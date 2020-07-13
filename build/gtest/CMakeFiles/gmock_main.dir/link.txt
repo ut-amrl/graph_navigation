@@ -1,1 +1,0 @@
-/usr/bin/g++  -fPIC -std=c++11 -Wall -Werror -fopenmp -O2 -DNDEBUG -O2 -g -DNDEBUG  -shared -Wl,-soname,libgmock_main.so -o /home/administrator/graph_navigation/lib/libgmock_main.so CMakeFiles/gmock_main.dir/usr/src/gtest/src/gtest-all.cc.o CMakeFiles/gmock_main.dir/src/gmock-all.cc.o CMakeFiles/gmock_main.dir/src/gmock_main.cc.o -lpthread 

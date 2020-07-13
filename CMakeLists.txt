@@ -44,7 +44,3 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
                         src/navigation/navigation.cc)
 TARGET_LINK_LIBRARIES(navigation shared_library ${libs})
-
-ROSBUILD_ADD_EXECUTABLE(autonomy_arbiter
-                        src/autonomy_arbiter/autonomy_arbiter.cc)
-TARGET_LINK_LIBRARIES(autonomy_arbiter shared_library ${libs})
