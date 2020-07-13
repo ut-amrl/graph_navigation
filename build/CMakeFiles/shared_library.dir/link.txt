@@ -1,0 +1,1 @@
+/usr/bin/g++  -fPIC -std=c++11 -Wall -Werror -fopenmp -O2 -DNDEBUG -O2 -g -DNDEBUG  -shared -Wl,-soname,libshared_library.so -o ../lib/libshared_library.so CMakeFiles/shared_library.dir/src/visualization/visualization.cc.o CMakeFiles/shared_library.dir/src/vector_map/vector_map.cc.o  -L/opt/ros/kinetic/lib 
