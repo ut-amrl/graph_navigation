@@ -290,7 +290,6 @@ void VectorMap::RayCast(const Vector2f& loc,
     int iidx;
     RayCastRay(const Vector2f& ray_end, int iidx) :
         ray_end(ray_end), iidx(iidx) {}
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   };
   // Go through all lines, and check for intersection of rays.
   vector<RayCastRay> ray_cast_rays;
