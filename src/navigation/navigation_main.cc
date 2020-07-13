@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "amrl_msgs/Localization2DMsg.h"
+#include "amrl_msgs/Pose2Df.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
@@ -132,13 +133,20 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   navigation_->UpdateOdometry(msg);
 }
 
-void GoToCallback(const geometry_msgs::PoseStamped& msg) {
+void GoToCallbackPS(const geometry_msgs::PoseStamped& msg) {
   const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
   const float angle =
       2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
   navigation_->SetNavGoal(loc, angle);
 }
+
+void GoToCallback(const amrl_msgs::Pose2Df& msg) {
+  const Vector2f loc(msg.x, msg.y);
+  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.theta);
+  navigation_->SetNavGoal(loc, msg.theta);
+}
+
 
 void SignalHandler(int) {
   if (!run_) {
