@@ -55,6 +55,7 @@ struct PathOption {
 class Navigation {
  public:
   explicit Navigation(const std::string& map_file, ros::NodeHandle* n);
+  void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const nav_msgs::Odometry& msg);

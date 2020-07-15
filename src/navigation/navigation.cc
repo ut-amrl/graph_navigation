@@ -25,6 +25,7 @@
 #include <string>
 
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
@@ -36,6 +37,7 @@
 #include "amrl_msgs/VisualizationMsg.h"
 #include "glog/logging.h"
 #include "nav_msgs/Odometry.h"
+#include "nav_msgs/Path.h"
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud.h"
 #include "shared/math/math_util.h"
@@ -61,6 +63,7 @@ using amrl_msgs::Pose2Df;
 using amrl_msgs::VisualizationMsg;
 using geometry_msgs::Twist;
 using geometry_msgs::TwistStamped;
+using geometry_msgs::PoseStamped;
 using ros_helpers::DrawEigen2DLine;
 using sensor_msgs::PointCloud;
 using std::atan2;
@@ -119,6 +122,7 @@ ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
+ros::Publisher path_pub_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
@@ -208,6 +212,7 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     kMaxClearance(1.0),
     planning_domain_(map_file),
     enabled_(false) {
+  
   ackermann_drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n->advertise<geometry_msgs::Twist>(
@@ -216,6 +221,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
       "navigation_goal_status", 1);
   viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
   fp_pcl_pub_ = n->advertise<PointCloud>("forward_predicted_pcl", 1);
+  path_pub_ = n->advertise<nav_msgs::Path>(
+      "trajectory", 1, true);
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
@@ -241,6 +248,31 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_complete_ = false;
   plan_path_.clear();
 }
+
+void Navigation::ConvertPathToNavMsgsPath() {                                  // new function!
+  if(plan_path_.size()>0){
+    nav_msgs::Path path;
+    path.header.stamp=ros::Time::now();
+    path.header.frame_id="map";
+    for (size_t i = 0; i < plan_path_.size(); i++) {
+      geometry_msgs::PoseStamped pose_plan;
+      pose_plan.pose.position.x = plan_path_[i].loc.x();
+      pose_plan.pose.position.y = plan_path_[i].loc.y();
+
+      pose_plan.pose.orientation.x = 0;
+      pose_plan.pose.orientation.y = 0;
+      pose_plan.pose.orientation.z = 0;
+      pose_plan.pose.orientation.w = 1;
+
+      pose_plan.header.stamp = ros::Time::now();
+      pose_plan.header.frame_id = "map";
+      path.poses.push_back(pose_plan);
+
+      path_pub_.publish(path);
+    }
+  }
+}
+
 
 void Navigation::UpdateMap(const string& map_file) {
   planning_domain_.Load(map_file);
@@ -550,6 +582,7 @@ void Navigation::Plan() {
       s1 = s2;
     }
     viz_pub_.publish(global_viz_msg_);
+    ConvertPathToNavMsgsPath();
   } else {
     printf("No path found!\n");
   }
