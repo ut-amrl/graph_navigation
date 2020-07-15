@@ -165,9 +165,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   navigation_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
   if (map != msg.map) {
     map = msg.map;
-    const string map_file =
-        StringPrintf("maps/%s/%s.navigation.txt", map.c_str(), map.c_str());
-    navigation_->UpdateMap(map_file);
+    navigation_->UpdateMap(FLAGS_map);
   }
 }
 
