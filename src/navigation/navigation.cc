@@ -628,7 +628,7 @@ Vector2f Navigation::GetCarrot() {
 void Navigation::GetStraightFreePathLength(float* free_path_length,
                                            float* clearance) {
   // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * params_.robot_length + params_.base_link_offset + params_.obstacle_margin;
+  const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
   // The robot's half-width.
   const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
   for (const Vector2f& p : fp_point_cloud_) {
@@ -654,7 +654,7 @@ void Navigation::GetFreePathLength(float curvature,
   }
   const float path_radius = 1.0 / curvature;
   // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * params_.robot_length + params_.base_link_offset + params_.obstacle_margin;
+  const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
   const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
   const Vector2f c(0, path_radius );
   const float s = ((path_radius > 0.0) ? 1.0 : -1.0);
@@ -891,9 +891,9 @@ Vector2f GetFinalPoint(const PathOption& o) {
 void Navigation::DrawRobot() {
   {
     // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * params_.robot_length + params_.base_link_offset - params_.obstacle_margin;
+    const float l1 = -0.5 * params_.robot_length - params_.base_link_offset - params_.obstacle_margin;
     // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * params_.robot_length + params_.base_link_offset + params_.obstacle_margin;
+    const float l2 = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
     const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
     visualization::DrawLine(
         Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
@@ -907,9 +907,9 @@ void Navigation::DrawRobot() {
 
   {
     // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * params_.robot_length + params_.base_link_offset;
+    const float l1 = -0.5 * params_.robot_length - params_.base_link_offset;
     // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * params_.robot_length + params_.base_link_offset;
+    const float l2 = 0.5 * params_.robot_length - params_.base_link_offset;
     const float w = 0.5 * params_.robot_width;
     visualization::DrawLine(
         Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);

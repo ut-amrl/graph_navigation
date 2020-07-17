@@ -46,3 +46,4 @@ script:
   - export ROS_PACKAGE_PATH=~/amrl_msgs:$ROS_PACKAGE_PATH
   - export ROS_PACKAGE_PATH=`pwd`:$ROS_PACKAGE_PATH
   - make
+  - timeout --preserve-status --signal INT 2.0s ./bin/navigation
