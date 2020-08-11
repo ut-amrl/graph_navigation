@@ -94,7 +94,7 @@ DEFINE_double(carrot_dist, 2.5, "Distance of carrot from current location");
 DEFINE_double(system_latency, 0.24, "System latency in seconds");
 
 // Margin to leave around the car for obstacle checking.
-DEFINE_double(obstacle_margin, 0.15, "Margin to leave for obstacle avoidance");
+DEFINE_double(obstacle_margin, 0.05, "Margin to leave for obstacle avoidance");
 
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
@@ -104,7 +104,7 @@ DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
-DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
+DEFINE_double(max_curvature, 3.1, "Maximum curvature of turning");
 DEFINE_int32(num_options, 41, "Number of options to consider");
 
 // Name of topic to publish twist messages to.
