@@ -72,8 +72,11 @@ DEFINE_string(init_topic,
 DEFINE_string(enable_topic, "autonomy_arbiter/enabled",
     "ROS topic that indicates whether autonomy is enabled or not.");
 DEFINE_string(map,
-              "maps/Joydeepb-Home/Joydeepb-Home.navigation.txt",
-              "Name of navigation map file");
+              "Joydeepb-Home",
+              "Name of navigation map");
+DEFINE_string(maps_dir,
+              "maps",
+              "Path to the directory containing navigati onmaps");
 DECLARE_string(helpon);
 DECLARE_int32(v);
 DECLARE_double(dt);
@@ -182,7 +185,7 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
-  navigation_ = new Navigation(FLAGS_map, &n);
+  navigation_ = new Navigation(FLAGS_maps_dir, FLAGS_map, &n);
 
   ros::Subscriber velocity_sub =
       n.subscribe(FLAGS_odom_topic, 1, &OdometryCallback);
