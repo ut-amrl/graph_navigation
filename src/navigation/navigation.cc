@@ -189,7 +189,11 @@ struct GraphVisualizer {
 
 namespace navigation {
 
-Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
+inline string GetMapPath(const string& dir, const string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.txt";
+}
+
+Navigation::Navigation(const string& maps_dir, const string& map_name, ros::NodeHandle* n) :
     robot_loc_(0, 0),
     robot_angle_(0),
     robot_vel_(0, 0),
@@ -206,7 +210,8 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     kRearAxleOffset(0),
     kMaxFreeLength(6),
     kMaxClearance(1.0),
-    planning_domain_(map_file),
+    maps_dir_(maps_dir),
+    planning_domain_(GetMapPath(maps_dir, map_name)),
     enabled_(false) {
   ackermann_drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
@@ -242,8 +247,8 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   plan_path_.clear();
 }
 
-void Navigation::UpdateMap(const string& map_file) {
-  planning_domain_.Load(map_file);
+void Navigation::UpdateMap(const string& map_name) {
+  planning_domain_.Load(GetMapPath(maps_dir_, map_name));
   plan_path_.clear();
 }
 

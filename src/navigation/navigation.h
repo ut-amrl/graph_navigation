@@ -54,7 +54,7 @@ struct PathOption {
 
 class Navigation {
  public:
-  explicit Navigation(const std::string& map_file, ros::NodeHandle* n);
+  explicit Navigation(const std::string& maps_dir, const std::string& map_name, ros::NodeHandle* n);
   void UpdateMap(const std::string& map_file);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const nav_msgs::Odometry& msg);
@@ -167,6 +167,8 @@ class Navigation {
   const float kMaxFreeLength;
   // Maximum clearance for the robot to care about.
   const float kMaxClearance;
+
+  const std::string maps_dir_;
 
   // Planning domain for A* planner.
   GraphDomain planning_domain_;
