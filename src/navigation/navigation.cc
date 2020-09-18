@@ -190,7 +190,7 @@ struct GraphVisualizer {
 namespace navigation {
 
 inline string GetMapPath(const string& dir, const string& name) {
-  return dir + "/" + name + "/" + name + ".vectormap.txt";
+  return dir + "/" + name + "/" + name + ".navigation.txt";
 }
 
 Navigation::Navigation(const string& maps_dir, const string& map_name, ros::NodeHandle* n) :
