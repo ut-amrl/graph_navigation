@@ -72,7 +72,7 @@ DEFINE_string(init_topic,
 DEFINE_string(enable_topic, "autonomy_arbiter/enabled",
     "ROS topic that indicates whether autonomy is enabled or not.");
 DEFINE_string(map,
-              "Joydeepb-Home",
+              "UT_Campus",
               "Name of navigation map");
 DEFINE_string(maps_dir,
               "maps",
