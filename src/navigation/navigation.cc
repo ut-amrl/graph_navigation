@@ -77,7 +77,7 @@ using namespace ros_helpers;
 // Control loop period, in seconds.
 DEFINE_double(dt, 0.025, "Control loop period");
 // Maximum speed that the robot will drive at.
-DEFINE_double(max_speed, 0.5, "Maximum speed");
+DEFINE_double(max_speed, 0.8, "Maximum speed");
 // Maximum acceleration of the robot.
 DEFINE_double(max_accel, 1.0, "Maximum acceleration");
 // Maximum deceleration of the robot.
