@@ -1,10 +1,9 @@
 <package>
-  <description brief="graph_naviation">
+  <description brief="graph_navigation">
 
     Graph navigation using carrot planning.
 
   </description>
-  <name>graph_navigation</name>
   <author>Joydeep Biswas</author>
   <license>MIT</license>
   <review status="unreviewed" notes=""/>
@@ -18,7 +17,6 @@
   <depend package="rosbag"/>
   <depend package="tf"/>
   <depend package="amrl_msgs"/>
-
 </package>
 
 

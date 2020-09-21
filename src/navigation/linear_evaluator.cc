@@ -111,4 +111,20 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   return best;
 }
 
+void LinearEvaluator::SetClearanceWeight(const float &weight) {
+  FLAGS_cw = weight;
+}
+
+void LinearEvaluator::SetDistanceWeight(const float &weight) {
+  FLAGS_dw = weight;
+}
+
+void LinearEvaluator::SetFreePathWeight(const float &weight) {
+  FLAGS_fw = weight;
+}
+
+void LinearEvaluator::SetSubOpt(const float &threshold) {
+  FLAGS_subopt = threshold;
+}
+
 }  // namespace motion_primitives
