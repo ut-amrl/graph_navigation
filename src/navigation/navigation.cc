@@ -205,9 +205,9 @@ Navigation::Navigation(const string& maps_dir, const string& map_name, ros::Node
     loc_initialized_(false),
     t_point_cloud_(0),
     t_odometry_(0),
-    kRobotWidth(0.44),
-    kRobotLength(0.5),
-    kRearAxleOffset(0),
+    kRobotWidth(0.281), //0.44
+    kRobotLength(0.535), //0.5
+    kRearAxleOffset(-0.162), //0
     kMaxFreeLength(6),
     kMaxClearance(1.0),
     maps_dir_(maps_dir),
@@ -346,25 +346,27 @@ void Navigation::ForwardPredict(double t) {
   using Eigen::Rotation2Df;
   using Eigen::Translation2f;
   Affine2f lidar_tf = Affine2f::Identity();
-  for (const TwistStamped& c : command_history_) {
-    const double cmd_time = c.header.stamp.toSec();
-    if (cmd_time > t) continue;
-    if (cmd_time >= t_odometry_ - FLAGS_dt) {
-      const float dt = (t_odometry_ > cmd_time) ?
-          min<double>(t_odometry_ - cmd_time, FLAGS_dt) :
-          min<double>(t - cmd_time, FLAGS_dt);
-      odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
-          c.twist.linear.x, c.twist.linear.y));
-      odom_angle_ = AngleMod(odom_angle_ + dt * c.twist.angular.z);
-    }
-    if (t_point_cloud_ >= cmd_time  - FLAGS_dt) {
-      const float dt = (t_point_cloud_ > cmd_time) ?
-          min<double>(t_point_cloud_ - cmd_time, FLAGS_dt) :
-          min<double>(t - cmd_time, FLAGS_dt);
-      lidar_tf =
-          Translation2f(-dt * Vector2f(c.twist.linear.x, c.twist.linear.y)) *
-          Rotation2Df(-c.twist.angular.z * dt) *
-          lidar_tf;
+  if (false) {
+    for (const TwistStamped& c : command_history_) {
+      const double cmd_time = c.header.stamp.toSec();
+      if (cmd_time > t) continue;
+      if (cmd_time >= t_odometry_ - FLAGS_dt) {
+        const float dt = (t_odometry_ > cmd_time) ?
+            min<double>(t_odometry_ - cmd_time, FLAGS_dt) :
+            min<double>(t - cmd_time, FLAGS_dt);
+        odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
+            c.twist.linear.x, c.twist.linear.y));
+        odom_angle_ = AngleMod(odom_angle_ + dt * c.twist.angular.z);
+      }
+      if (t_point_cloud_ >= cmd_time  - FLAGS_dt) {
+        const float dt = (t_point_cloud_ > cmd_time) ?
+            min<double>(t_point_cloud_ - cmd_time, FLAGS_dt) :
+            min<double>(t - cmd_time, FLAGS_dt);
+        lidar_tf =
+            Translation2f(-dt * Vector2f(c.twist.linear.x, c.twist.linear.y)) *
+            Rotation2Df(-c.twist.angular.z * dt) *
+            lidar_tf;
+      }
     }
   }
   fp_point_cloud_.resize(point_cloud_.size());
@@ -1026,6 +1028,9 @@ void Navigation::RunObstacleAvoidance() {
   const float speed = robot_vel_.norm();
   const float max_speed = min(FLAGS_max_speed,
       sqrt(2.0f * FLAGS_max_accel * best_option.clearance));
+  // std::cout << "FLAGS_max_speed: " << FLAGS_max_speed << std::endl;
+  // std::cout << "Max speed brake limit: " << sqrt(2.0f * FLAGS_max_accel * best_option.clearance) << std::endl;
+  // std::cout << "max speed: " << max_speed << std::endl;
   velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, FLAGS_max_accel, FLAGS_max_decel, FLAGS_dt);
   SendCommand(velocity_cmd, curvature_cmd);
 }
@@ -1119,7 +1124,7 @@ void Navigation::Run() {
   DrawRobot();
   if (!odom_initialized_) return;
   ForwardPredict(ros::Time::now().toSec() + FLAGS_system_latency);
-  const float kNavTolerance = 0.5;
+  const float kNavTolerance = 1.48; //1.25
   if (FLAGS_test_toc) {
     TrapezoidTest();
     return;
@@ -1144,6 +1149,11 @@ void Navigation::Run() {
     status_msg_.status = 3;
     status_pub_.publish(status_msg_);
     viz_pub_.publish(local_viz_msg_);
+
+    // Set the goal location as the goal ID (only up to integer precision)
+    status_msg_.goal_id.id= std::to_string(static_cast<int>(nav_goal_loc_[0])) 
+                           + ","
+                           + std::to_string(static_cast<int>(nav_goal_loc_[1]));
     return;
   }
   status_msg_.status = 1;

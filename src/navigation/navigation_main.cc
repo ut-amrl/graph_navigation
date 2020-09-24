@@ -98,7 +98,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
            GetWallTime() - msg.header.stamp.toSec());
   }
   // Location of the laser on the robot. Assumes the laser is forward-facing.
-  const Vector2f kLaserLoc(0.065, 0);
+  const Vector2f kLaserLoc(0.2, 0); // (0.065, 0)
   static float cached_dtheta_ = 0;
   static float cached_angle_min_ = 0;
   static size_t cached_num_rays_ = 0;
