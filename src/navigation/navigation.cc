@@ -77,14 +77,14 @@ using namespace ros_helpers;
 // Control loop period, in seconds.
 DEFINE_double(dt, 0.025, "Control loop period");
 // Maximum speed that the robot will drive at.
-DEFINE_double(max_speed, 0.6, "Maximum speed");
+DEFINE_double(max_speed, 0.5, "Maximum speed");
 // Maximum acceleration of the robot.
 DEFINE_double(max_accel, 1.0, "Maximum acceleration");
 // Maximum deceleration of the robot.
 DEFINE_double(max_decel, 1.0, "Maximum deceleration");
 
-DEFINE_double(max_ang_accel, 0.5, "Maximum angular acceleration");
-DEFINE_double(max_ang_speed, 1.0, "Maximum angular speed");
+DEFINE_double(max_ang_accel, 0.3, "Maximum angular acceleration");
+DEFINE_double(max_ang_speed, 0.5, "Maximum angular speed");
 
 DEFINE_double(carrot_dist, 2.5, "Distance of carrot from current location");
 
@@ -94,7 +94,7 @@ DEFINE_double(carrot_dist, 2.5, "Distance of carrot from current location");
 DEFINE_double(system_latency, 0.24, "System latency in seconds");
 
 // Margin to leave around the car for obstacle checking.
-DEFINE_double(obstacle_margin, 0.15, "Margin to leave for obstacle avoidance");
+DEFINE_double(obstacle_margin, 0.1, "Margin to leave for obstacle avoidance");// Comment for Steve Kim
 
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
