@@ -262,8 +262,19 @@ struct GraphDomain {
   }
 
   bool Save(const std::string& file) {
-    fprintf(stderr, "Saving nav map not implemented.\n");
-    return false;
+    ScopedFile fid(file, "w", true);
+    for(uint32_t i = 0; i < states.size(); i++) {
+      std::stringstream line;
+      line << states[i].id << ", " << states[i].loc.x() << ", " << states[i].loc.y();
+      // handle neighbors
+      line << ", " << neighbors[i].size();
+      for(uint32_t j = 0; j < neighbors[i].size(); j++) {
+        line << ", " << neighbors[i][j];
+      }
+      line << std::endl;
+      fputs(line.str().c_str(), fid());
+    }
+    return true;
   }
 
   uint64_t GetClosestVertex(const Eigen::Vector2f& p) {
@@ -291,7 +302,7 @@ struct GraphDomain {
     neighbors.clear();
     auto drawmap = [&]() {
       printf("Map:\n======\n");
-      for (const State s : states) {
+      for (const State& s : states) {
         printf("%4lu: %8.3f,%8.3f", s.id, s.loc.x(), s.loc.y());
         CHECK_GT(neighbors.size(), s.id);
         for (const uint64_t n : neighbors[s.id]) {
@@ -302,7 +313,8 @@ struct GraphDomain {
       printf("Map:\n======\n");
     };
     while (valid &&
-        fscanf(fid(), "%lu, %f, %f, %d", &id, &x, &y, &num_neighbors) == 4) {
+          !feof(fid()) &&
+          fscanf(fid(), "%lu, %f, %f, %d", &id, &x, &y, &num_neighbors) == 4) {
       GrowIfNeeded(id);
       states[id] = State(id, x, y);
       if (kDebug) {
