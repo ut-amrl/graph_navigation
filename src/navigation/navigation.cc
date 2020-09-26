@@ -526,7 +526,7 @@ void Navigation::Plan() {
   const uint64_t goal_id = planning_domain_.AddDynamicState(nav_goal_loc_);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
-  if (true) {
+  if (false) {
     printf("Plan from (%7.2f,%7.2f) to (%7.2f,%7.2f)\n",
           start.loc.x(), start.loc.y(), goal.loc.x(), goal.loc.y());
     printf("Map:\n======\n");
