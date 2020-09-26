@@ -454,7 +454,8 @@ void Navigation::ObstacleTest() {
   float free_path_length = 30.0;
   float clearance = 10;
   GetStraightFreePathLength(&free_path_length, &clearance);
-  const float dist_left = max<float>(0.0f, free_path_length - FLAGS_obstacle_margin);
+  const float dist_left = max<float>(
+      0.0f, free_path_length - FLAGS_obstacle_margin);
   printf("%f\n", free_path_length);
   const float velocity_cmd = Run1DTOC(0, dist_left, speed, FLAGS_max_speed, FLAGS_max_accel, FLAGS_max_decel, FLAGS_dt);
   SendCommand(velocity_cmd, 0);
@@ -955,6 +956,10 @@ void Navigation::RunObstacleAvoidance() {
   float curvature_cmd = 0;
   float velocity_cmd = 0;
 
+  float max_map_speed = FLAGS_max_speed;
+  planning_domain_.GetClearanceAndSpeedFromLoc(
+      robot_loc_, nullptr, &max_map_speed);
+
   if (false) {
     fp_point_cloud_ = {
       Vector2f(FLAGS_tx, FLAGS_ty)
@@ -1024,8 +1029,9 @@ void Navigation::RunObstacleAvoidance() {
       max<float>(0.0, best_option.free_path_length - FLAGS_obstacle_margin);
 
   const float speed = robot_vel_.norm();
-  const float max_speed = min(FLAGS_max_speed,
+  float max_speed = min(FLAGS_max_speed,
       sqrt(2.0f * FLAGS_max_accel * best_option.clearance));
+  max_speed = min(max_map_speed, max_speed);
   velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, FLAGS_max_accel, FLAGS_max_decel, FLAGS_dt);
   SendCommand(velocity_cmd, curvature_cmd);
 }

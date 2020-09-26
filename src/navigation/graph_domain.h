@@ -453,6 +453,23 @@ struct GraphDomain {
     if (kDebug) drawmap();
   }
 
+  void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p, 
+                                   float* clearance, 
+                                   float* speed) const {
+    if (static_edges.empty()) return;
+    float min_dist = FLT_MAX;
+    NavigationEdge closest_edge = static_edges[0];
+    for (const NavigationEdge& e : static_edges) {
+      const float dist = e.edge.Distance(p);
+      if (dist < min_dist) {
+        closest_edge = e;
+        min_dist = dist;
+      }
+    }
+    if (clearance) *clearance = closest_edge.max_clearance;
+    if (speed) *speed = closest_edge.max_speed;
+  }
+
   std::vector<State> states;
   std::vector<std::vector<uint64_t> > neighbors;
   std::vector<State> static_states;
