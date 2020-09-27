@@ -105,32 +105,26 @@ struct GraphDomain {
     return Heuristic(states[k_s1], states[k_s2]);
   }
 
-  void GetNeighbors(const State& s,
-                    std::vector<State>* neighbors) const {
-    printf("%s unimplemented\n", __PRETTY_FUNCTION__);
-  }
-
   // Get neighbors to a state.
   void GetNeighborsKeys(uint64_t s_key,
                         std::vector<uint64_t>* state_neighbors) const {
     CHECK_LT(s_key, states.size());
-    CHECK_LT(s_key, neighbors.size());
     state_neighbors->clear();
-    state_neighbors->insert(state_neighbors->end(),
-                            neighbors[s_key].begin(),
-                            neighbors[s_key].end());
+    for (const NavigationEdge& e : edges) {
+      if (e.s0_id == s_key) state_neighbors->push_back(e.s1_id);
+      if (e.s1_id == s_key) state_neighbors->push_back(e.s0_id);
+    }
   }
 
   void GrowIfNeeded(uint64_t id) {
     if (states.size() <= id) {
       states.resize(id + 1, State(0, 0, 0));
-      neighbors.resize(id + 1);
     }
   }
 
   void ResetDynamicStates() {
     states = static_states;
-    neighbors = static_neighbors;
+    edges = static_edges;
   }
 
   uint64_t GetClosestState(const Eigen::Vector2f& v) {
@@ -147,24 +141,39 @@ struct GraphDomain {
     return closest_state;
   }
 
-  float GetClosestEdge(const Eigen::Vector2f& v,
-                       uint64_t* p0_id_ptr,
-                       uint64_t* p1_id_ptr) {
-    uint64_t& p0 = *p0_id_ptr;
-    uint64_t& p1 = *p1_id_ptr;
+  NavigationEdge GetClosestEdge(const Eigen::Vector2f& v) const {
+    NavigationEdge closest_edge;
+    closest_edge.edge.p0 = closest_edge.edge.p1 = 
+        Eigen::Vector2f(FLT_MAX, FLT_MAX);
+    closest_edge.s0_id = closest_edge.s1_id = 0;
+    closest_edge.max_clearance = closest_edge.max_speed = 0;
+    if (edges.empty()) return closest_edge;
     float closest_dist = FLT_MAX;
-    for (const State& s : states) {
-      for (const uint64_t n : neighbors[s.id]) {
-        const Eigen::Vector2f& a = s.loc;
-        const Eigen::Vector2f& b = states[n].loc;
-        const float dist = geometry::DistanceFromLineSegment(v, a, b);
-        if (dist < closest_dist) {
-          p0 = s.id;
-          p1 = n;
-          closest_dist = dist;
-        }
+    for (const NavigationEdge& e : edges) {
+      const float dist = e.edge.Distance(v);
+      if (dist < closest_dist) {
+        closest_dist = dist;
+        closest_edge = e;
       }
     }
+    return closest_edge;
+  }
+
+  float GetClosestEdge(const Eigen::Vector2f& v,
+                       uint64_t* p0,
+                       uint64_t* p1) const {
+    float closest_dist = FLT_MAX;
+    if (edges.empty()) return closest_dist;
+    NavigationEdge closest_edge = edges[0];
+    for (const NavigationEdge& e : edges) {
+      const float dist = e.edge.Distance(v);
+      if (dist < closest_dist) {
+        closest_dist = dist;
+        closest_edge = e;
+      }
+    }
+    *p0 = closest_edge.s0_id;
+    *p1 = closest_edge.s1_id;
     return closest_dist;
   }
 
@@ -177,19 +186,16 @@ struct GraphDomain {
 
   void DeleteState(const uint64_t s_id) {
     // Delete all edges that touch this state.
-    for (std::vector<uint64_t>& n : neighbors) {
-      for (size_t i = 0; i < n.size(); ++i) {
-        if (n[i] == s_id) {
-          n.erase(n.begin() + i);
-          --i;
-        } else if (n[i] > s_id) {
-          // Renumber states after this state.
-          --n[i];
-        }
+    for (int i = edges.size() - 1; i >= 0; --i) {
+      if (edges[i].s0_id == s_id || edges[i].s1_id == s_id) {
+        edges.erase(edges.begin() + i);
       }
     }
-    // Remove the adjacency row for this state.
-    neighbors.erase(neighbors.begin() + s_id);
+    // Renumber state IDs in the edges list.
+    for (NavigationEdge& e : edges) {
+      if (e.s0_id > s_id) --e.s0_id;
+      if (e.s1_id > s_id) --e.s1_id;
+    }
     // Remove this state.
     for (size_t i = 0; i < states.size(); ++i) {
       if (states[i].id == s_id) {
@@ -203,26 +209,13 @@ struct GraphDomain {
   }
 
   void DeleteUndirectedEdge(const uint64_t s0, const uint64_t s1) {
-    for (uint64_t s : {s0, s1}) {
-      std::vector<uint64_t>& n = neighbors[s];
-      for (size_t j = 0; j < n.size(); ++j) {
-        if ((s == s0 && n[j] == s1) || (s == s1 && n[j] == s0)) {
-          n.erase(n.begin() + j);
-        }
+    // This edge must exist, hence the list can't be empty.
+    CHECK_GT(edges.size(), 0);
+    for (int i = edges.size() - 1; i >= 0; --i) {
+      if (edges[i].s0_id == s0 && 
+          edges[i].s1_id == s1) {
+        edges.erase(edges.begin() + i);
       }
-    }
-  }
-
-  bool NeighborExists(const std::vector<uint64_t>& neighbors,
-                      const uint64_t s) {
-    return (std::find(neighbors.begin(), neighbors.end(), s)
-        != neighbors.end());
-  }
-  void AddDirectedEdge(const uint64_t s0, const uint64_t s1) {
-    GrowIfNeeded(s0);
-    GrowIfNeeded(s1);
-    if (!NeighborExists(neighbors[s0], s1)) {
-      neighbors[s0].push_back(s1);
     }
   }
 
@@ -232,14 +225,6 @@ struct GraphDomain {
                          const float max_clearance) {
     CHECK_LT(s0, states.size());
     CHECK_LT(s1, states.size());
-    CHECK_LT(s0, neighbors.size());
-    CHECK_LT(s1, neighbors.size());
-    if (!NeighborExists(neighbors[s0], s1)) {
-      neighbors[s0].push_back(s1);
-    }
-    if (!NeighborExists(neighbors[s1], s0)) {
-      neighbors[s1].push_back(s0);
-    }
     NavigationEdge e;
     e.s0_id = s0;
     e.s1_id = s1;
@@ -247,26 +232,15 @@ struct GraphDomain {
     e.max_clearance = max_clearance;
     e.edge.p0 = states[s0].loc;
     e.edge.p1 = states[s1].loc;
-    static_edges.push_back(e);
-  }
-
-  void AddUndirectedEdge(const uint64_t s0, const uint64_t s1) {
-    GrowIfNeeded(s0);
-    GrowIfNeeded(s1);
-    if (!NeighborExists(neighbors[s0], s1)) {
-      neighbors[s0].push_back(s1);
-    }
-    if (!NeighborExists(neighbors[s1], s0)) {
-      neighbors[s1].push_back(s0);
-    }
+    edges.push_back(e);
   }
 
   uint64_t AddDynamicState(const Eigen::Vector2f& v) {
-    static const bool kDebug = true;
+    static const bool kDebug = false;
     CHECK(!states.empty());
     // Find the closest Edge.
-    uint64_t p0_id = 0, p1_id = 1;
-    GetClosestEdge(v, &p0_id, &p1_id);
+    const NavigationEdge e = GetClosestEdge(v);
+    const uint64_t p0_id = e.s0_id, p1_id = e.s1_id;
     const Eigen::Vector2f& p0 = states[p0_id].loc;
     const Eigen::Vector2f& p1 = states[p1_id].loc;
     if (kDebug) {
@@ -280,48 +254,34 @@ struct GraphDomain {
 
     // Add p0 : pmid
     const uint64_t pmid_id = AddState(pmid);
-    AddUndirectedEdge(p0_id, pmid_id);
+    AddUndirectedEdge(p0_id, pmid_id, e.max_speed, e.max_clearance);
 
     // Add p1 : pmid
-    AddUndirectedEdge(p1_id, pmid_id);
+    AddUndirectedEdge(p1_id, pmid_id, e.max_speed, e.max_clearance);
 
     // Delete p0 : p1, since there is a p0 : pmid : p1 pathway now.
     DeleteUndirectedEdge(p0_id, p1_id);
 
     // Add pmid : v
     const uint64_t v_id = AddState(v);
-    AddUndirectedEdge(pmid_id, v_id);
+    AddUndirectedEdge(pmid_id, v_id, e.max_speed, e.max_clearance);
 
-    printf("Adding dynamic state %f,%f (%lu) %lu %lu %lu\n",
-        v.x(), v.y(), v_id, p0_id, p1_id, pmid_id);
+    if (kDebug) {
+      printf("Adding dynamic state %f,%f (%lu) %lu %lu %lu\n",
+          v.x(), v.y(), v_id, p0_id, p1_id, pmid_id);
+    }
     return v_id;
   }
 
-  bool Save(const std::string& file) {
-    ScopedFile fid(file, "w", true);
-    for(uint32_t i = 0; i < states.size(); i++) {
-      std::stringstream line;
-      line << states[i].id << ", " << states[i].loc.x() << ", " << states[i].loc.y();
-      // handle neighbors
-      line << ", " << neighbors[i].size();
-      for(uint32_t j = 0; j < neighbors[i].size(); j++) {
-        line << ", " << neighbors[i][j];
-      }
-      line << std::endl;
-      fputs(line.str().c_str(), fid());
-    }
-    return true;
-  }
-
   // Save a V2 Map from V2 map structures.
-  bool SaveV2(const std::string& file) {
+  bool SaveV2(const std::string& file) const {
     ScopedFile fid(file, "w", true);
-    fprintf(fid(), "%lu\n", static_states.size());
-    fprintf(fid(), "%lu\n", static_edges.size());
-    for (const State& s : static_states) {
+    fprintf(fid(), "%lu\n", states.size());
+    fprintf(fid(), "%lu\n", edges.size());
+    for (const State& s : states) {
       fprintf(fid(), "%lu, %f, %f\n", s.id, s.loc.x(), s.loc.y());
     }
-    for(const NavigationEdge& e : static_edges) {
+    for(const NavigationEdge& e : edges) {
       fprintf(fid(), "%lu, %lu, %f, %f\n", 
           e.s0_id, e.s1_id, e.max_speed, e.max_clearance);
     }
@@ -337,8 +297,6 @@ struct GraphDomain {
     CHECK_EQ(fscanf(fid(), "%lu", &num_states), 1);
     CHECK_EQ(fscanf(fid(), "%lu", &num_edges), 1);
     states.resize(num_states);
-    neighbors.clear();
-    neighbors.resize(num_states);
     for (State& s : states) {
       CHECK_EQ(fscanf(fid(), "%lu, %f, %f", 
           &(s.id), &(s.loc.x()), &(s.loc.y())), 3);
@@ -354,36 +312,11 @@ struct GraphDomain {
         file.c_str(), num_states, num_edges);
 
     static_states = states;
-    static_neighbors = neighbors;
+    static_edges = edges;
     return true;
   }
 
-  // Save a V2 Map from V1 map structures.
-  bool SaveV2FromV1(const std::string& file) {
-    // V1 Maps had no defined max speed, set it to some crazy high number.
-    static const float kMaxSpeed = 50.0;
-    // V1 Maps had no defined max clearance, set it to some crazy high number.
-    static const float kMaxClearance = 10.0;
-
-    ScopedFile fid(file, "w", true);
-    uint64_t num_edges = 0;
-    for (const State& s : states) {
-      num_edges += neighbors[s.id].size();
-    }
-    fprintf(fid(), "%lu\n", states.size());
-    fprintf(fid(), "%lu\n", num_edges);
-    for (const State& s : states) {
-      fprintf(fid(), "%lu, %f, %f\n", s.id, s.loc.x(), s.loc.y());
-    }
-    for(uint64_t i = 0; i < neighbors.size(); i++) {
-      for (uint64_t j : neighbors[i]) {
-        fprintf(fid(), "%lu, %lu, %f, %f\n", i, j, kMaxSpeed, kMaxClearance);
-      }
-    }
-    return true;
-  }
-
-  uint64_t GetClosestVertex(const Eigen::Vector2f& p) {
+  uint64_t GetClosestVertex(const Eigen::Vector2f& p) const {
     float best_sq_dist = FLT_MAX;
     uint64_t best = 0;
     for (const State& s : states) {
@@ -395,86 +328,19 @@ struct GraphDomain {
     return best;
   }
 
-  void Load(const std::string& file) {
-    static const bool kDebug = true;
-    ScopedFile fid(file, "r", true);
-    CHECK_NOTNULL(fid());
-    bool valid = true;
-    uint64_t id = 0;
-    float x = 0, y = 0;
-    int num_neighbors = 0;
-    int num_edges = 0;
-    states.clear();
-    neighbors.clear();
-    auto drawmap = [&]() {
-      printf("Map:\n======\n");
-      for (const State& s : states) {
-        printf("%4lu: %8.3f,%8.3f", s.id, s.loc.x(), s.loc.y());
-        CHECK_GT(neighbors.size(), s.id);
-        for (const uint64_t n : neighbors[s.id]) {
-          printf(" %4lu", n);
-        }
-        printf("\n");
-      }
-      printf("======\n");
-    };
-    while (valid &&
-          !feof(fid()) &&
-          fscanf(fid(), "%lu, %f, %f, %d", &id, &x, &y, &num_neighbors) == 4) {
-      GrowIfNeeded(id);
-      states[id] = State(id, x, y);
-      if (kDebug) {
-        printf("Node %lu (%f,%f), with %d neighbors:\n",
-               id,
-               x,
-               y,
-               num_neighbors);
-      }
-      for (int i = 0; i < num_neighbors; ++i) {
-        uint64_t n = 0;
-        if (fscanf(fid(), ", %lu", &n) == 1) {
-          if (kDebug) printf("%lu -> %lu\n", id, n);
-          AddUndirectedEdge(id, n);
-          ++num_edges;
-        } else {
-          if (kDebug) printf("\n");
-          valid = false;
-          break;
-        }
-      }
-      // drawmap();
-    }
-    printf("Loaded %s with %d states, %d edges\n",
-            file.c_str(),
-            static_cast<int>(states.size()),
-            num_edges);
-    static_states = states;
-    static_neighbors = neighbors;
-    if (kDebug) drawmap();
-  }
-
   void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p, 
                                    float* clearance, 
                                    float* speed) const {
-    if (static_edges.empty()) return;
-    float min_dist = FLT_MAX;
-    NavigationEdge closest_edge = static_edges[0];
-    for (const NavigationEdge& e : static_edges) {
-      const float dist = e.edge.Distance(p);
-      if (dist < min_dist) {
-        closest_edge = e;
-        min_dist = dist;
-      }
-    }
+    if (edges.empty()) return;
+    const NavigationEdge closest_edge = GetClosestEdge(p);
     if (clearance) *clearance = closest_edge.max_clearance;
     if (speed) *speed = closest_edge.max_speed;
   }
 
   std::vector<State> states;
-  std::vector<std::vector<uint64_t> > neighbors;
   std::vector<State> static_states;
-  std::vector<std::vector<uint64_t> > static_neighbors;
   // V2 Map edges.
+  std::vector<NavigationEdge> edges;
   std::vector<NavigationEdge> static_edges;
 };
 
