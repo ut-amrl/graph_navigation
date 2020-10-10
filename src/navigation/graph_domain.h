@@ -19,6 +19,8 @@
 */
 //========================================================================
 
+// NOTE: This file is an exact copy of `src/navigation_map/navigation_map.h` in `https://github.com/ut-amrl/vector_display`. This should be kept in sync.
+
 // C headers.
 #include <inttypes.h>
 
@@ -217,22 +219,16 @@ struct GraphDomain {
 
   void DeleteState(const uint64_t s_id) {
     // Delete all edges that touch this state.
-    for (size_t i = 0; i < edges.size(); ++i) {
+    for (int i = edges.size() - 1; i >= 0; --i) {
       if (edges[i].s0_id == s_id || edges[i].s1_id == s_id) {
         edges.erase(edges.begin() + i);
-        --i;
-      } else {
-        if (edges[i].s0_id > s_id) {
-          // Renumber edges after this state.
-          --edges[i].s0_id;
-        }
-        if (edges[i].s1_id > s_id) {
-          // Renumber edges after this state.
-          --edges[i].s1_id;
-        }
       }
     }
-    
+    // Renumber state IDs in the edges list.
+    for (NavigationEdge& e : edges) {
+      if (e.s0_id > s_id) --e.s0_id;
+      if (e.s1_id > s_id) --e.s1_id;
+    }
     // Remove this state.
     for (size_t i = 0; i < states.size(); ++i) {
       if (states[i].id == s_id) {
