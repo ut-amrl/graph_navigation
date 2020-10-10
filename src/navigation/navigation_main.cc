@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
   ros::Subscriber laser_sub =
       n.subscribe(FLAGS_laser_topic, 1, &LaserCallback);
   ros::Subscriber goto_sub =
-      n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
+      n.subscribe("/move_base_simple/goal", 1, &GoToCallbackPS);
   ros::Subscriber enabler_sub =
       n.subscribe(FLAGS_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
