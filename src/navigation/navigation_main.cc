@@ -75,7 +75,7 @@ DEFINE_string(map,
               "UT_Campus",
               "Name of navigation map");
 DEFINE_string(maps_dir,
-              "maps",
+              "enml/maps",
               "Path to the directory containing navigati onmaps");
 DECLARE_string(helpon);
 DECLARE_int32(v);
