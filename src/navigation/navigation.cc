@@ -77,14 +77,14 @@ using namespace ros_helpers;
 // Control loop period, in seconds.
 DEFINE_double(dt, 0.02, "Control loop period"); // 0.025
 // Maximum speed that the robot will drive at.
-DEFINE_double(max_speed, 0.7, "Maximum speed"); // 0.5
+DEFINE_double(max_speed, 0.55, "Maximum speed"); // 0.5
 // Maximum acceleration of the robot.
-DEFINE_double(max_accel, 0.2, "Maximum acceleration");
+DEFINE_double(max_accel, 0.15, "Maximum acceleration");
 // Maximum deceleration of the robot.
 DEFINE_double(max_decel, 1.0, "Maximum deceleration");
 
-DEFINE_double(max_ang_accel, 0.1, "Maximum angular acceleration"); // 0.5
-DEFINE_double(max_ang_speed, 0.2, "Maximum angular speed"); // 0.4
+DEFINE_double(max_ang_accel, 0.05, "Maximum angular acceleration"); // 0.5
+DEFINE_double(max_ang_speed, 0.25, "Maximum angular speed"); // 0.4
 
 DEFINE_double(carrot_dist, 2.5, "Distance of carrot from current location");
 
