@@ -202,6 +202,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   status_msg_.text = "Navigation Status";
   InitRosHeader("base_link", &drive_msg_.header);
   InitRosHeader("base_link", &fp_pcl_msg_.header);
+  planning_domain_ = GraphDomain(map_file);
   initialized_ = true;
 }
 
@@ -220,8 +221,8 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   plan_path_.clear();
 }
 
-void Navigation::UpdateMap(const string& map_file) {
-  planning_domain_.Load(map_file);
+void Navigation::UpdateMap(const string& map_name) {
+  planning_domain_.Load(GetMapPath(maps_dir_, map_name));
   plan_path_.clear();
 }
 
@@ -374,7 +375,11 @@ float Navigation::Run1DTOC(float x_now,
       Sq(speed) / (2.0 * d_max);
   char phase = '?';
   if (dist_left >  0) {
-    if (speed < max_speed && accel_stopping_dist < dist_left) {
+    if (speed > max_speed) {
+      // Over max speed, slow down.
+      phase = 'O';
+      velocity_cmd = max<float>(0.0f, speed - dv_a);
+    } else if (speed < max_speed && accel_stopping_dist < dist_left) {
       // Acceleration possible.
       phase = 'A';
       velocity_cmd = min<float>(max_speed, speed + dv_a);
@@ -501,19 +506,6 @@ void Navigation::Plan() {
   const uint64_t goal_id = planning_domain_.AddDynamicState(nav_goal_loc_);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
-  if (true) {
-    printf("Plan from (%7.2f,%7.2f) to (%7.2f,%7.2f)\n",
-          start.loc.x(), start.loc.y(), goal.loc.x(), goal.loc.y());
-    printf("Map:\n======\n");
-    for (const Domain::State& s : planning_domain_.states) {
-      printf("%4lu: %8.3f,%8.3f", s.id, s.loc.x(), s.loc.y());
-      for (const uint64_t n : planning_domain_.neighbors[s.id]) {
-        printf(" %4lu", n);
-      }
-      printf("\n");
-    }
-    printf("Map:\n======\n");
-  }
   visualization::ClearVisualizationMsg(global_viz_msg_);
   GraphVisualizer graph_viz(kVisualize);
   visualization::DrawCross(goal.loc, 0.2, 0xFF0000, global_viz_msg_);
@@ -932,6 +924,10 @@ void Navigation::RunObstacleAvoidance() {
   float curvature_cmd = 0;
   float velocity_cmd = 0;
 
+  float max_map_speed = params_.linear_limits.speed;
+  planning_domain_.GetClearanceAndSpeedFromLoc(
+      robot_loc_, nullptr, &max_map_speed);
+
   if (false) {
     fp_point_cloud_ = {
       Vector2f(FLAGS_tx, FLAGS_ty)
@@ -1001,8 +997,9 @@ void Navigation::RunObstacleAvoidance() {
       max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
 
   const float speed = robot_vel_.norm();
-  const float max_speed = min<float>(params_.linear_limits.speed,
+  float max_speed = min<float>(params_.linear_limits.speed,
       sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
+  max_speed = min(max_map_speed, max_speed);
   velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
   SendCommand(velocity_cmd, curvature_cmd);
 }

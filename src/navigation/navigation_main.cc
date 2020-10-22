@@ -46,6 +46,7 @@
 #include "ros/package.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
+#include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
 
@@ -66,7 +67,7 @@ using Eigen::Vector2f;
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
-DEFINE_string(maps_dir, kAmrlMapsDir, "Robot config file");
+DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 
 CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
@@ -219,13 +220,20 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
-  const string map_file = FLAGS_maps_dir +
-      StringPrintf("/%s/%s.navigation.txt",
-                   FLAGS_map.c_str(),
-                   FLAGS_map.c_str());
+  std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+  std::string deprecated_path = navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
+  if (!FileExists(map_path) && FileExists(deprecated_path)) {
+    printf("Could not find navigation map file at %s. An V1 nav-map was found at %s. Please run map_upgrade from vector_display to upgrade this map.\n", map_path.c_str(), deprecated_path.c_str());
+    return 1;
+  } else if (!FileExists(map_path)) {
+    printf("Could not find navigation map file at %s.\n", map_path.c_str());
+    return 1;
+  }
+
   navigation::NavigationParameters params;
   LoadConfig(&params);
-  navigation_.Initialize(params, MapNameToFile(FLAGS_map), &n);
+
+  navigation_.Initialize(params, map_path, &n);
 
   ros::Subscriber velocity_sub =
       n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);

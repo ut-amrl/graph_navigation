@@ -103,6 +103,14 @@ struct NavigationParameters {
       max_clearance(1.0) {}
 };
 
+inline std::string GetMapPath(const std::string& dir, const std::string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.json";
+}
+
+inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.txt";
+}
+
 struct PathOption {
   float curvature;
   float clearance;
@@ -224,6 +232,8 @@ class Navigation {
   double t_point_cloud_;
   // Time stamp of latest odometry message.
   double t_odometry_;
+
+  const std::string maps_dir_;
 
   // Planning domain for A* planner.
   GraphDomain planning_domain_;
