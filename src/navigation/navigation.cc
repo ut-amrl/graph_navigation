@@ -189,10 +189,6 @@ struct GraphVisualizer {
 
 namespace navigation {
 
-inline string GetMapPath(const string& dir, const string& name) {
-  return dir + "/" + name + "/" + name + ".navigation.json";
-}
-
 Navigation::Navigation(const string& maps_dir, const string& map_name, ros::NodeHandle* n) :
     robot_loc_(0, 0),
     robot_angle_(0),

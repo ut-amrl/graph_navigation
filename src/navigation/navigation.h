@@ -39,6 +39,14 @@ namespace ros {
 
 namespace navigation {
 
+inline std::string GetMapPath(const std::string& dir, const std::string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.json";
+}
+
+inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.txt";
+}
+
 struct PathOption {
   float curvature;
   float clearance;
