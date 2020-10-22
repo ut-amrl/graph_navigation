@@ -313,6 +313,9 @@ struct GraphDomain {
     const uint64_t pmid_id = AddState(pmid);
     const uint64_t p0_id = closest_edge.s0_id;
     const uint64_t p1_id = closest_edge.s1_id;
+    
+    // NOTE: Here, we are assuming that any dynamic edges added are free of stairs and doors.
+    // Additionally, we adopt the max_speed and max_clearance of the closest edge.
     AddUndirectedEdge(p0_id, pmid_id, closest_edge.max_speed, closest_edge.max_clearance, false, false);
 
     // Add p1 : pmid
@@ -323,6 +326,9 @@ struct GraphDomain {
 
     // Add pmid : v
     const uint64_t v_id = AddState(v);
+    
+    // NOTE: Here, we are assuming that any dynamic edges added are free of stairs and doors.
+    // Additionally, we adopt the max_speed and max_clearance of the closest edge.
     AddUndirectedEdge(pmid_id, v_id, closest_edge.max_speed, closest_edge.max_clearance, false, false);
 
     if (kDebug) {
