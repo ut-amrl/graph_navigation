@@ -193,16 +193,16 @@ struct GraphDomain {
     return found;
   }
 
-  bool GetClosestEdge(const Eigen::Vector2f& v, NavigationEdge& closest_edge, float* closest_dist) const {
+  bool GetClosestEdge(const Eigen::Vector2f& v, NavigationEdge* closest_edge, float* closest_dist) const {
     bool found;
-    closest_edge.s0_id = -1;
-    closest_edge.s1_id = -1;
+    closest_edge->s0_id = -1;
+    closest_edge->s1_id = -1;
     if (edges.empty()) return closest_dist;
     for (const NavigationEdge& e : edges) {
       const float dist = e.edge.Distance(v);
       if (dist < *closest_dist) {
         *closest_dist = dist;
-        closest_edge = e;
+        *closest_edge = e;
         found = true;
       }
     }
@@ -301,7 +301,7 @@ struct GraphDomain {
     // Find the closest Edge.
     NavigationEdge closest_edge;
     float closest_dist = FLT_MAX;
-    if (!GetClosestEdge(v, closest_edge, &closest_dist)) {
+    if (!GetClosestEdge(v, &closest_edge, &closest_dist)) {
       std::cerr << "Unable to find closest edge to point " << v << std::endl;
       return 0;
     }
@@ -455,7 +455,7 @@ struct GraphDomain {
     if (edges.empty()) return;
     NavigationEdge closest_edge;
     float closest_dist = FLT_MAX;
-    if (!GetClosestEdge(p, closest_edge, &closest_dist)) return;
+    if (!GetClosestEdge(p, &closest_edge, &closest_dist)) return;
     if (clearance) *clearance = closest_edge.max_clearance;
     if (speed) *speed = closest_edge.max_speed;
   }
