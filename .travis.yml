@@ -39,11 +39,15 @@ before_install:
   - git clone https://github.com/ut-amrl/amrl_msgs.git ~/amrl_msgs
   - pushd ~/amrl_msgs
   - export ROS_PACKAGE_PATH=~/amrl_msgs:$ROS_PACKAGE_PATH
+  - git clone https://github.com/ut-amrl/amrl_maps.git ~/amrl_maps
+  - pushd ~/amrl_maps
+  - export ROS_PACKAGE_PATH=~/amrl_maps:$ROS_PACKAGE_PATH
   - make
   - popd
 script:
   - source /opt/ros/melodic/setup.bash
   - export ROS_PACKAGE_PATH=~/amrl_msgs:$ROS_PACKAGE_PATH
+  - export ROS_PACKAGE_PATH=~/amrl_maps:$ROS_PACKAGE_PATH
   - export ROS_PACKAGE_PATH=`pwd`:$ROS_PACKAGE_PATH
   - make
   - roscore &
