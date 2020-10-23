@@ -36,6 +36,7 @@ ADD_LIBRARY(shared_library
 
 ADD_SUBDIRECTORY(src/shared)
 INCLUDE_DIRECTORIES(src/shared)
+INCLUDE_DIRECTORIES(src/config_reader/include)
 INCLUDE_DIRECTORIES(src/third_party)
 INCLUDE_DIRECTORIES(src)
 
