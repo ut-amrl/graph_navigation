@@ -221,8 +221,8 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   plan_path_.clear();
 }
 
-void Navigation::UpdateMap(const string& map_name) {
-  planning_domain_.Load(GetMapPath(maps_dir_, map_name));
+void Navigation::UpdateMap(const string& map_path) {
+  planning_domain_.Load(map_path);
   plan_path_.clear();
 }
 

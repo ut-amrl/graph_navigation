@@ -151,10 +151,6 @@ void SignalHandler(int) {
   run_ = false;
 }
 
-string MapNameToFile(const string& map) {
-  return FLAGS_maps_dir + StringPrintf("/%s/%s.navigation.txt", map.c_str(), map.c_str());
-}
-
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   static string map  = "";
   if (FLAGS_v > 0) {
@@ -163,7 +159,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
   if (map != msg.map) {
     map = msg.map;
-    navigation_.UpdateMap(MapNameToFile(map));
+    navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
   }
 }
 
