@@ -799,7 +799,7 @@ PathOption GetBestOption(const vector<PathOption>& options,
 
 void Navigation::ApplyDynamicConstraints(vector<PathOption>* options_ptr) {
   vector<PathOption>& options = *options_ptr;
-  // const float max_domega = params_.dt * params_.angular_limits.accel;
+  const float max_domega = params_.dt * params_.angular_limits.accel;
   const float stopping_dist =
       robot_vel_.squaredNorm() / (2.0 * params_.linear_limits.decel);
   for (PathOption& o : options) {
@@ -808,12 +808,12 @@ void Navigation::ApplyDynamicConstraints(vector<PathOption>* options_ptr) {
       o.dist_to_goal = FLT_MAX;
       o.clearance = 0;
     }
-    // const float omega_next = robot_vel_.x() * o.curvature;
-    // if (omega_next < robot_omega_ - max_domega ||
-    //     omega_next > robot_omega_ + max_domega) {
-    //   o.free_path_length = 0;
-    //   o.dist_to_goal = FLT_MAX;
-    // }
+    const float omega_next = robot_vel_.x() * o.curvature;
+    if (omega_next < robot_omega_ - max_domega ||
+        omega_next > robot_omega_ + max_domega) {
+      o.free_path_length = 0;
+      o.dist_to_goal = FLT_MAX;
+    }
   }
 }
 
