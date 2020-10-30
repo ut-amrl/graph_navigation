@@ -1,6 +1,6 @@
 NavigationParameters = {
   laser_topic = "velodyne_2dscan";
-  odom_topic = "jackal_velocity_controller/odom";
+  odom_topic = "odom";
   localization_topic = "localization";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
@@ -24,4 +24,5 @@ NavigationParameters = {
   base_link_offset = 0;
   max_free_path_length = 6.0;
   max_clearance = 1.0;
+  can_traverse_stairs = false;
 };
