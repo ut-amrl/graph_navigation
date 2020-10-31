@@ -171,6 +171,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
   #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
   #define STRING_PARAM(x) CONFIG_STRING(x, "NavigationParameters."#x);
+  #define BOOL_PARAM(x) CONFIG_BOOL(x, "NavigationParameters."#x);
   REAL_PARAM(dt);
   REAL_PARAM(max_linear_accel);
   REAL_PARAM(max_linear_decel);
@@ -187,6 +188,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(base_link_offset);
   REAL_PARAM(max_free_path_length);
   REAL_PARAM(max_clearance);
+  BOOL_PARAM(can_traverse_stairs);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -207,6 +209,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->base_link_offset = CONFIG_base_link_offset;
   params->max_free_path_length = CONFIG_max_free_path_length;
   params->max_clearance = CONFIG_max_clearance;
+  params->can_traverse_stairs = CONFIG_can_traverse_stairs;
 }
 
 int main(int argc, char** argv) {

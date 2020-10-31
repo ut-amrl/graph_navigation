@@ -45,7 +45,9 @@
 #include "math/math_util.h"
 #include "ros/ros_helpers.h"
 #include "util/helpers.h"
+
 #include "vector_map/vector_map.h"
+#include "navigation_parameters.h"
 
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
@@ -118,12 +120,14 @@ struct GraphDomain {
     }
   };
 
+  GraphDomain() {
+    this->params_ = new NavigationParameters();
+  }
 
-  GraphDomain() {}
-
-  explicit GraphDomain(const std::string& map_file) {
+  explicit GraphDomain(const std::string& map_file, const navigation::NavigationParameters* params) {
     // Load graph from file.
     Load(map_file);
+    this->params_ = params;
   }
 
   State KeyToState(uint64_t key) const {
@@ -162,8 +166,8 @@ struct GraphDomain {
     CHECK_LT(s_key, states.size());
     state_neighbors->clear();
     for (const NavigationEdge& e : edges) {
-      if (e.s0_id == s_key) state_neighbors->push_back(e.s1_id);
-      if (e.s1_id == s_key) state_neighbors->push_back(e.s0_id);
+      if (e.s0_id == s_key && (!e.has_stairs || params_->can_traverse_stairs)) state_neighbors->push_back(e.s1_id);
+      if (e.s1_id == s_key && (!e.has_stairs || params_->can_traverse_stairs)) state_neighbors->push_back(e.s0_id);
     }
   }
 
@@ -200,7 +204,7 @@ struct GraphDomain {
     if (edges.empty()) return closest_dist;
     for (const NavigationEdge& e : edges) {
       const float dist = e.edge.Distance(v);
-      if (dist < *closest_dist) {
+      if (dist < *closest_dist && (!e.has_stairs || params_->can_traverse_stairs)) {
         *closest_dist = dist;
         *closest_edge = e;
         found = true;
@@ -465,6 +469,8 @@ struct GraphDomain {
   // V2 Map edges.
   std::vector<NavigationEdge> edges;
   std::vector<NavigationEdge> static_edges;
+
+  const navigation::NavigationParameters* params_;
 };
 
 

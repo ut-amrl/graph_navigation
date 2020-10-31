@@ -202,7 +202,8 @@ void Navigation::Initialize(const NavigationParameters& params,
   status_msg_.text = "Navigation Status";
   InitRosHeader("base_link", &drive_msg_.header);
   InitRosHeader("base_link", &fp_pcl_msg_.header);
-  planning_domain_ = GraphDomain(map_file);
+  params_ = params;
+  planning_domain_ = GraphDomain(map_file, &params_);
   initialized_ = true;
 }
 
