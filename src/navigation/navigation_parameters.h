@@ -15,7 +15,7 @@
 /*!
 \file    navigation.h
 \brief   Interface for reference Navigation class.
-\author  Joydeep Biswas, (C) 2019
+\author  Kavan Sikand, (C) 2020
 */
 //========================================================================
 
