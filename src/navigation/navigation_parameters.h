@@ -13,8 +13,8 @@
 //  If not, see <http://www.gnu.org/licenses/>.
 //========================================================================
 /*!
-\file    navigation.h
-\brief   Interface for reference Navigation class.
+\file    navigation_parameters.h
+\brief   Interface for Navigation parameters as loaded from config.
 \author  Kavan Sikand, (C) 2020
 */
 //========================================================================
