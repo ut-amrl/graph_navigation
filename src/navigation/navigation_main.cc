@@ -28,7 +28,7 @@
 #include <vector>
 
 #include "amrl_msgs/Localization2DMsg.h"
-#include "amrl_msgs/Pose2Df.h"
+#include "config_reader/config_reader.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
@@ -43,8 +43,10 @@
 #include "visualization_msgs/MarkerArray.h"
 #include "nav_msgs/Odometry.h"
 #include "ros/ros.h"
+#include "ros/package.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
+#include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
 
@@ -62,30 +64,29 @@ using std::string;
 using std::vector;
 using Eigen::Vector2f;
 
-DEFINE_string(laser_topic, "velodyne_2dscan", "Name of ROS topic for LIDAR data");
-DEFINE_string(odom_topic, "jackal_velocity_controller/odom", "Name of ROS topic for odometry data");
-DEFINE_string(loc_topic, "localization", "Name of ROS topic for localization");
-DEFINE_string(init_topic,
-              "initialpose",
-              "Name of ROS topic for initialization");
-// Name of topic controlling whether to enable autonomous nav or not.
-DEFINE_string(enable_topic, "autonomy_arbiter/enabled",
-    "ROS topic that indicates whether autonomy is enabled or not.");
-DEFINE_string(map,
-              "maps/Joydeepb-Home/Joydeepb-Home.navigation.txt",
-              "Name of navigation map file");
-DECLARE_string(helpon);
+const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
+
+DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
+DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
+
+CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
+CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
+CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
+CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
+CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
+CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
+CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
+
+DEFINE_string(map, "UT_Campus", "Name of navigation map file");
+
 DECLARE_int32(v);
-DECLARE_double(dt);
 
 bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
-Navigation* navigation_ = nullptr;
+Navigation navigation_;
 
 void EnablerCallback(const std_msgs::Bool& msg) {
-  if (navigation_) {
-    navigation_->Enable(msg.data);
-  }
+  navigation_.Enable(msg.data);
 }
 
 void LaserCallback(const sensor_msgs::LaserScan& msg) {
@@ -95,7 +96,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
            GetWallTime() - msg.header.stamp.toSec());
   }
   // Location of the laser on the robot. Assumes the laser is forward-facing.
-  const Vector2f kLaserLoc(0.065, 0);
+  const Vector2f kLaserLoc(CONFIG_laser_loc_x, CONFIG_laser_loc_y);
   static float cached_dtheta_ = 0;
   static float cached_angle_min_ = 0;
   static size_t cached_num_rays_ = 0;
@@ -122,7 +123,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
       msg.ranges[i] : msg.range_max);
     point_cloud_[i] = r * cached_rays_[i] + kLaserLoc;
   }
-  navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
+  navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
   last_laser_msg_ = msg;
 }
 
@@ -130,23 +131,16 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 0) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
-  navigation_->UpdateOdometry(msg);
+  navigation_.UpdateOdometry(msg);
 }
 
-void GoToCallbackPS(const geometry_msgs::PoseStamped& msg) {
+void GoToCallback(const geometry_msgs::PoseStamped& msg) {
   const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
   const float angle =
       2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
-  navigation_->SetNavGoal(loc, angle);
+  navigation_.SetNavGoal(loc, angle);
 }
-
-void GoToCallback(const amrl_msgs::Pose2Df& msg) {
-  const Vector2f loc(msg.x, msg.y);
-  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.theta);
-  navigation_->SetNavGoal(loc, msg.theta);
-}
-
 
 void SignalHandler(int) {
   if (!run_) {
@@ -162,17 +156,60 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   if (FLAGS_v > 0) {
     printf("Localization t=%f\n", GetWallTime());
   }
-  navigation_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
+  navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
   if (map != msg.map) {
     map = msg.map;
-    navigation_->UpdateMap(FLAGS_map);
+    navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
   }
 }
 
 void HaltCallback(const std_msgs::Bool& msg) {
-  if (navigation_) {
-    navigation_->Abort();
-  }
+  navigation_.Abort();
+}
+
+void LoadConfig(navigation::NavigationParameters* params) {
+  #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
+  #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
+  #define STRING_PARAM(x) CONFIG_STRING(x, "NavigationParameters."#x);
+  #define BOOL_PARAM(x) CONFIG_BOOL(x, "NavigationParameters."#x);
+  REAL_PARAM(dt);
+  REAL_PARAM(max_linear_accel);
+  REAL_PARAM(max_linear_decel);
+  REAL_PARAM(max_linear_speed);
+  REAL_PARAM(max_angular_accel);
+  REAL_PARAM(max_angular_decel);
+  REAL_PARAM(max_angular_speed);
+  REAL_PARAM(carrot_dist);
+  REAL_PARAM(system_latency);
+  REAL_PARAM(obstacle_margin);
+  NATURALNUM_PARAM(num_options);
+  REAL_PARAM(robot_width);
+  REAL_PARAM(robot_length);
+  REAL_PARAM(base_link_offset);
+  REAL_PARAM(max_free_path_length);
+  REAL_PARAM(max_clearance);
+  BOOL_PARAM(can_traverse_stairs);
+
+  config_reader::ConfigReader reader({FLAGS_robot_config});
+  params->dt = CONFIG_dt;
+  params->linear_limits = navigation::MotionLimit(
+      CONFIG_max_linear_accel,
+      CONFIG_max_linear_decel,
+      CONFIG_max_linear_speed);
+  params->angular_limits = navigation::MotionLimit(
+      CONFIG_max_angular_accel,
+      CONFIG_max_angular_decel,
+      CONFIG_max_angular_speed);
+  params->carrot_dist = CONFIG_carrot_dist;
+  params->system_latency = CONFIG_system_latency;
+  params->obstacle_margin = CONFIG_obstacle_margin;
+  params->num_options = CONFIG_num_options;
+  params->robot_width = CONFIG_robot_width;
+  params->robot_length = CONFIG_robot_length;
+  params->base_link_offset = CONFIG_base_link_offset;
+  params->max_free_path_length = CONFIG_max_free_path_length;
+  params->max_clearance = CONFIG_max_clearance;
+  params->can_traverse_stairs = CONFIG_can_traverse_stairs;
 }
 
 int main(int argc, char** argv) {
@@ -182,27 +219,39 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
-  navigation_ = new Navigation(FLAGS_map, &n);
+  std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+  std::string deprecated_path = navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
+  if (!FileExists(map_path) && FileExists(deprecated_path)) {
+    printf("Could not find navigation map file at %s. An V1 nav-map was found at %s. Please run map_upgrade from vector_display to upgrade this map.\n", map_path.c_str(), deprecated_path.c_str());
+    return 1;
+  } else if (!FileExists(map_path)) {
+    printf("Could not find navigation map file at %s.\n", map_path.c_str());
+    return 1;
+  }
+
+  navigation::NavigationParameters params;
+  LoadConfig(&params);
+
+  navigation_.Initialize(params, map_path, &n);
 
   ros::Subscriber velocity_sub =
-      n.subscribe(FLAGS_odom_topic, 1, &OdometryCallback);
+      n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
   ros::Subscriber localization_sub =
-      n.subscribe(FLAGS_loc_topic, 1, &LocalizationCallback);
+      n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =
-      n.subscribe(FLAGS_laser_topic, 1, &LaserCallback);
+      n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber enabler_sub =
-      n.subscribe(FLAGS_enable_topic, 1, &EnablerCallback);
+      n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
       n.subscribe("halt_robot", 1, &HaltCallback);
 
-  RateLoop loop(1.0 / FLAGS_dt);
+  RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
     ros::spinOnce();
-    navigation_->Run();
+    navigation_.Run();
     loop.Sleep();
   }
-  delete navigation_;
   return 0;
 }

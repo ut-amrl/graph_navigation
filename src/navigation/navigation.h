@@ -27,8 +27,10 @@
 #include "geometry_msgs/TwistStamped.h"
 #include "nav_msgs/Odometry.h"
 
+#include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
 #include "graph_domain.h"
+#include "navigation_parameters.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -38,6 +40,14 @@ namespace ros {
 }  // namespace ros
 
 namespace navigation {
+
+inline std::string GetMapPath(const std::string& dir, const std::string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.json";
+}
+
+inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
+  return dir + "/" + name + "/" + name + ".navigation.txt";
+}
 
 struct PathOption {
   float curvature;
@@ -54,7 +64,8 @@ struct PathOption {
 
 class Navigation {
  public:
-  explicit Navigation(const std::string& map_file, ros::NodeHandle* n);
+
+  explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
@@ -78,6 +89,10 @@ class Navigation {
   bool Enabled() const;
   // Stop all navigation functions.
   void Abort();
+  // Set parameters for navigation.
+  void Initialize(const NavigationParameters& params,
+                  const std::string& map_file,
+                  ros::NodeHandle* ros_node_handle);
 
  private:
 
@@ -158,16 +173,7 @@ class Navigation {
   // Time stamp of latest odometry message.
   double t_odometry_;
 
-  // Width of the robot.
-  const float kRobotWidth;
-  // Length of the robot.
-  const float kRobotLength;
-  // Location of the robot's rear wheel axle relative to the center of the body.
-  const float kRearAxleOffset;
-  // Assumed free space when there are no obstacles detected along a path.
-  const float kMaxFreeLength;
-  // Maximum clearance for the robot to care about.
-  const float kMaxClearance;
+  const std::string maps_dir_;
 
   // Planning domain for A* planner.
   GraphDomain planning_domain_;
@@ -187,6 +193,12 @@ class Navigation {
 
   // Whether to enable autonomous navigation or not.
   bool enabled_;
+
+  // Navigation parameters.
+  NavigationParameters params_;
+
+  // Whether or not things have been initialized.
+  bool initialized_;
 };
 
 }  // namespace navigation

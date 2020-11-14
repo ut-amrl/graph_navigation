@@ -77,28 +77,6 @@ using std::vector;
 using namespace math_util;
 using namespace ros_helpers;
 
-// Control loop period, in seconds.
-DEFINE_double(dt, 0.025, "Control loop period");
-// Maximum speed that the robot will drive at.
-DEFINE_double(max_speed, 0.5, "Maximum speed");
-// Maximum acceleration of the robot.
-DEFINE_double(max_accel, 1.0, "Maximum acceleration");
-// Maximum deceleration of the robot.
-DEFINE_double(max_decel, 1.0, "Maximum deceleration");
-
-DEFINE_double(max_ang_accel, 0.5, "Maximum angular acceleration");
-DEFINE_double(max_ang_speed, 1.0, "Maximum angular speed");
-
-DEFINE_double(carrot_dist, 2.5, "Distance of carrot from current location");
-
-// Latency of the robot: time difference between making an observation, to
-// processing the sensor data, to planning, to sending commands to the
-// actuators, to actually moving.
-DEFINE_double(system_latency, 0.24, "System latency in seconds");
-
-// Margin to leave around the car for obstacle checking.
-DEFINE_double(obstacle_margin, 0.15, "Margin to leave for obstacle avoidance");
-
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
 DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
@@ -107,8 +85,8 @@ DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
+
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
-DEFINE_int32(num_options, 41, "Number of options to consider");
 
 // Name of topic to publish twist messages to.
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "ROS topic to publish twist messages to.");
@@ -214,7 +192,7 @@ struct GraphVisualizer {
 
 namespace navigation {
 
-Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
+Navigation::Navigation() :
     robot_loc_(0, 0),
     robot_angle_(0),
     robot_vel_(0, 0),
@@ -226,14 +204,12 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
     loc_initialized_(false),
     t_point_cloud_(0),
     t_odometry_(0),
-    kRobotWidth(0.44),
-    kRobotLength(0.5),
-    kRearAxleOffset(0),
-    kMaxFreeLength(6),
-    kMaxClearance(1.0),
-    planning_domain_(map_file),
-    enabled_(false) {
-  
+    enabled_(false),
+    initialized_(false) { }
+
+void Navigation::Initialize(const NavigationParameters& params,
+                            const string& map_file,
+                            ros::NodeHandle* n) {
   ackermann_drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n->advertise<geometry_msgs::Twist>(
@@ -254,6 +230,9 @@ Navigation::Navigation(const string& map_file, ros::NodeHandle* n) :
   status_msg_.text = "Navigation Status";
   InitRosHeader("base_link", &drive_msg_.header);
   InitRosHeader("base_link", &fp_pcl_msg_.header);
+  params_ = params;
+  planning_domain_ = GraphDomain(map_file, &params_);
+  initialized_ = true;
 }
 
 bool Navigation::Enabled() const {
@@ -295,8 +274,8 @@ void Navigation::ConvertPathToNavMsgsPath() {                                  /
   }
 }
 
-void Navigation::UpdateMap(const string& map_file) {
-  planning_domain_.Load(map_file);
+void Navigation::UpdateMap(const string& map_path) {
+  planning_domain_.Load(map_path);
   plan_path_.clear();
 }
 
@@ -319,7 +298,7 @@ void Navigation::SendCommand(float vel, float curvature) {
   twist_drive_pub_.publish(twist.twist);
   // This command is going to take effect system latency period after. Hence
   // modify the timestamp to reflect the time when it will take effect.
-  twist.header.stamp += ros::Duration(FLAGS_system_latency);
+  twist.header.stamp += ros::Duration(params_.system_latency);
   command_history_.push_back(twist);
   if (false) {
     printf("Push %f %f\n",
@@ -337,7 +316,7 @@ void Navigation::PruneLatencyQueue() {
     if (kDebug) {
       printf("Command %d %f\n", int(i), t_cmd - update_time);
     }
-    if (t_cmd < update_time - FLAGS_dt) {
+    if (t_cmd < update_time - params_.dt) {
       if (kDebug) {
         printf("Erase %d %f %f\n",
             int(i),
@@ -397,18 +376,18 @@ void Navigation::ForwardPredict(double t) {
   for (const TwistStamped& c : command_history_) {
     const double cmd_time = c.header.stamp.toSec();
     if (cmd_time > t) continue;
-    if (cmd_time >= t_odometry_ - FLAGS_dt) {
+    if (cmd_time >= t_odometry_ - params_.dt) {
       const float dt = (t_odometry_ > cmd_time) ?
-          min<double>(t_odometry_ - cmd_time, FLAGS_dt) :
-          min<double>(t - cmd_time, FLAGS_dt);
+          min<double>(t_odometry_ - cmd_time, params_.dt) :
+          min<double>(t - cmd_time, params_.dt);
       odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
           c.twist.linear.x, c.twist.linear.y));
       odom_angle_ = AngleMod(odom_angle_ + dt * c.twist.angular.z);
     }
-    if (t_point_cloud_ >= cmd_time  - FLAGS_dt) {
+    if (t_point_cloud_ >= cmd_time  - params_.dt) {
       const float dt = (t_point_cloud_ > cmd_time) ?
-          min<double>(t_point_cloud_ - cmd_time, FLAGS_dt) :
-          min<double>(t - cmd_time, FLAGS_dt);
+          min<double>(t_point_cloud_ - cmd_time, params_.dt) :
+          min<double>(t - cmd_time, params_.dt);
       lidar_tf =
           Translation2f(-dt * Vector2f(c.twist.linear.x, c.twist.linear.y)) *
           Rotation2Df(-c.twist.angular.z * dt) *
@@ -449,7 +428,11 @@ float Navigation::Run1DTOC(float x_now,
       Sq(speed) / (2.0 * d_max);
   char phase = '?';
   if (dist_left >  0) {
-    if (speed < max_speed && accel_stopping_dist < dist_left) {
+    if (speed > max_speed) {
+      // Over max speed, slow down.
+      phase = 'O';
+      velocity_cmd = max<float>(0.0f, speed - dv_a);
+    } else if (speed < max_speed && accel_stopping_dist < dist_left) {
       // Acceleration possible.
       phase = 'A';
       velocity_cmd = min<float>(max_speed, speed + dv_a);
@@ -493,7 +476,8 @@ void Navigation::TrapezoidTest() {
   if (!odom_initialized_) return;
   const float x = (odom_loc_ - starting_loc_).norm();
   const float speed = robot_vel_.norm();
-  const float velocity_cmd = Run1DTOC(x, FLAGS_test_dist, speed, FLAGS_max_speed, FLAGS_max_accel, FLAGS_max_decel, FLAGS_dt);
+  const float velocity_cmd = Run1DTOC(x, FLAGS_test_dist, speed,
+    params_.linear_limits.speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
   SendCommand(velocity_cmd, 0);
 }
 
@@ -502,9 +486,10 @@ void Navigation::ObstacleTest() {
   float free_path_length = 30.0;
   float clearance = 10;
   GetStraightFreePathLength(&free_path_length, &clearance);
-  const float dist_left = max<float>(0.0f, free_path_length - FLAGS_obstacle_margin);
+  const float dist_left =
+      max<float>(0.0f, free_path_length - params_.obstacle_margin);
   printf("%f\n", free_path_length);
-  const float velocity_cmd = Run1DTOC(0, dist_left, speed, FLAGS_max_speed, FLAGS_max_accel, FLAGS_max_decel, FLAGS_dt);
+  const float velocity_cmd = Run1DTOC(0, dist_left, speed, params_.linear_limits.speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
   SendCommand(velocity_cmd, 0);
 }
 
@@ -574,19 +559,6 @@ void Navigation::Plan() {
   const uint64_t goal_id = planning_domain_.AddDynamicState(nav_goal_loc_);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
-  if (true) {
-    printf("Plan from (%7.2f,%7.2f) to (%7.2f,%7.2f)\n",
-          start.loc.x(), start.loc.y(), goal.loc.x(), goal.loc.y());
-    printf("Map:\n======\n");
-    for (const Domain::State& s : planning_domain_.states) {
-      printf("%4lu: %8.3f,%8.3f", s.id, s.loc.x(), s.loc.y());
-      for (const uint64_t n : planning_domain_.neighbors[s.id]) {
-        printf(" %4lu", n);
-      }
-      printf("\n");
-    }
-    printf("Map:\n======\n");
-  }
   visualization::ClearVisualizationMsg(global_viz_msg_);
   GraphVisualizer graph_viz(kVisualize);
   visualization::DrawCross(goal.loc, 0.2, 0xFF0000, global_viz_msg_);
@@ -632,7 +604,7 @@ bool Navigation::PlanStillValid() {
 }
 
 Vector2f Navigation::GetCarrot() {
-  const float kSqCarrotDist = Sq(FLAGS_carrot_dist);
+  const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
 
   if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
@@ -689,7 +661,7 @@ Vector2f Navigation::GetCarrot() {
   // printf("%f,%f %f,%f %f,%f %f\n",
   //     V2COMP(robot_loc_), V2COMP(v0), V2COMP(v1), (v0 - v1).norm());
   const int num_intersections = geometry::CircleLineIntersection<float>(
-      robot_loc_, FLAGS_carrot_dist, v0, v1, &r0, &r1);
+      robot_loc_, params_.carrot_dist, v0, v1, &r0, &r1);
   CHECK_GT(num_intersections, 0);
   if (num_intersections == 1) return r0;
   if ((r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
@@ -702,14 +674,14 @@ Vector2f Navigation::GetCarrot() {
 void Navigation::GetStraightFreePathLength(float* free_path_length,
                                            float* clearance) {
   // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * kRobotLength - kRearAxleOffset + FLAGS_obstacle_margin;
+  const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
   // The robot's half-width.
-  const float w = 0.5 * kRobotWidth + FLAGS_obstacle_margin;
+  const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
   for (const Vector2f& p : fp_point_cloud_) {
     if (fabs(p.y()) > w || p.x() < 0.0f) continue;
     *free_path_length = min(*free_path_length, p.x() - l);
   }
-  *clearance = kMaxClearance;
+  *clearance = params_.max_clearance;
   for (const Vector2f& p : point_cloud_) {
     if (p.x() - l > *free_path_length || p.x() < 0.0) continue;
     *clearance = min<float>(*clearance, fabs(fabs(p.y() - w)));
@@ -728,8 +700,8 @@ void Navigation::GetFreePathLength(float curvature,
   }
   const float path_radius = 1.0 / curvature;
   // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * kRobotLength - kRearAxleOffset + FLAGS_obstacle_margin;
-  const float w = 0.5 * kRobotWidth + FLAGS_obstacle_margin;
+  const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
+  const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
   const Vector2f c(0, path_radius );
   const float s = ((path_radius > 0.0) ? 1.0 : -1.0);
   const Vector2f inner_front_corner(l, s * w);
@@ -739,7 +711,7 @@ void Navigation::GetFreePathLength(float curvature,
   const float r2_sq = (inner_front_corner - c).squaredNorm();
   const float r3_sq = (outer_front_corner - c).squaredNorm();
   float angle_min = M_PI;
-  *obstruction = Vector2f(-kMaxFreeLength, 0);
+  *obstruction = Vector2f(-params_.max_free_path_length, 0);
   for (size_t i = 0; i < fp_point_cloud_.size(); ++i) {
     const Vector2f& p = fp_point_cloud_[i];
     if (p.x() < 0.0f) continue;
@@ -770,7 +742,7 @@ void Navigation::GetFreePathLength(float curvature,
   }
   *free_path_length = max(0.0f, *free_path_length);
   angle_min = min<float>(angle_min, *free_path_length * fabs(curvature));
-  *clearance = kMaxClearance;
+  *clearance = params_.max_clearance;
 
   for (const Vector2f& p : fp_point_cloud_) {
     const float theta = ((curvature > 0.0f) ?
@@ -881,13 +853,14 @@ PathOption GetBestOption(const vector<PathOption>& options,
 
 void Navigation::ApplyDynamicConstraints(vector<PathOption>* options_ptr) {
   vector<PathOption>& options = *options_ptr;
-  const float max_domega = FLAGS_dt * FLAGS_max_ang_accel;
+  const float max_domega = params_.dt * params_.angular_limits.accel;
   const float stopping_dist =
-      robot_vel_.squaredNorm() / (2.0 * FLAGS_max_decel);
+      robot_vel_.squaredNorm() / (2.0 * params_.linear_limits.decel);
   for (PathOption& o : options) {
     if (o.free_path_length < stopping_dist) {
       o.free_path_length = 0;
       o.dist_to_goal = FLT_MAX;
+      o.clearance = 0;
     }
     const float omega_next = robot_vel_.x() * o.curvature;
     if (omega_next < robot_omega_ - max_domega ||
@@ -908,8 +881,8 @@ void Navigation::GetPathOptions(vector<PathOption>* options_ptr) {
     };
     return;
   }
-  const float max_domega = FLAGS_dt * FLAGS_max_ang_accel;
-  const float max_dv = FLAGS_dt * FLAGS_max_accel;
+  const float max_domega = params_.dt * params_.angular_limits.accel;
+  const float max_dv = params_.dt * params_.linear_limits.accel;
   const float robot_speed = fabs(robot_vel_.x());
   float c_min = -FLAGS_max_curvature;
   float c_max = FLAGS_max_curvature;
@@ -919,7 +892,8 @@ void Navigation::GetPathOptions(vector<PathOption>* options_ptr) {
     c_max = min<float>(
         c_max, (robot_omega_ + max_domega) / (robot_speed - max_dv));
   }
-  const float dc = (c_max - c_min) / static_cast<float>(FLAGS_num_options - 1);
+  const float dc = (c_max - c_min) / static_cast<float>(
+      params_.num_options - 1);
   // printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
   if (false) {
     for (float c = c_min; c <= c_max; c+= dc) {
@@ -929,7 +903,7 @@ void Navigation::GetPathOptions(vector<PathOption>* options_ptr) {
     }
   } else {
     const float dc = (2.0f * FLAGS_max_curvature) /
-        static_cast<float>(FLAGS_num_options - 1);
+        static_cast<float>(params_.num_options - 1);
     for (float c = -FLAGS_max_curvature; c <= FLAGS_max_curvature; c+= dc) {
       PathOption o;
       o.curvature = c;
@@ -963,10 +937,10 @@ Vector2f GetFinalPoint(const PathOption& o) {
 void Navigation::DrawRobot() {
   {
     // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * kRobotLength - kRearAxleOffset - FLAGS_obstacle_margin;
+    const float l1 = -0.5 * params_.robot_length - params_.base_link_offset - params_.obstacle_margin;
     // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * kRobotLength - kRearAxleOffset + FLAGS_obstacle_margin;
-    const float w = 0.5 * kRobotWidth + FLAGS_obstacle_margin;
+    const float l2 = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
+    const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
     visualization::DrawLine(
         Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
     visualization::DrawLine(
@@ -979,10 +953,10 @@ void Navigation::DrawRobot() {
 
   {
     // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
+    const float l1 = -0.5 * params_.robot_length - params_.base_link_offset;
     // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
-    const float w = 0.5 * kRobotWidth;
+    const float l2 = 0.5 * params_.robot_length - params_.base_link_offset;
+    const float w = 0.5 * params_.robot_width;
     visualization::DrawLine(
         Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);
     visualization::DrawLine(
@@ -1004,6 +978,10 @@ void Navigation::RunObstacleAvoidance() {
   float curvature_cmd = 0;
   float velocity_cmd = 0;
 
+  float max_map_speed = params_.linear_limits.speed;
+  planning_domain_.GetClearanceAndSpeedFromLoc(
+      robot_loc_, nullptr, &max_map_speed);
+
   if (false) {
     fp_point_cloud_ = {
       Vector2f(FLAGS_tx, FLAGS_ty)
@@ -1018,7 +996,7 @@ void Navigation::RunObstacleAvoidance() {
 
   for (PathOption& o : path_options) {
     if (fabs(o.curvature) < kEpsilon) {
-      o.free_path_length = min(kMaxFreeLength, local_target_.x());
+      o.free_path_length = min(params_.max_free_path_length, local_target_.x());
     } else {
       const float turn_radius = 1.0f / o.curvature;
       const Vector2f turn_center(0, turn_radius);
@@ -1028,7 +1006,7 @@ void Navigation::RunObstacleAvoidance() {
       const float middle_angle =
           atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
       o.free_path_length =
-          min<float>(kMaxFreeLength, middle_angle * fabs(turn_radius));
+          min<float>(params_.max_free_path_length, middle_angle * fabs(turn_radius));
       o.free_path_length =
           min<float>(o.free_path_length, fabs(turn_radius) * M_PI_2);
     }
@@ -1051,7 +1029,7 @@ void Navigation::RunObstacleAvoidance() {
     }
   }
   if (kDebug) printf("\n");
-  // ApplyDynamicConstraints(&path_options);
+  ApplyDynamicConstraints(&path_options);
   for (const auto& o : path_options) {
     visualization::DrawPathOption(o.curvature,
                                   o.free_path_length,
@@ -1070,12 +1048,13 @@ void Navigation::RunObstacleAvoidance() {
   visualization::DrawCross(closest_point, 0.05, 0x00A000, local_viz_msg_);
   curvature_cmd = best_option.curvature;
   const float dist_left =
-      max<float>(0.0, best_option.free_path_length - FLAGS_obstacle_margin);
+      max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
 
   const float speed = robot_vel_.norm();
-  const float max_speed = min(FLAGS_max_speed,
-      sqrt(2.0f * FLAGS_max_accel * best_option.clearance));
-  velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, FLAGS_max_accel, FLAGS_max_decel, FLAGS_dt);
+  float max_speed = min<float>(params_.linear_limits.speed,
+      sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
+  max_speed = min(max_map_speed, max_speed);
+  velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
   SendCommand(velocity_cmd, curvature_cmd);
 }
 
@@ -1084,7 +1063,7 @@ void Navigation::Halt() {
   const float velocity = robot_vel_.x();
   float velocity_cmd = 0;
   if (fabs(velocity) > kEpsSpeed) {
-    const float dv = FLAGS_max_decel * FLAGS_dt;
+    const float dv = params_.linear_limits.decel * params_.dt;
     if (velocity < -dv) {
       velocity_cmd = velocity + dv;
     } else if (velocity > dv) {
@@ -1107,7 +1086,7 @@ void Navigation::TurnInPlace() {
     return;
   }
   const float goal_theta = atan2(local_target_.y(), local_target_.x());
-  const float dv = FLAGS_dt * FLAGS_max_ang_accel;
+  const float dv = params_.dt * params_.angular_limits.accel;
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
     if (fabs(robot_omega_) < dv) {
@@ -1119,8 +1098,8 @@ void Navigation::TurnInPlace() {
     // printf("Running TOC\n");
     const float s = Sign(goal_theta);
     angular_cmd = s * Run1DTOC(0, s * goal_theta, s * robot_omega_,
-        FLAGS_max_ang_speed, FLAGS_max_ang_accel, FLAGS_max_ang_accel,
-        FLAGS_dt);
+        params_.angular_limits.speed, params_.angular_limits.accel,
+        params_.angular_limits.decel, params_.dt);
   }
   // TODO: Motion profiling for omega.
   // printf("TurnInPlace: %8.3f %8.3f %8.3f\n",
@@ -1164,10 +1143,11 @@ void Navigation::Abort() {
 }
 
 void Navigation::Run() {
+  if (!initialized_) return;
   visualization::ClearVisualizationMsg(local_viz_msg_);
   DrawRobot();
   if (!odom_initialized_) return;
-  ForwardPredict(ros::Time::now().toSec() + FLAGS_system_latency);
+  ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
   const float kNavTolerance = 0.5;
   if (FLAGS_test_toc) {
     TrapezoidTest();
@@ -1206,7 +1186,7 @@ void Navigation::Run() {
   auto msg_copy = global_viz_msg_;
   visualization::DrawCross(carrot, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
-      Vector2f(0, 0), FLAGS_carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+      Vector2f(0, 0), params_.carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
   // Check if complete.
   nav_complete_ = (robot_loc_ - carrot).norm() < kNavTolerance;
@@ -1218,8 +1198,8 @@ void Navigation::Run() {
     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
     static const float kLocalFOV = DegToRad(60.0);
     const float theta = atan2(local_target_.y(), local_target_.x());
-    if (local_target_.squaredNorm() > Sq(FLAGS_carrot_dist)) {
-      local_target_ = FLAGS_carrot_dist * local_target_.normalized();
+    if (local_target_.squaredNorm() > Sq(params_.carrot_dist)) {
+      local_target_ = params_.carrot_dist * local_target_.normalized();
     }
     visualization::DrawCross(local_target_, 0.2, 0xFF0080, local_viz_msg_);
     // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",

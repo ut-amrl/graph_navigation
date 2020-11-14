@@ -1,0 +1,56 @@
+dist: bionic
+sudo: required
+language:
+  - cpp
+env:
+  global:
+    - ROS_CI_DESKTOP="`lsb_release -cs`"  # e.g. [trusty|xenial|...]
+    - CI_SOURCE_PATH=$(pwd)
+    - ROSINSTALL_FILE=$CI_SOURCE_PATH/dependencies.rosinstall
+    - CATKIN_OPTIONS=$CI_SOURCE_PATH/catkin.options
+    - ROS_PARALLEL_JOBS='-j8 -l6'
+    # Set the python path manually to include /usr/-/python2.7/dist-packages
+    # as this is where apt-get installs python packages.
+    - PYTHONPATH=$PYTHONPATH:/usr/lib/python2.7/dist-packages:/usr/local/lib/python2.7/dist-packages
+compiler:
+  - clang
+  - gcc
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - gcc-7
+      - g++-7
+      - cmake
+      - clang-7
+before_install:
+  - sudo sh -c "echo \"deb http://packages.ros.org/ros/ubuntu $ROS_CI_DESKTOP main\" > /etc/apt/sources.list.d/ros-latest.list"
+  - sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+  - sudo apt-get update -qq
+  - sudo apt-get install dpkg
+  - sudo apt-get install -y ros-melodic-desktop libgtest-dev libeigen3-dev libgoogle-glog-dev cmake build-essential
+  - sudo apt-get install python-rosdep python-rosinstall python-rosinstall-generator python-wstool build-essential
+  - sudo apt-get install liblua5.1-dev
+  - source /opt/ros/melodic/setup.bash
+  # Prepare rosdep to install dependencies.
+  - sudo rosdep init
+  - rosdep update --include-eol-distros  # Support EOL distros.
+  - git clone https://github.com/ut-amrl/amrl_msgs.git ~/amrl_msgs
+  - pushd ~/amrl_msgs
+  - export ROS_PACKAGE_PATH=~/amrl_msgs:$ROS_PACKAGE_PATH
+  - make
+  - popd
+  - git clone https://github.com/ut-amrl/amrl_maps.git ~/amrl_maps
+  - pushd ~/amrl_maps
+  - export ROS_PACKAGE_PATH=~/amrl_maps:$ROS_PACKAGE_PATH
+  - popd
+script:
+  - source /opt/ros/melodic/setup.bash
+  - export ROS_PACKAGE_PATH=~/amrl_msgs:$ROS_PACKAGE_PATH
+  - export ROS_PACKAGE_PATH=~/amrl_maps:$ROS_PACKAGE_PATH
+  - export ROS_PACKAGE_PATH=`pwd`:$ROS_PACKAGE_PATH
+  - make
+  - roscore &
+  - sleep 2
+  - timeout --preserve-status --signal INT 2.0s ./bin/navigation
