@@ -122,7 +122,7 @@ geometry_msgs::TwistStamped AckermannToTwist(
   return twist_msg;
 }
 
-nav_msgs::Path CarrotToNavMsgsPath (                                //new function for converting carrot to NavMsgsPath
+nav_msgs::Path CarrotToNavMsgsPath (
   const Vector2f carrot) {
   nav_msgs::Path carrotNav;
   carrotNav.header.stamp=ros::Time::now();
@@ -250,7 +250,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   plan_path_.clear();
 }
 
-void Navigation::ConvertPathToNavMsgsPath() {                                  // new function!
+void Navigation::ConvertPathToNavMsgsPath() {
   if(plan_path_.size()>0){
     nav_msgs::Path path;
     path.header.stamp=ros::Time::now();
