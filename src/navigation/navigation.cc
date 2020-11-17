@@ -25,6 +25,7 @@
 #include <string>
 
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
@@ -36,6 +37,7 @@
 #include "amrl_msgs/VisualizationMsg.h"
 #include "glog/logging.h"
 #include "nav_msgs/Odometry.h"
+#include "nav_msgs/Path.h"
 #include "ros/ros.h"
 #include "sensor_msgs/PointCloud.h"
 #include "shared/math/math_util.h"
@@ -61,6 +63,7 @@ using amrl_msgs::Pose2Df;
 using amrl_msgs::VisualizationMsg;
 using geometry_msgs::Twist;
 using geometry_msgs::TwistStamped;
+using geometry_msgs::PoseStamped;
 using ros_helpers::DrawEigen2DLine;
 using sensor_msgs::PointCloud;
 using std::atan2;
@@ -97,6 +100,8 @@ ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
+ros::Publisher path_pub_;
+ros::Publisher carrot_pub_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
@@ -115,6 +120,26 @@ geometry_msgs::TwistStamped AckermannToTwist(
   twist_msg.twist.angular.y = 0;
   twist_msg.twist.angular.z = msg.velocity * msg.curvature;
   return twist_msg;
+}
+
+nav_msgs::Path CarrotToNavMsgsPath (
+  const Vector2f carrot) {
+  nav_msgs::Path carrotNav;
+  carrotNav.header.stamp=ros::Time::now();
+  carrotNav.header.frame_id="map";
+  geometry_msgs::PoseStamped carrotPose;
+  carrotPose.pose.position.x = carrot.x();
+  carrotPose.pose.position.y = carrot.y();
+
+  carrotPose.pose.orientation.x = 0;
+  carrotPose.pose.orientation.y = 0;
+  carrotPose.pose.orientation.z = 0;
+  carrotPose.pose.orientation.w = 1;
+
+  carrotPose.header.stamp = ros::Time::now();
+  carrotPose.header.frame_id = "map";
+  carrotNav.poses.push_back(carrotPose);
+  return carrotNav;
 }
 
 struct EightGridVisualizer {
@@ -193,6 +218,9 @@ void Navigation::Initialize(const NavigationParameters& params,
       "navigation_goal_status", 1);
   viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
   fp_pcl_pub_ = n->advertise<PointCloud>("forward_predicted_pcl", 1);
+  path_pub_ = n->advertise<nav_msgs::Path>(
+      "trajectory", 1, true);
+  carrot_pub_ = n->advertise<nav_msgs::Path>("carrot",1,true);
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
@@ -220,6 +248,30 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_angle_ = angle;
   nav_complete_ = false;
   plan_path_.clear();
+}
+
+void Navigation::ConvertPathToNavMsgsPath() {
+  if(plan_path_.size()>0){
+    nav_msgs::Path path;
+    path.header.stamp=ros::Time::now();
+    path.header.frame_id="map";
+    for (size_t i = 0; i < plan_path_.size(); i++) {
+      geometry_msgs::PoseStamped pose_plan;
+      pose_plan.pose.position.x = plan_path_[i].loc.x();
+      pose_plan.pose.position.y = plan_path_[i].loc.y();
+
+      pose_plan.pose.orientation.x = 0;
+      pose_plan.pose.orientation.y = 0;
+      pose_plan.pose.orientation.z = 0;
+      pose_plan.pose.orientation.w = 1;
+
+      pose_plan.header.stamp = ros::Time::now();
+      pose_plan.header.frame_id = "map";
+      path.poses.push_back(pose_plan);
+
+      path_pub_.publish(path);
+    }
+  }
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -523,6 +575,7 @@ void Navigation::Plan() {
       s1 = s2;
     }
     viz_pub_.publish(global_viz_msg_);
+    ConvertPathToNavMsgsPath();
   } else {
     printf("No path found!\n");
   }
@@ -1129,6 +1182,7 @@ void Navigation::Run() {
   }
   // Get Carrot.
   const Vector2f carrot = GetCarrot();
+  carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
   auto msg_copy = global_viz_msg_;
   visualization::DrawCross(carrot, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
