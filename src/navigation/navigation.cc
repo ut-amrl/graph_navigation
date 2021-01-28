@@ -83,6 +83,7 @@ DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
 DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
+DEFINE_bool(can_turn_in_place, true, "Enables in place turning behavior.");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
@@ -1204,7 +1205,7 @@ void Navigation::Run() {
     visualization::DrawCross(local_target_, 0.2, 0xFF0080, local_viz_msg_);
     // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
     //     local_target_.x(), local_target_.y(), RadToDeg(theta));
-    if (fabs(theta) > kLocalFOV) {
+    if (fabs(theta) > kLocalFOV && FLAGS_can_turn_in_place) {
       // printf("TurnInPlace\n");
       TurnInPlace();
     } else {
