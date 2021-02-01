@@ -88,6 +88,8 @@ DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
+DEFINE_double(navigation_tolerance, 0.5, 
+              "Tolerance for distance to goal in meters.");
 
 // Name of topic to publish twist messages to.
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "ROS topic to publish twist messages to.");
@@ -1149,7 +1151,6 @@ void Navigation::Run() {
   DrawRobot();
   if (!odom_initialized_) return;
   ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
-  const float kNavTolerance = 0.5;
   if (FLAGS_test_toc) {
     TrapezoidTest();
     return;
@@ -1190,7 +1191,7 @@ void Navigation::Run() {
       Vector2f(0, 0), params_.carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
   // Check if complete.
-  nav_complete_ = (robot_loc_ - carrot).norm() < kNavTolerance;
+  nav_complete_ = (robot_loc_ - carrot).norm() < FLAGS_navigation_tolerance;
   // Run local planner.
   if (nav_complete_) {
     Halt();
