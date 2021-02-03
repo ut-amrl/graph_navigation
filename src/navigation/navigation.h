@@ -152,6 +152,8 @@ class Navigation {
 
   // Whether navigation is complete.
   bool nav_complete_;
+  // Whether navigation is aborted.
+  bool nav_aborted_;
   // Navigation goal location.
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.

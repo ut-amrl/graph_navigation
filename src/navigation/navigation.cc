@@ -229,7 +229,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
   // Initialize status message
-  status_msg_.status = 3;
+  status_msg_.status = status_msg_.SUCCEEDED;
   status_msg_.text = "Navigation Status";
   InitRosHeader("base_link", &drive_msg_.header);
   InitRosHeader("base_link", &fp_pcl_msg_.header);
@@ -250,6 +250,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   nav_complete_ = false;
+  nav_aborted_ = false;
   plan_path_.clear();
 }
 
@@ -1143,6 +1144,7 @@ void Navigation::Abort() {
     printf("Abort!\n");
   }
   nav_complete_ = true;
+  nav_aborted_ = true;
 }
 
 void Navigation::Run() {
@@ -1172,12 +1174,16 @@ void Navigation::Run() {
   // Publish Navigation Status
   if (nav_complete_) {
     Halt();
-    status_msg_.status = 3;
+    if (nav_aborted_) {
+      status_msg_.status = status_msg_.ABORTED;
+    } else {
+      status_msg_.status = status_msg_.SUCCEEDED;
+    }
     status_pub_.publish(status_msg_);
     viz_pub_.publish(local_viz_msg_);
     return;
   }
-  status_msg_.status = 1;
+  status_msg_.status = status_msg_.ACTIVE;
   status_pub_.publish(status_msg_);
   if (!PlanStillValid()) {
     Plan();
