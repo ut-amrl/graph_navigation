@@ -35,6 +35,7 @@
 #include "amrl_msgs/ColoredLine2D.h"
 #include "amrl_msgs/ColoredPoint2D.h"
 #include "amrl_msgs/VisualizationMsg.h"
+#include "graph_navigation/MDPSolver.h"
 #include "glog/logging.h"
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
@@ -61,6 +62,7 @@ using amrl_msgs::ColoredLine2D;
 using amrl_msgs::ColoredPoint2D;
 using amrl_msgs::Pose2Df;
 using amrl_msgs::VisualizationMsg;
+using graph_navigation::MDPSolver;
 using geometry_msgs::Twist;
 using geometry_msgs::TwistStamped;
 using geometry_msgs::PoseStamped;
@@ -105,6 +107,7 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+ros::ServiceClient mdp_client_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
@@ -224,6 +227,8 @@ void Navigation::Initialize(const NavigationParameters& params,
   path_pub_ = n->advertise<nav_msgs::Path>(
       "trajectory", 1, true);
   carrot_pub_ = n->advertise<nav_msgs::Path>("carrot",1,true);
+  mdp_client_ =
+      n->serviceClient<MDPSolver>("mdp_solver");
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
@@ -567,8 +572,13 @@ void Navigation::Plan() {
   GraphVisualizer graph_viz(kVisualize);
   visualization::DrawCross(goal.loc, 0.2, 0xFF0000, global_viz_msg_);
   visualization::DrawCross(start.loc, 0.2, 0x8F, global_viz_msg_);
-  const bool found_path =
-      AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
+  bool found_path = false;
+  if (!params_.competence_aware) {
+    found_path = AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
+  } else {
+    found_path = QueryMDPSolver(start_id, goal_id, &graph_viz, &plan_path_);
+  }
+      
   if (found_path) {
     const uint32_t path_color = 0x10A000;
     CHECK(plan_path_.size() > 0);
@@ -972,6 +982,62 @@ void Navigation::DrawRobot() {
   }
 }
 
+template <class State, class Visualizer>
+bool Navigation::QueryMDPSolver(const uint64_t& start_id,
+                                const uint64_t& goal_id,
+                                Visualizer* const viz,
+                                std::vector<State>* path) {
+  static const bool kDebug = false;
+  path->clear();
+
+  // Prep the full map in json
+  json graph_json = planning_domain_.GetGraphInJSON();
+  std::stringstream graph_ss;
+  graph_ss << std::setw(4) << graph_json << std::endl;
+
+  // Call the mdp solver service
+  MDPSolver mdp_srv;
+  mdp_srv.request.map_info = graph_ss.str();
+  mdp_srv.request.start = start_id;
+  mdp_srv.request.goal = goal_id;
+
+  if (kDebug) {
+    std::cout << "JSON map sent to the MDP solver: " << std::endl;
+    std::cout << mdp_srv.request.map_info << std::endl;
+    std::cout << "start_id: " << start_id << std::endl;
+    std::cout << "goal_id: " << goal_id << std::endl;
+  }
+
+  if (mdp_client_.call(mdp_srv)) {
+    LOG(INFO) << ("Response received from MDP solver.");
+  } else {
+    LOG(INFO) << ("Failed to call the MDP solver!");
+    return false;
+  }
+
+  if (mdp_srv.response.plan.empty()) {
+    return false;
+  }
+
+  // Populate the path
+  for (auto& node_id : mdp_srv.response.plan) {
+    path->push_back(planning_domain_.KeyToState(node_id));
+  }
+  std::reverse(path->begin(), path->end());
+
+  if (kDebug) {
+    std::cout << "Generated path: " << std::endl;
+    for (auto& state : *path) {
+      std::cout << state.id << ", ";
+    }
+    std::cout << std::endl;
+  }
+
+  // TODO: Add visualizations
+
+  return true;
+}
+
 DEFINE_double(tx, 0.4, "Test obstacle point - X");
 DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 
@@ -1145,6 +1211,35 @@ void Navigation::Abort() {
   }
   nav_complete_ = true;
   nav_aborted_ = true;
+}
+
+bool Navigation::GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id) {
+  if (!initialized_) {
+    return false;
+  }
+
+  navigation::GraphDomain::NavigationEdge closest_edge;
+  float closest_dist = FLT_MAX;
+  if (!planning_domain_.GetClosestStaticEdge(
+          robot_loc_, &closest_edge, &closest_dist)) {
+    return false;
+  }
+
+  // Calculate the direction of robot relative to the edge
+  Eigen::Vector2f edge_dir = closest_edge.edge.Dir();
+  float edge_angle = atan2(edge_dir.y(), edge_dir.x());
+  float angle_dist = math_util::AngleDist(robot_angle_, edge_angle);
+  if (angle_dist > M_PI_2) {
+    // The robot is moving in the opposite direction of the edge
+    *s0_id = closest_edge.s1_id;
+    *s1_id = closest_edge.s0_id;
+  } else {
+    // The robot is moving in the direction of the edge
+    *s0_id = closest_edge.s0_id;
+    *s1_id = closest_edge.s1_id;
+  }
+
+  return true;
 }
 
 void Navigation::Run() {

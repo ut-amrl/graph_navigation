@@ -4,7 +4,6 @@
     Graph navigation using carrot planning.
 
   </description>
-  <name>graph_navigation</name>
   <author>Joydeep Biswas</author>
   <license>MIT</license>
   <review status="unreviewed" notes=""/>

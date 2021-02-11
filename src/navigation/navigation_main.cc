@@ -49,6 +49,8 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "graph_navigation/IntrospectivePerceptionRawInfo.h"
+#include "graph_navigation/IntrospectivePerceptionInfo.h"
 
 #include "navigation.h"
 
@@ -84,6 +86,7 @@ DECLARE_int32(v);
 bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
 Navigation navigation_;
+ros::Publisher introspective_perception_pub_;
 
 void EnablerCallback(const std_msgs::Bool& msg) {
   navigation_.Enable(msg.data);
@@ -167,6 +170,24 @@ void HaltCallback(const std_msgs::Bool& msg) {
   navigation_.Abort();
 }
 
+// Receives the latest raw information provided by introspective perception
+// and republishes that along with information about current navigation
+// status
+void IntrospectivePerceptionCallback(
+    const graph_navigation::IntrospectivePerceptionRawInfo& msg) {
+  bool navigation_edge_found = false;
+  graph_navigation::IntrospectivePerceptionInfo complemented_info;
+
+  complemented_info.failure_likelihood = msg.failure_likelihood;
+  complemented_info.failure_type = msg.failure_type;
+  navigation_edge_found = navigation_.GetClosestStaticEdgeInfo(
+      &complemented_info.s0_id, &complemented_info.s1_id);
+
+  if (navigation_edge_found) {
+    introspective_perception_pub_.publish(complemented_info);
+  }
+}
+
 void LoadConfig(navigation::NavigationParameters* params) {
   #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
   #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
@@ -189,6 +210,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_free_path_length);
   REAL_PARAM(max_clearance);
   BOOL_PARAM(can_traverse_stairs);
+  BOOL_PARAM(competence_aware);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -210,6 +232,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->max_free_path_length = CONFIG_max_free_path_length;
   params->max_clearance = CONFIG_max_clearance;
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
+  params->competence_aware = CONFIG_competence_aware;
 }
 
 int main(int argc, char** argv) {
@@ -246,6 +269,13 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
       n.subscribe("halt_robot", 1, &HaltCallback);
+  ros::Subscriber introspection_sub =
+      n.subscribe("/introspective_perception/raw_info",
+                  1,
+                  &IntrospectivePerceptionCallback);
+  introspective_perception_pub_ =
+      n.advertise<graph_navigation::IntrospectivePerceptionInfo>(
+          "/introspective_perception/info", 1);
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {

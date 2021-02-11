@@ -213,6 +213,24 @@ struct GraphDomain {
     return found;
   }
 
+  bool GetClosestStaticEdge(const Eigen::Vector2f& v,
+                            NavigationEdge* closest_edge,
+                            float* closest_dist) const {
+    bool found;
+    closest_edge->s0_id = -1;
+    closest_edge->s1_id = -1;
+    if (static_edges.empty()) return closest_dist;
+    for (const NavigationEdge& e : static_edges) {
+      const float dist = e.edge.Distance(v);
+      if (dist < *closest_dist &&
+          (!e.has_stairs || params_->can_traverse_stairs)) {
+        *closest_dist = dist;
+        *closest_edge = e;
+        found = true;
+      }
+    }
+    return found;
+  }
 
   uint64_t AddState(const Eigen::Vector2f& v) {
     State s(states.size(), v);
@@ -362,6 +380,25 @@ struct GraphDomain {
     o << std::setw(4) << j << std::endl;
     o.close();
     return true;
+  }
+
+  // Get the full graph in JSON (including the dynamic states)
+  json GetGraphInJSON() const {
+    json j;
+    std::vector<json> state_jsons;
+    for (const State& s: states) {
+      state_jsons.push_back(s.toJSON());
+    }
+    j["nodes"] = state_jsons;
+
+
+    std::vector<json> edge_jsons;
+    for (const NavigationEdge& e: edges) {
+      edge_jsons.push_back(e.toJSON());
+    }
+    j["edges"] = edge_jsons;
+
+    return j;
   }
 
   void DrawMap() {

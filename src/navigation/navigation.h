@@ -93,6 +93,9 @@ class Navigation {
   void Initialize(const NavigationParameters& params,
                   const std::string& map_file,
                   ros::NodeHandle* ros_node_handle);
+  // Provides information about the closes static edge 
+  // in the map to the current pose of the robot
+  bool GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id);
 
  private:
 
@@ -134,6 +137,14 @@ class Navigation {
   void GetPathOptions(std::vector<PathOption>* options);
   // Draw the robot's outline for visualization.
   void DrawRobot();
+  // Queries the MDP solver for a plan that takes into account 
+  // the probability of navigation failure on each edge. This is
+  // used in competence_aware operation mode.
+  template <class State, class Visualizer>
+  bool QueryMDPSolver(const uint64_t& start_id,
+                      const uint64_t& goal_id,
+                      Visualizer* const viz,
+                      std::vector<State>* path);
 
   // Current robot location.
   Eigen::Vector2f robot_loc_;

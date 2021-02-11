@@ -76,6 +76,7 @@ struct NavigationParameters {
   float max_clearance;
 
   bool can_traverse_stairs;
+  bool competence_aware;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -91,7 +92,8 @@ struct NavigationParameters {
       base_link_offset(0),
       max_free_path_length(6.0),
       max_clearance(1.0),
-      can_traverse_stairs(false) {}
+      can_traverse_stairs(false),
+      competence_aware(false) {}
 };
 
 }  // namespace navigation
