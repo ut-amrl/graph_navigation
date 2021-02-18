@@ -46,5 +46,6 @@ MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
-                        src/navigation/navigation.cc)
+                        src/navigation/navigation.cc
+                        src/navigation/introspection.cc)
 TARGET_LINK_LIBRARIES(navigation shared_library ${libs})

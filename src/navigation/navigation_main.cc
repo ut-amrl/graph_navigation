@@ -175,7 +175,11 @@ void HaltCallback(const std_msgs::Bool& msg) {
 // status
 void IntrospectivePerceptionCallback(
     const graph_navigation::IntrospectivePerceptionRawInfo& msg) {
+  // The minimum time interval between consecutive reports of the same type of
+  // failure in order for that to be added as a new failure instance (seconds).
+  const float kMinPeriod = 5.0;
   bool navigation_edge_found = false;
+  static std::unordered_map<int, double> failure_type_to_last_time_map;
   graph_navigation::IntrospectivePerceptionInfo complemented_info;
 
   complemented_info.failure_likelihood = msg.failure_likelihood;
@@ -183,8 +187,21 @@ void IntrospectivePerceptionCallback(
   navigation_edge_found = navigation_.GetClosestStaticEdgeInfo(
       &complemented_info.s0_id, &complemented_info.s1_id);
 
+  // Republish along with information about the closes static edge
   if (navigation_edge_found) {
     introspective_perception_pub_.publish(complemented_info);
+  }
+
+  // Add the failure instance to the database of predicted failures
+  // if more than kMinPeriod seconds has passed since last failure of the
+  // same type
+  double curr_time = ros::Time::now().toSec();
+  if (!((failure_type_to_last_time_map.find(msg.failure_type) !=
+         failure_type_to_last_time_map.end()) &&
+        (curr_time - failure_type_to_last_time_map[msg.failure_type] <
+         kMinPeriod))) {
+    failure_type_to_last_time_map[msg.failure_type] = curr_time;
+    navigation_.AddFailureInstance(msg);
   }
 }
 
@@ -271,7 +288,7 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber introspection_sub =
       n.subscribe("/introspective_perception/raw_info",
-                  1,
+                  5,
                   &IntrospectivePerceptionCallback);
   introspective_perception_pub_ =
       n.advertise<graph_navigation::IntrospectivePerceptionInfo>(

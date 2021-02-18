@@ -31,6 +31,9 @@
 #include "eight_connected_domain.h"
 #include "graph_domain.h"
 #include "navigation_parameters.h"
+#include "introspection.h"
+#include "graph_navigation/IntrospectivePerceptionInfo.h"
+#include "graph_navigation/IntrospectivePerceptionRawInfo.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -96,6 +99,9 @@ class Navigation {
   // Provides information about the closes static edge 
   // in the map to the current pose of the robot
   bool GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id);
+  // Add a new instance of predicted navigation failure
+  void AddFailureInstance(
+      const graph_navigation::IntrospectivePerceptionRawInfo& msg);
 
  private:
 
@@ -145,6 +151,16 @@ class Navigation {
                       const uint64_t& goal_id,
                       Visualizer* const viz,
                       std::vector<State>* path);
+  // Given the available database of predicted failure locations, get the
+  // updated probability of failure for all dynamic edges. This information is
+  // to be sent to the MDP solver before requesting a replan
+  bool GetDynamicEdgesFailureProb(
+      std::vector<graph_navigation::IntrospectivePerceptionInfo>*
+          edges_failure_prob);
+  // Updates the correspondences between logged sources of failure and the 
+  // dynamic edges of the navigation graph. It then publishes the updated
+  // info on a ROS topic
+  void PublishDynamicEdgesFailureInfo();
 
   // Current robot location.
   Eigen::Vector2f robot_loc_;
@@ -203,6 +219,14 @@ class Navigation {
 
   // History of commands sent, to perform latency compensation.
   std::deque<geometry_msgs::TwistStamped> command_history_;
+
+  // TODO(srabiee): implement as a priority queue
+  // Logged instances of predicted navigation failure
+  std::vector<introspection::FailureData> failure_data_;
+
+  // Whether or not a replan has been requested due to a potential change
+  // in the cost of the edges.
+  bool replan_requested_ = false;
 
   // Whether to enable autonomous navigation or not.
   bool enabled_;

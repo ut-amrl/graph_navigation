@@ -198,7 +198,7 @@ struct GraphDomain {
   }
 
   bool GetClosestEdge(const Eigen::Vector2f& v, NavigationEdge* closest_edge, float* closest_dist) const {
-    bool found;
+    bool found = false;
     closest_edge->s0_id = -1;
     closest_edge->s1_id = -1;
     if (edges.empty()) return closest_dist;
@@ -208,6 +208,33 @@ struct GraphDomain {
         *closest_dist = dist;
         *closest_edge = e;
         found = true;
+      }
+    }
+    return found;
+  }
+
+  bool GetClosestEdge(const Eigen::Vector2f& v,
+                      NavigationEdge* closest_edge,
+                      float* closest_dist,
+                      bool* is_dynamic_edge) const {
+    bool found = false;
+    closest_edge->s0_id = -1;
+    closest_edge->s1_id = -1;
+    if (edges.empty()) return closest_dist;
+    for (const NavigationEdge& e : edges) {
+      const float dist = e.edge.Distance(v);
+      if (dist < *closest_dist &&
+          (!e.has_stairs || params_->can_traverse_stairs)) {
+        *closest_dist = dist;
+        *closest_edge = e;
+        found = true;
+
+        if (e.s0_id >= static_states.size() ||
+            e.s1_id >= static_states.size()) {
+          *is_dynamic_edge = true;
+        } else {
+          *is_dynamic_edge = false;
+        }
       }
     }
     return found;
@@ -237,6 +264,16 @@ struct GraphDomain {
     GrowIfNeeded(s.id);
     states[s.id] = s;
     return s.id;
+  }
+
+  void GetDynamicEdges(std::vector<NavigationEdge>* dynamic_edges) const {
+    dynamic_edges->clear();
+    for (auto& edge : edges) {
+      if (edge.s0_id >= static_states.size() ||
+          edge.s1_id >= static_states.size()) {
+        dynamic_edges->push_back(edge);
+      }
+    }
   }
 
   void DeleteState(const uint64_t s_id) {

@@ -51,6 +51,7 @@
 #include "graph_domain.h"
 #include "astar.h"
 #include "visualization/visualization.h"
+#include "graph_navigation/IntrospectivePerceptionInfoArray.h"
 
 using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
@@ -78,6 +79,7 @@ using std::vector;
 
 using namespace math_util;
 using namespace ros_helpers;
+using namespace introspection;
 
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
@@ -107,6 +109,7 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+ros::Publisher introspective_perception_pub_;
 ros::ServiceClient mdp_client_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
@@ -227,8 +230,10 @@ void Navigation::Initialize(const NavigationParameters& params,
   path_pub_ = n->advertise<nav_msgs::Path>(
       "trajectory", 1, true);
   carrot_pub_ = n->advertise<nav_msgs::Path>("carrot",1,true);
-  mdp_client_ =
-      n->serviceClient<MDPSolver>("mdp_solver");
+  introspective_perception_pub_ =
+      n->advertise<graph_navigation::IntrospectivePerceptionInfoArray>(
+          "/introspective_perception/info_array", 1);
+  mdp_client_ = n->serviceClient<MDPSolver>("mdp_solver");
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
@@ -576,6 +581,7 @@ void Navigation::Plan() {
   if (!params_.competence_aware) {
     found_path = AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
   } else {
+    PublishDynamicEdgesFailureInfo();
     found_path = QueryMDPSolver(start_id, goal_id, &graph_viz, &plan_path_);
   }
       
@@ -1033,9 +1039,133 @@ bool Navigation::QueryMDPSolver(const uint64_t& start_id,
     std::cout << std::endl;
   }
 
-  // TODO: Add visualizations
+  // TODO(srabiee): Add visualizations
 
   return true;
+}
+
+bool Navigation::GetDynamicEdgesFailureProb(
+    std::vector<graph_navigation::IntrospectivePerceptionInfo>*
+        edges_failure_prob) {
+  if (!initialized_) {
+    return false;
+  }
+  // TODO(srabiee): Add the failure type number to the
+  // IntrospectivePerceptionInfo.msg and use that instead of hardcoding the
+  // value here
+  const int kFailureTypeCount = 2;
+
+  std::unordered_map<std::string, std::unordered_map<int, float>>
+      edge_to_failure_prob_map;
+
+  for (auto& failure : failure_data_) {
+    bool is_dyanmic = false;
+    navigation::GraphDomain::NavigationEdge edge;
+    float closest_dist = FLT_MAX;
+    if (!planning_domain_.GetClosestEdge(
+            failure.location, &edge, &closest_dist, &is_dyanmic)) {
+      continue;
+    }
+
+    if (is_dyanmic) {
+      // Calculate the angle between the the failure pose and the edge
+      // direction. Navigation edges will be treated as directed for
+      // competence-aware planning
+      string edge_id;
+      Eigen::Vector2f edge_dir = edge.edge.Dir();
+      float edge_angle = atan2(edge_dir.y(), edge_dir.x());
+      float angle_dist = math_util::AngleDist(failure.angle, edge_angle);
+      if (angle_dist > M_PI_2) {
+        // The failure pose is oriented in the opposite direction of the edge
+        edge_id = std::to_string(edge.s1_id) + "," + std::to_string(edge.s0_id);
+      } else {
+        // The failure pose is oriented in the direction of the edge
+        edge_id = std::to_string(edge.s0_id) + "," + std::to_string(edge.s1_id);
+      }
+
+      if (edge_to_failure_prob_map.find(edge_id) !=
+          edge_to_failure_prob_map.end()) {
+        if (edge_to_failure_prob_map[edge_id].find(failure.failure_type) !=
+            edge_to_failure_prob_map[edge_id].end()) {
+          edge_to_failure_prob_map[edge_id][failure.failure_type] =
+              std::max(failure.failure_prob,
+                       edge_to_failure_prob_map[edge_id][failure.failure_type]);
+        } else {
+          edge_to_failure_prob_map[edge_id][failure.failure_type] =
+              failure.failure_prob;
+        }
+      } else {
+        std::unordered_map<int, float> failure_type_to_prob_map;
+        failure_type_to_prob_map.insert(
+            make_pair(failure.failure_type, failure.failure_prob));
+        edge_to_failure_prob_map.insert(
+            std::make_pair(edge_id, failure_type_to_prob_map));
+      }
+    }
+  }
+
+  std::vector<navigation::GraphDomain::NavigationEdge> dynamic_edges;
+  planning_domain_.GetDynamicEdges(&dynamic_edges);
+
+  // Go through all dynamic edges and generate an IntrospectivePerceptionInfo
+  // message for each direction of that edge and for each type of failure
+  for (auto& dynamic_edge : dynamic_edges) {
+    // Each navigation edge is converted to two directed edges
+    std::array<std::string, 2> directed_edge_ids;
+    directed_edge_ids[0] = std::to_string(dynamic_edge.s0_id) + "," +
+                           std::to_string(dynamic_edge.s1_id);
+    directed_edge_ids[1] = std::to_string(dynamic_edge.s1_id) + "," +
+                           std::to_string(dynamic_edge.s0_id);
+
+    // Check if failures are available for either direction of the edge
+    for (size_t i = 0; i < directed_edge_ids.size(); i++) {
+      uint64_t s0_id, s1_id;
+      if (i == 1) {
+        s0_id = dynamic_edge.s1_id;
+        s1_id = dynamic_edge.s0_id;
+      } else {
+        s0_id = dynamic_edge.s0_id;
+        s1_id = dynamic_edge.s1_id;
+      }
+      if (edge_to_failure_prob_map.find(directed_edge_ids[i]) !=
+          edge_to_failure_prob_map.end()) {
+        // Check each type of failure separately
+        for (int j = 0; j < kFailureTypeCount; j++) {
+          if (edge_to_failure_prob_map[directed_edge_ids[i]].find(j) !=
+              edge_to_failure_prob_map[directed_edge_ids[i]].end()) {
+            edges_failure_prob->push_back(
+                GenerateIntrospectivePerceptionInfoMsg(
+                    s0_id,
+                    s1_id,
+                    edge_to_failure_prob_map[directed_edge_ids[i]][j],
+                    j));
+          } else {
+            edges_failure_prob->push_back(
+                GenerateIntrospectivePerceptionInfoMsg(s0_id, s1_id, 0.0, j));
+          }
+        }
+      } else {
+        for (int j = 0; j < kFailureTypeCount; j++) {
+          edges_failure_prob->push_back(
+              GenerateIntrospectivePerceptionInfoMsg(s0_id, s1_id, 0.0, j));
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+void Navigation::PublishDynamicEdgesFailureInfo() {
+  std::vector<graph_navigation::IntrospectivePerceptionInfo> edges_failure_prob;
+  graph_navigation::IntrospectivePerceptionInfoArray msg;
+  if (GetDynamicEdgesFailureProb(&edges_failure_prob)) {
+    for (auto& detection : edges_failure_prob) {
+      msg.detections.push_back(detection);
+    }
+
+    introspective_perception_pub_.publish(msg);
+  }
 }
 
 DEFINE_double(tx, 0.4, "Test obstacle point - X");
@@ -1217,7 +1347,7 @@ bool Navigation::GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id) {
   if (!initialized_) {
     return false;
   }
-
+  
   navigation::GraphDomain::NavigationEdge closest_edge;
   float closest_dist = FLT_MAX;
   if (!planning_domain_.GetClosestStaticEdge(
@@ -1240,6 +1370,28 @@ bool Navigation::GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id) {
   }
 
   return true;
+}
+
+void Navigation::AddFailureInstance(
+    const graph_navigation::IntrospectivePerceptionRawInfo& msg) {
+  // The offset between the current robot location and the location
+  // to log the predicted failure at (meters).
+  const float kFailureLocationOffset = 3.0;
+
+  if (initialized_) {
+    replan_requested_ = true;
+    introspection::FailureData failure_data;
+
+    failure_data.failure_prob = msg.failure_likelihood;
+    failure_data.failure_type = msg.failure_type;
+    failure_data.angle = robot_angle_;
+    // Tag the location for the failure that has been observed at current
+    // time to kFailureLocationOffset meters in front of the robot
+    failure_data.location =
+        robot_loc_ +
+        kFailureLocationOffset * Vector2f(cos(robot_angle_), sin(robot_angle_));
+    failure_data_.push_back(failure_data);
+  }
 }
 
 void Navigation::Run() {
@@ -1280,8 +1432,9 @@ void Navigation::Run() {
   }
   status_msg_.status = status_msg_.ACTIVE;
   status_pub_.publish(status_msg_);
-  if (!PlanStillValid()) {
+  if (!PlanStillValid() || replan_requested_) {
     Plan();
+    replan_requested_ = false;
   }
   // Get Carrot.
   const Vector2f carrot = GetCarrot();
