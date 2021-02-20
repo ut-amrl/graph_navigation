@@ -77,6 +77,9 @@ struct NavigationParameters {
 
   bool can_traverse_stairs;
   bool competence_aware;
+  // Make graph_nav run in airsim mode so that it can exploit control
+  // services available by the simulator
+  bool airsim_compatible;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -93,7 +96,8 @@ struct NavigationParameters {
       max_free_path_length(6.0),
       max_clearance(1.0),
       can_traverse_stairs(false),
-      competence_aware(false) {}
+      competence_aware(false),
+      airsim_compatible(false) {}
 };
 
 }  // namespace navigation

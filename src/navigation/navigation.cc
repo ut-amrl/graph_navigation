@@ -36,6 +36,7 @@
 #include "amrl_msgs/ColoredPoint2D.h"
 #include "amrl_msgs/VisualizationMsg.h"
 #include "graph_navigation/MDPSolver.h"
+#include "graph_navigation/TurnInPlace.h"
 #include "glog/logging.h"
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
@@ -111,6 +112,7 @@ ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 ros::Publisher introspective_perception_pub_;
 ros::ServiceClient mdp_client_;
+ros::ServiceClient turn_in_place_client_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
@@ -234,6 +236,8 @@ void Navigation::Initialize(const NavigationParameters& params,
       n->advertise<graph_navigation::IntrospectivePerceptionInfoArray>(
           "/introspective_perception/info_array", 1);
   mdp_client_ = n->serviceClient<MDPSolver>("mdp_solver");
+  turn_in_place_client_ = n->serviceClient<graph_navigation::TurnInPlace>(
+      "/airsim_node/turn_in_place");
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
@@ -1280,13 +1284,41 @@ void Navigation::Halt() {
 void Navigation::TurnInPlace() {
   const float kMaxLinearSpeed = 0.1;
   const float velocity = robot_vel_.x();
+  // If in airsim_compatible mode, skip a number of frames
+  // to receive the updated location info before calling
+  // the turn_in_place service
+  const int kAirSimSkipFrames = 3;
+  static int airsim_skip_counter = 0;
+
   float angular_cmd = 0;
   if (fabs(velocity) > kMaxLinearSpeed) {
     Halt();
     return;
   }
+
   const float goal_theta = atan2(local_target_.y(), local_target_.x());
   const float dv = params_.dt * params_.angular_limits.accel;
+
+  if (params_.airsim_compatible && enabled_) {
+    airsim_skip_counter++;
+    if (airsim_skip_counter % kAirSimSkipFrames != 0) {
+      return;
+    }
+
+    // Call the AirSim's turn-in-place service
+    graph_navigation::TurnInPlace turn_in_place_srv;
+    turn_in_place_srv.request.vehicle_name = "PhysXCar";
+    turn_in_place_srv.request.yaw = goal_theta;
+
+    if (turn_in_place_client_.call(turn_in_place_srv)) {
+      LOG(INFO) << ("Response received from the turn_in_place service.");
+    } else {
+      LOG(INFO) << ("Failed to call the turn_in_place service!");
+    }
+
+    return;
+  }
+
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
     if (fabs(robot_omega_) < dv) {
@@ -1458,10 +1490,10 @@ void Navigation::Run() {
       local_target_ = params_.carrot_dist * local_target_.normalized();
     }
     visualization::DrawCross(local_target_, 0.2, 0xFF0080, local_viz_msg_);
-    // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
-    //     local_target_.x(), local_target_.y(), RadToDeg(theta));
+    printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
+        local_target_.x(), local_target_.y(), RadToDeg(theta));
     if (fabs(theta) > kLocalFOV && FLAGS_can_turn_in_place) {
-      // printf("TurnInPlace\n");
+      printf("TurnInPlace\n");
       TurnInPlace();
     } else {
       // printf("ObstAv\n");

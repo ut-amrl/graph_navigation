@@ -177,7 +177,7 @@ void IntrospectivePerceptionCallback(
     const graph_navigation::IntrospectivePerceptionRawInfo& msg) {
   // The minimum time interval between consecutive reports of the same type of
   // failure in order for that to be added as a new failure instance (seconds).
-  const float kMinPeriod = 5.0;
+  const float kMinPeriod = 7.0;
   bool navigation_edge_found = false;
   static std::unordered_map<int, double> failure_type_to_last_time_map;
   graph_navigation::IntrospectivePerceptionInfo complemented_info;
@@ -228,6 +228,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_clearance);
   BOOL_PARAM(can_traverse_stairs);
   BOOL_PARAM(competence_aware);
+  BOOL_PARAM(airsim_compatible);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -250,6 +251,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->max_clearance = CONFIG_max_clearance;
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
   params->competence_aware = CONFIG_competence_aware;
+  params->airsim_compatible = CONFIG_airsim_compatible;
 }
 
 int main(int argc, char** argv) {
@@ -288,7 +290,7 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber introspection_sub =
       n.subscribe("/introspective_perception/raw_info",
-                  5,
+                  1,
                   &IntrospectivePerceptionCallback);
   introspective_perception_pub_ =
       n.advertise<graph_navigation::IntrospectivePerceptionInfo>(

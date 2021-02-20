@@ -1,0 +1,6 @@
+# This service provides the means for requesting a turn-in-place maneuver
+# for a specified rotation angle
+float64 yaw
+string vehicle_name
+---
+bool success
