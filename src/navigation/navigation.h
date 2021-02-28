@@ -220,9 +220,9 @@ class Navigation {
   // History of commands sent, to perform latency compensation.
   std::deque<geometry_msgs::TwistStamped> command_history_;
 
-  // TODO(srabiee): implement as a priority queue
+  // TODO(srabiee): Prune failure data using a kd-tree structure
   // Logged instances of predicted navigation failure
-  std::vector<introspection::FailureData> failure_data_;
+  std::deque<introspection::FailureData> failure_data_;
 
   // Whether or not a replan has been requested due to a potential change
   // in the cost of the edges.

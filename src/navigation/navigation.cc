@@ -1299,26 +1299,6 @@ void Navigation::TurnInPlace() {
   const float goal_theta = atan2(local_target_.y(), local_target_.x());
   const float dv = params_.dt * params_.angular_limits.accel;
 
-  if (params_.airsim_compatible && enabled_) {
-    airsim_skip_counter++;
-    if (airsim_skip_counter % kAirSimSkipFrames != 0) {
-      return;
-    }
-
-    // Call the AirSim's turn-in-place service
-    graph_navigation::TurnInPlace turn_in_place_srv;
-    turn_in_place_srv.request.vehicle_name = "PhysXCar";
-    turn_in_place_srv.request.yaw = goal_theta;
-
-    if (turn_in_place_client_.call(turn_in_place_srv)) {
-      LOG(INFO) << ("Response received from the turn_in_place service.");
-    } else {
-      LOG(INFO) << ("Failed to call the turn_in_place service!");
-    }
-
-    return;
-  }
-
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
     if (fabs(robot_omega_) < dv) {
@@ -1341,6 +1321,26 @@ void Navigation::TurnInPlace() {
   const float curvature = Sign(goal_theta) * 10000.0;
   const float velocity_cmd = angular_cmd / curvature;
   SendCommand(velocity_cmd, curvature);
+
+  if (params_.airsim_compatible && enabled_) {
+    airsim_skip_counter++;
+    if (airsim_skip_counter % kAirSimSkipFrames != 0) {
+      return;
+}
+
+    // Call the AirSim's turn-in-place service
+    graph_navigation::TurnInPlace turn_in_place_srv;
+    turn_in_place_srv.request.vehicle_name = "PhysXCar";
+    turn_in_place_srv.request.yaw = goal_theta;
+
+    if (turn_in_place_client_.call(turn_in_place_srv)) {
+      LOG(INFO) << ("Response received from the turn_in_place service.");
+    } else {
+      LOG(INFO) << ("Failed to call the turn_in_place service!");
+    }
+
+    return;
+  }
 }
 
 void Navigation::LatencyTest() {
@@ -1404,6 +1404,9 @@ bool Navigation::GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id) {
   return true;
 }
 
+DEFINE_uint32(failure_data_queue_size, 200, "Maximum number of failure"     
+              " instances to be stored for association with dynamic navigation" " edges.");
+
 void Navigation::AddFailureInstance(
     const graph_navigation::IntrospectivePerceptionRawInfo& msg) {
   // The offset between the current robot location and the location
@@ -1423,7 +1426,11 @@ void Navigation::AddFailureInstance(
         robot_loc_ +
         kFailureLocationOffset * Vector2f(cos(robot_angle_), sin(robot_angle_));
     failure_data_.push_back(failure_data);
+
+    while(failure_data_.size() > FLAGS_failure_data_queue_size) {
+      failure_data_.pop_front();
   }
+}
 }
 
 void Navigation::Run() {
@@ -1468,6 +1475,17 @@ void Navigation::Run() {
     Plan();
     replan_requested_ = false;
   }
+
+  if (plan_path_.size() < 2) {
+    // No path was found
+    status_msg_.status = status_msg_.LOST;
+    nav_aborted_ = true;
+    nav_complete_ = true;
+    status_pub_.publish(status_msg_);
+    viz_pub_.publish(local_viz_msg_);
+    return;
+  }
+
   // Get Carrot.
   const Vector2f carrot = GetCarrot();
   carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
