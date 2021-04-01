@@ -549,14 +549,14 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
   PruneLatencyQueue();
 }
 
-void Navigation::Plan() {
+void Navigation::Plan(Eigen::Vector2f goal_loc) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   static const bool kVisualize = true;
   typedef navigation::GraphDomain Domain;
   planning_domain_.ResetDynamicStates();
   const uint64_t start_id = planning_domain_.AddDynamicState(robot_loc_);
-  const uint64_t goal_id = planning_domain_.AddDynamicState(nav_goal_loc_);
+  const uint64_t goal_id = planning_domain_.AddDynamicState(goal_loc);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
   visualization::ClearVisualizationMsg(global_viz_msg_);
@@ -583,7 +583,7 @@ void Navigation::Plan() {
 
 void Navigation::PlannerTest() {
   if (!loc_initialized_) return;
-  Plan();
+  Plan(nav_goal_loc_);
 }
 
 DEFINE_double(max_plan_deviation, 0.5,
@@ -1178,7 +1178,7 @@ void Navigation::Run() {
   status_msg_.status = 1;
   status_pub_.publish(status_msg_);
   if (!PlanStillValid()) {
-    Plan();
+    Plan(nav_goal_loc_);
   }
   // Get Carrot.
   const Vector2f carrot = GetCarrot();

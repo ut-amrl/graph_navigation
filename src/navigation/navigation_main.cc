@@ -142,6 +142,24 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
   navigation_.SetNavGoal(loc, angle);
 }
 
+void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
+  const Vector2f loc(msg.pose.x, msg.pose.y);
+  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
+  navigation_.SetNavGoal(loc, msg.pose.theta);
+}
+
+void QueryCallback(const geometry_msgs::PoseStamped& msg) {
+  const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
+  printf("Queried Plan for Goal: (%f,%f)\n", loc.x(), loc.y());
+  navigation_.Plan(loc);
+}
+
+void QueryCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
+  const Vector2f loc(msg.pose.x, msg.pose.y);
+  printf("Queried Plan for Goal: (%f,%f)\n", loc.x(), loc.y());
+  navigation_.Plan(loc);
+}
+
 void SignalHandler(int) {
   if (!run_) {
     printf("Force Exit.\n");
@@ -242,6 +260,12 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
+  ros::Subscriber goto_amrl_sub =
+      n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
+  ros::Subscriber query_sub =
+      n.subscribe("/query_simple/goal", 1, &QueryCallback);
+  ros::Subscriber query_amrl_sub =
+      n.subscribe("/query_simple/goal_amrl", 1, &QueryCallbackAMRL);
   ros::Subscriber enabler_sub =
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =

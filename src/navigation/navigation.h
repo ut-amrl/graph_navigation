@@ -81,7 +81,7 @@ class Navigation {
                          Eigen::Vector2f* obstruction);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   bool PlanStillValid();
-  void Plan();
+  void Plan(Eigen::Vector2f goal_loc);
   Eigen::Vector2f GetCarrot();
   // Enable or disable autonomy.
   void Enable(bool enable);
