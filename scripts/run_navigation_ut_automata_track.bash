@@ -24,7 +24,7 @@ ENABLE_TOPIC="/autonomy_enabler" # enable_topic (ROS topic that indicates whethe
 
 ../bin/navigation \
  --map="UT_AUTOmata_Track_New" \
- --maps_dir="/home/mango/Academics/AMRL/amrl_maps" \
+ --maps_dir="/home/amrl_user/amrl_libraries/amrl_maps" \
  --odom_topic="/odom" \
  --carrot_dist=$CARROT_DIST \
  --cw=$CLEARANCE_WEIGHT \
