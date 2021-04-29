@@ -53,6 +53,8 @@
 #include "astar.h"
 #include "visualization/visualization.h"
 #include "graph_navigation/IntrospectivePerceptionInfoArray.h"
+#include "nlohmann/json.hpp"
+
 
 using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
@@ -77,6 +79,7 @@ using std::min;
 using std::swap;
 using std::string;
 using std::vector;
+using json = nlohmann::json;
 
 using namespace math_util;
 using namespace ros_helpers;
@@ -220,6 +223,7 @@ Navigation::Navigation() :
 
 void Navigation::Initialize(const NavigationParameters& params,
                             const string& map_file,
+                            const string& failure_logs_path,
                             ros::NodeHandle* n) {
   ackermann_drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
@@ -249,6 +253,10 @@ void Navigation::Initialize(const NavigationParameters& params,
   InitRosHeader("base_link", &fp_pcl_msg_.header);
   params_ = params;
   planning_domain_ = GraphDomain(map_file, &params_);
+
+  if (params_.competence_aware && params_.load_failure_logs) {
+    LoadFailureInstancesFromFile(failure_logs_path);
+  }
   initialized_ = true;
 }
 
@@ -1402,6 +1410,49 @@ bool Navigation::GetClosestStaticEdgeInfo(uint64_t* s0_id, uint64_t* s1_id) {
   }
 
   return true;
+}
+
+void Navigation::SaveFailureInstancesToFile(const std::string& output_path) {
+  if (!params_.competence_aware) {
+    return;
+  }
+
+  json json_obj;
+  std::vector<json> failure_instances_json;
+  for (const FailureData& failure : failure_data_) {
+    failure_instances_json.push_back(failure.toJSON());
+  }
+  json_obj["failure_instances"] = failure_instances_json;
+
+  std::ofstream output_file(output_path);
+  output_file << std::setw(4) << json_obj << std::endl;
+  output_file.close();
+}
+
+void Navigation::LoadFailureInstancesFromFile(const std::string& file) {
+  if (!FileExists(file)) {
+    LOG(WARNING) << "Failure logs file was not found: " << file;
+    return; 
+  }
+
+  std::ifstream f(file);
+  json json_obj;
+  f >> json_obj;
+  f.close();
+
+  CHECK(json_obj["failure_instances"].is_array());
+  auto const failure_instances_json = json_obj["failure_instances"];
+
+  failure_data_.clear();
+
+  for (const json& j : failure_instances_json) {
+    FailureData failure_instance = FailureData::fromJSON(j);
+    failure_data_.push_back(failure_instance);
+  }
+
+  printf("Loaded %s with %lu failure instances\n",
+         file.c_str(),
+         failure_instances_json.size());
 }
 
 DEFINE_uint32(failure_data_queue_size, 200, "Maximum number of failure"     

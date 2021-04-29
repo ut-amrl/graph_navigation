@@ -52,6 +52,11 @@ inline std::string GetDeprecatedMapPath(const std::string& dir, const std::strin
   return dir + "/" + name + "/" + name + ".navigation.txt";
 }
 
+inline std::string GetFailureLogsPath(const std::string& dir,
+                                      const std::string& name) {
+  return dir + "/" + name + "/" + name + ".failure_logs.json";
+}
+
 struct PathOption {
   float curvature;
   float clearance;
@@ -95,6 +100,7 @@ class Navigation {
   // Set parameters for navigation.
   void Initialize(const NavigationParameters& params,
                   const std::string& map_file,
+                  const std::string& failure_logs_path,
                   ros::NodeHandle* ros_node_handle);
   // Provides information about the closes static edge 
   // in the map to the current pose of the robot
@@ -102,6 +108,12 @@ class Navigation {
   // Add a new instance of predicted navigation failure
   void AddFailureInstance(
       const graph_navigation::IntrospectivePerceptionRawInfo& msg);
+  // Save the set of detected locations of navigation failures to file 
+  // (competence-aware mode)
+  void SaveFailureInstancesToFile(const std::string& output_path);
+  // Load the set of previously detected locations of navigation failures to 
+  // file (competence-aware mode)
+  void LoadFailureInstancesFromFile(const std::string& file);
 
  private:
 

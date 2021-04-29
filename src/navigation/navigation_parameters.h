@@ -80,6 +80,9 @@ struct NavigationParameters {
   // Make graph_nav run in airsim mode so that it can exploit control
   // services available by the simulator
   bool airsim_compatible;
+  // Whether to load failure logs from file upon initialization. This
+  // is only done if in competence_aware mode.
+  bool load_failure_logs;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -97,7 +100,8 @@ struct NavigationParameters {
       max_clearance(1.0),
       can_traverse_stairs(false),
       competence_aware(false),
-      airsim_compatible(false) {}
+      airsim_compatible(false),
+      load_failure_logs(false) {}
 };
 
 }  // namespace navigation

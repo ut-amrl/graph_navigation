@@ -29,8 +29,12 @@
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "graph_navigation/IntrospectivePerceptionInfo.h"
+#include "nlohmann/json.hpp"
 
 namespace introspection {
+
+using json = nlohmann::json;
+
 struct FailureData {
   FailureData(const float& failure_prob,
               const int& failure_type,
@@ -41,6 +45,26 @@ struct FailureData {
         angle(angle),
         location(location) {}
   FailureData() {}
+
+  json toJSON() const {
+    json json_obj;
+    json_obj["failure_prob"] = failure_prob;
+    json_obj["failure_type"] = failure_type;
+    json_obj["angle"] = angle;
+    json_obj["location"]["x"] = location.x();
+    json_obj["location"]["y"] = location.y();
+    return json_obj;
+  }
+
+  static FailureData fromJSON(const json& j) {
+    FailureData failure_instance;
+    failure_instance.failure_prob = j["failure_prob"].get<float>();
+    failure_instance.failure_type = j["failure_type"].get<uint64_t>();
+    failure_instance.angle = j["angle"].get<float>();
+    failure_instance.location = Eigen::Vector2f(
+        j["location"]["x"].get<float>(), j["location"]["y"].get<float>());
+    return failure_instance;
+  }
 
   float failure_prob;
   int failure_type;

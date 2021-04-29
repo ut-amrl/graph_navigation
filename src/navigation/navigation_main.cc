@@ -146,6 +146,10 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
 }
 
 void SignalHandler(int) {
+  // Saving detected failure instances to file if in competence-aware mode
+  navigation_.SaveFailureInstancesToFile(
+      navigation::GetFailureLogsPath(FLAGS_maps_dir, FLAGS_map));
+
   if (!run_) {
     printf("Force Exit.\n");
     exit(0);
@@ -229,6 +233,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(can_traverse_stairs);
   BOOL_PARAM(competence_aware);
   BOOL_PARAM(airsim_compatible);
+  BOOL_PARAM(load_failure_logs);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -252,6 +257,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
   params->competence_aware = CONFIG_competence_aware;
   params->airsim_compatible = CONFIG_airsim_compatible;
+  params->load_failure_logs = CONFIG_load_failure_logs;
 }
 
 int main(int argc, char** argv) {
@@ -262,6 +268,8 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+  std::string failure_logs_path =
+      navigation::GetFailureLogsPath(FLAGS_maps_dir, FLAGS_map);
   std::string deprecated_path = navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
   if (!FileExists(map_path) && FileExists(deprecated_path)) {
     printf("Could not find navigation map file at %s. An V1 nav-map was found at %s. Please run map_upgrade from vector_display to upgrade this map.\n", map_path.c_str(), deprecated_path.c_str());
@@ -274,7 +282,7 @@ int main(int argc, char** argv) {
   navigation::NavigationParameters params;
   LoadConfig(&params);
 
-  navigation_.Initialize(params, map_path, &n);
+  navigation_.Initialize(params, map_path, failure_logs_path, &n);
 
   ros::Subscriber velocity_sub =
       n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
