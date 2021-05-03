@@ -87,6 +87,7 @@ DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
+DEFINE_bool(no_local, false, "can be used to turn off local planner");
 
 // Name of topic to publish twist messages to.
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "ROS topic to publish twist messages to.");
@@ -1202,14 +1203,16 @@ void Navigation::Run() {
       local_target_ = params_.carrot_dist * local_target_.normalized();
     }
     visualization::DrawCross(local_target_, 0.2, 0xFF0080, local_viz_msg_);
-    // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
-    //     local_target_.x(), local_target_.y(), RadToDeg(theta));
-    if (fabs(theta) > kLocalFOV) {
-      // printf("TurnInPlace\n");
-      TurnInPlace();
-    } else {
-      // printf("ObstAv\n");
-      RunObstacleAvoidance();
+    if (!FLAGS_no_local) {
+      // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
+      //     local_target_.x(), local_target_.y(), RadToDeg(theta));
+      if (fabs(theta) > kLocalFOV) {
+        // printf("TurnInPlace\n");
+        TurnInPlace();
+      } else {
+        // printf("ObstAv\n");
+        RunObstacleAvoidance();
+      }
     }
   }
   viz_pub_.publish(local_viz_msg_);
