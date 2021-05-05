@@ -83,6 +83,11 @@ struct NavigationParameters {
   // Whether to load failure logs from file upon initialization. This
   // is only done if in competence_aware mode.
   bool load_failure_logs;
+  // Whether to keep adding instances of actual or predicted navigation
+  // failures or just keep the latest one. This is only relevant in
+  // competence-aware mode (only set to True for implementation
+  // of a simple baseline method)
+  bool memoryless;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -101,7 +106,8 @@ struct NavigationParameters {
       can_traverse_stairs(false),
       competence_aware(false),
       airsim_compatible(false),
-      load_failure_logs(false) {}
+      load_failure_logs(false),
+      memoryless(false) {}
 };
 
 }  // namespace navigation

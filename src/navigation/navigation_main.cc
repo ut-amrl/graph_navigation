@@ -234,6 +234,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(competence_aware);
   BOOL_PARAM(airsim_compatible);
   BOOL_PARAM(load_failure_logs);
+  BOOL_PARAM(memoryless);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -258,6 +259,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->competence_aware = CONFIG_competence_aware;
   params->airsim_compatible = CONFIG_airsim_compatible;
   params->load_failure_logs = CONFIG_load_failure_logs;
+  params->memoryless = CONFIG_memoryless;
 }
 
 int main(int argc, char** argv) {

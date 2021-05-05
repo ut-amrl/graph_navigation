@@ -1476,12 +1476,20 @@ void Navigation::AddFailureInstance(
     failure_data.location =
         robot_loc_ +
         kFailureLocationOffset * Vector2f(cos(robot_angle_), sin(robot_angle_));
+
+    // Remove all the stored failure data before adding this new one if in
+    // memoryless mode.
+    if (params_.memoryless) {
+      failure_data_.clear();
+    }
     failure_data_.push_back(failure_data);
 
-    while(failure_data_.size() > FLAGS_failure_data_queue_size) {
+    // Remove enough of the oldest failure instances
+    // to prevent exceeding the allocated buffer
+    while (failure_data_.size() > FLAGS_failure_data_queue_size) {
       failure_data_.pop_front();
+    }
   }
-}
 }
 
 void Navigation::Run() {
