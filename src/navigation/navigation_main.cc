@@ -85,6 +85,23 @@ bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
 Navigation navigation_;
 
+// offroad
+CONFIG_STRING(imu_topic, "NavigationParameters.imu_topic");
+sensor_msgs::Imu last_imu_msg_;
+void ImuCallback(const sensor_msgs::Imu& msg) {
+  if (navigation_.imu_history_.size() > 99) {
+    navigation_.imu_history_.pop_front();
+  }
+  navigation_.imu_history_.push_back(msg);
+  last_imu_msg_ = msg;
+  // std::cout << navigation_.imu_history_.size() << " ||| ";
+  // for (size_t i = 0; i < navigation_.imu_history_.size(); ++i) {
+  //   std::cout << navigation_.imu_history_[i].linear_acceleration.x << ' ';
+  // }
+  // std::cout << '\n';
+}
+// offroad
+
 void EnablerCallback(const std_msgs::Bool& msg) {
   navigation_.Enable(msg.data);
 }
@@ -172,6 +189,12 @@ void LoadConfig(navigation::NavigationParameters* params) {
   #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
   #define STRING_PARAM(x) CONFIG_STRING(x, "NavigationParameters."#x);
   #define BOOL_PARAM(x) CONFIG_BOOL(x, "NavigationParameters."#x);
+
+  // offroad	
+  REAL_PARAM(neural_lower);
+  REAL_PARAM(neural_upper);
+  // offroad
+
   REAL_PARAM(dt);
   REAL_PARAM(max_linear_accel);
   REAL_PARAM(max_linear_decel);
@@ -191,6 +214,10 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(can_traverse_stairs);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
+  //offroad
+  params->neural_lower = CONFIG_neural_lower;
+  params->neural_upper = CONFIG_neural_upper;
+  //offroad
   params->dt = CONFIG_dt;
   params->linear_limits = navigation::MotionLimit(
       CONFIG_max_linear_accel,
@@ -233,6 +260,11 @@ int main(int argc, char** argv) {
   LoadConfig(&params);
 
   navigation_.Initialize(params, map_path, &n);
+
+  // offroad
+  ros::Subscriber imu_sub =
+      n.subscribe(CONFIG_imu_topic, 1, &ImuCallback);
+  // offroad
 
   ros::Subscriber velocity_sub =
       n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);

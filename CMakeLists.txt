@@ -1,12 +1,27 @@
 PROJECT(reference_car)
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 MESSAGE(STATUS "Compiling Reference Car Localization + Navigation")
 MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
 MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
-SET(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Werror")
+
+
+
+include_directories("/home/amrl_user/.local/lib/python3.6/site-packages/torch/include")
+
+link_directories("/home/amrl_user/.local/lib")
+link_directories("/home/amrl_user/.local/lib/python3.6/site-packages/torch/lib")
+
+set(CMAKE_PREFIX_PATH "/home/amrl_user/.local/lib/python3.6/site-packages/torch")
+set(Torch_DIR "/home/amrl_user/.local/lib/python3.6/site-packages/torch")
+find_package(Torch REQUIRED)
+
+
+
+
+SET(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Werror")
 
 IF(${CMAKE_BUILD_TYPE} MATCHES "Release")
   MESSAGE(STATUS "Additional Flags for Release mode")
@@ -28,7 +43,7 @@ SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 SET(libs roslib roscpp rosbag glog gflags amrl_shared_lib boost_system lua5.1
-    pthread)
+    pthread torch)
 
 ADD_LIBRARY(shared_library
             src/visualization/visualization.cc

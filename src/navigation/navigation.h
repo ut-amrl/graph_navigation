@@ -18,6 +18,9 @@
 \author  Joydeep Biswas, (C) 2019
 */
 //========================================================================
+// offroad
+#include "sensor_msgs/Imu.h"
+// offroad
 
 #include <deque>
 #include <vector>
@@ -65,6 +68,10 @@ struct PathOption {
 class Navigation {
  public:
 
+  // offroad
+  std::deque<sensor_msgs::Imu> imu_history_;
+  // offroad  
+	 
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);

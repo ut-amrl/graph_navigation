@@ -47,6 +47,14 @@ struct MotionLimit {
 };
 
 struct NavigationParameters {
+  
+  
+  // neural net input lower bound 
+  double neural_lower;
+  // neural net input upper bound
+  double neural_upper;
+
+
   // Control period in seconds.
   double dt;
   // Motion limits for linear motion.

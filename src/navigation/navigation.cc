@@ -18,6 +18,11 @@
 \author  Joydeep Biswas, (C) 2019
 */
 //========================================================================
+// offroad
+#include <torch/script.h> // One-stop header.
+#include <iostream>
+#include <memory>
+// offroad
 
 #include <algorithm>
 #include <cmath>
@@ -86,7 +91,7 @@ DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
-DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
+DEFINE_double(max_curvature, 1.35, "Maximum curvature of turning");
 
 // Name of topic to publish twist messages to.
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "ROS topic to publish twist messages to.");
@@ -95,6 +100,9 @@ DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "ROS topic to publish twi
 DEFINE_bool(no_joystick, false, "Disregards autonomy enable mode from joystick");
 
 namespace {
+// offroad
+torch::jit::script::Module module;
+// offroad
 ros::Publisher ackermann_drive_pub_;
 ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
@@ -210,6 +218,9 @@ Navigation::Navigation() :
 void Navigation::Initialize(const NavigationParameters& params,
                             const string& map_file,
                             ros::NodeHandle* n) {
+  // offroad
+  module = torch::jit::load("/home/amrl_user/offroad_nav/models/traced_offroad_model.pt");
+  // offroad
   ackermann_drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n->advertise<geometry_msgs::Twist>(
@@ -373,6 +384,7 @@ void Navigation::ForwardPredict(double t) {
   using Eigen::Rotation2Df;
   using Eigen::Translation2f;
   Affine2f lidar_tf = Affine2f::Identity();
+  if (false) {
   for (const TwistStamped& c : command_history_) {
     const double cmd_time = c.header.stamp.toSec();
     if (cmd_time > t) continue;
@@ -393,6 +405,7 @@ void Navigation::ForwardPredict(double t) {
           Rotation2Df(-c.twist.angular.z * dt) *
           lidar_tf;
     }
+  }
   }
   fp_point_cloud_.resize(point_cloud_.size());
   for (size_t i = 0; i < point_cloud_.size(); ++i) {
@@ -1055,6 +1068,59 @@ void Navigation::RunObstacleAvoidance() {
       sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
   max_speed = min(max_map_speed, max_speed);
   velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
+
+  // offroad
+  if (curvature_cmd != 0.0 && fabs(curvature_cmd) < params_.neural_upper && fabs(curvature_cmd) > params_.neural_lower) {
+    // torch::jit::script::Module module;
+    // module = torch::jit::load("/home/xuesu/PycharmProjects/offroad_nav/traced_offroad_model.pt");
+
+    // debug imu history
+    // std::cout << imu_history_.size() << " IMU ||| ";
+    // for (size_t i = 0; i < imu_history_.size(); ++i) {
+    //   std::cout << imu_history_[i].linear_acceleration.x << ' ';
+    // }
+    // std::cout << '\n';
+
+    // debug command history
+    // std::cout << "20 Command ||| ";
+    // for (size_t i = command_history_.size()-1; i > command_history_.size() - 21; --i) {
+    //  std::cout << command_history_[i].twist.linear.x << ' ';
+    // }
+    // std::cout << '\n';
+
+    float input_v = velocity_cmd;
+    float input_c = curvature_cmd;
+    torch::Tensor my_tensor = torch::empty({1, 602});
+    //torch::Tensor my_tensor = torch::empty({1, 2});
+    my_tensor.index_put_({0, 0}, input_v/3);
+    my_tensor.index_put_({0, 1}, input_c/2);
+    for (size_t i = 0; i < imu_history_.size(); ++i) {
+      my_tensor.index_put_({0, 3 * static_cast<int>(i) + 2}, (imu_history_[i].angular_velocity.x-0.01572)/0.69783);
+      my_tensor.index_put_({0, 3 * static_cast<int>(i) + 3}, (imu_history_[i].angular_velocity.y-0.11090)/0.43708);
+      my_tensor.index_put_({0, 3 * static_cast<int>(i) + 4}, (imu_history_[i].angular_velocity.z-0.24443)/1.64938);
+      my_tensor.index_put_({0, 3 * static_cast<int>(i) + 302}, (imu_history_[i].linear_acceleration.x-0.07645)/1.66148);
+      my_tensor.index_put_({0, 3 * static_cast<int>(i) + 303}, (imu_history_[i].linear_acceleration.y-0.21097)/4.50831);
+      my_tensor.index_put_({0, 3 * static_cast<int>(i) + 304}, (imu_history_[i].linear_acceleration.z-9.56521)/3.77231);
+      //my_tensor.index_put_({0, 3 * static_cast<int>(i) + 2}, (imu_history_[i].angular_velocity.x-0.0)/1);
+      //my_tensor.index_put_({0, 3 * static_cast<int>(i) + 3}, (imu_history_[i].angular_velocity.y-0.0)/1);
+      //my_tensor.index_put_({0, 3 * static_cast<int>(i) + 4}, (imu_history_[i].angular_velocity.z-0.0)/1);
+      //my_tensor.index_put_({0, 3 * static_cast<int>(i) + 302}, (imu_history_[i].linear_acceleration.x-0.0)/1);
+      //my_tensor.index_put_({0, 3 * static_cast<int>(i) + 303}, (imu_history_[i].linear_acceleration.y-0.0)/1);
+      //my_tensor.index_put_({0, 3 * static_cast<int>(i) + 304}, (imu_history_[i].linear_acceleration.z-0.0)/1);
+
+    }
+
+    std::vector<torch::jit::IValue> inputs;
+    inputs.push_back(my_tensor);
+    // std::cout << inputs << '\n';
+    at::Tensor output = module.forward(inputs).toTensor();
+    std::cout << "orginal:" << velocity_cmd <<  ", " << curvature_cmd << '\n';
+    // curvature_cmd = copysign(2 * output[0][0].item<float>(), curvature_cmd);
+    curvature_cmd = 2 * output[0][0].item<float>();
+    // neural net
+    std::cout << "                    updated:" << velocity_cmd << ", " << curvature_cmd << '\n';
+  }
+  // offroad
   SendCommand(velocity_cmd, curvature_cmd);
 }
 
