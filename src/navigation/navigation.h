@@ -75,7 +75,7 @@ class Navigation {
 
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
-  void UpdateMap(const std::string& map_file);
+  void UpdateMap(const std::string& map_dir, const std::string& map_name);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const nav_msgs::Odometry& msg);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
@@ -159,8 +159,8 @@ class Navigation {
   // the probability of navigation failure on each edge. This is
   // used in competence_aware operation mode.
   template <class State, class Visualizer>
-  bool QueryMDPSolver(const uint64_t& start_id,
-                      const uint64_t& goal_id,
+  bool QueryMDPSolver(uint64_t start_id,
+                      uint64_t goal_id,
                       Visualizer* const viz,
                       std::vector<State>* path);
   // Given the available database of predicted failure locations, get the
@@ -169,10 +169,27 @@ class Navigation {
   bool GetDynamicEdgesFailureProb(
       std::vector<graph_navigation::IntrospectivePerceptionInfo>*
           edges_failure_prob);
+  // Given the available database of logs of previous successful and 
+  // unsuccessful traversals of the static edges, estimates the prob. 
+  // of navigation failure for all static edges.
+  bool GetStaticEdgesFailureProb(
+      std::vector<graph_navigation::IntrospectivePerceptionInfo>*
+          edges_failure_prob);
+
   // Updates the correspondences between logged sources of failure and the 
   // dynamic edges of the navigation graph. It then publishes the updated
   // info on a ROS topic
   void PublishDynamicEdgesFailureInfo();
+  // Uses the logged frequency of failures for each static edge to 
+  // compute the probability of navigation failure for that edge.
+  // For all dynamic edges, it computes an estimate of navigation
+  // failure based on the proximity of the individual instances of
+  // logged failures. It then publishes all the estimated values on a ROS topic
+  void PublishAllEdgesFailureInfo();
+  // Updates the state of the robot along the planned path and records 
+  // instances of successful navigation
+  void UpdatePlanProgress(int plan_progress_idx);
+
 
   // Current robot location.
   Eigen::Vector2f robot_loc_;
@@ -221,6 +238,9 @@ class Navigation {
 
   // Previously computed navigation plan.
   std::vector<GraphDomain::State> plan_path_;
+
+  // Index of the current edge on the plan_path_
+  int curr_plan_progress_ = 0;
 
   // Local navigation target for obstacle avoidance planner, in the robot's
   // reference frame.

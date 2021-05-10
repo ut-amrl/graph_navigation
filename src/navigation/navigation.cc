@@ -300,8 +300,11 @@ void Navigation::ConvertPathToNavMsgsPath() {
   }
 }
 
-void Navigation::UpdateMap(const string& map_path) {
-  planning_domain_.Load(map_path);
+void Navigation::UpdateMap(const string& map_dir, const string& map_name) {
+  planning_domain_.Load(GetMapPath(map_dir, map_name));
+  if (params_.competence_aware && params_.load_failure_logs) {
+    LoadFailureInstancesFromFile(GetFailureLogsPath(map_dir, map_name));
+  }
   plan_path_.clear();
 }
 
@@ -581,8 +584,10 @@ void Navigation::Plan() {
   static const bool kVisualize = true;
   typedef navigation::GraphDomain Domain;
   planning_domain_.ResetDynamicStates();
-  const uint64_t start_id = planning_domain_.AddDynamicState(robot_loc_);
-  const uint64_t goal_id = planning_domain_.AddDynamicState(nav_goal_loc_);
+  const uint64_t start_id =
+      planning_domain_.AddDynamicState(robot_loc_, params_.frequentist_mode);
+  const uint64_t goal_id =
+      planning_domain_.AddDynamicState(nav_goal_loc_, params_.frequentist_mode);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
   visualization::ClearVisualizationMsg(global_viz_msg_);
@@ -593,7 +598,19 @@ void Navigation::Plan() {
   if (!params_.competence_aware) {
     found_path = AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
   } else {
-    PublishDynamicEdgesFailureInfo();
+    if (params_.frequentist_mode) {
+      // In frequentist mode, the probability of navigation failure for
+      // each edge is stored in the graph structure hence will be published
+      // to be received by the MDP solver
+      PublishAllEdgesFailureInfo();
+    } else {
+      // If not in frequentist mode, only the probability of navigation failure
+      // for dynamic edges will be estimated and published since the
+      // corresponding values for the static edges are already tracked by 
+      // the MDP solver.
+      PublishDynamicEdgesFailureInfo();
+    }
+ 
     found_path = QueryMDPSolver(start_id, goal_id, &graph_viz, &plan_path_);
   }
       
@@ -658,6 +675,7 @@ Vector2f Navigation::GetCarrot() {
       i1 = i + 1;
     }
   }
+  UpdatePlanProgress(i1);
   // printf("closest: %d %d %f\n", i0, i1, closest_dist);
 
   if (closest_dist > kSqCarrotDist) {
@@ -1001,15 +1019,54 @@ void Navigation::DrawRobot() {
 }
 
 template <class State, class Visualizer>
-bool Navigation::QueryMDPSolver(const uint64_t& start_id,
-                                const uint64_t& goal_id,
+bool Navigation::QueryMDPSolver(uint64_t start_id,
+                                uint64_t goal_id,
                                 Visualizer* const viz,
                                 std::vector<State>* path) {
-  static const bool kDebug = false;
+  const bool kDebug = true;
+  bool plan_on_static_graph = false;
   path->clear();
 
+  if (params_.frequentist_mode) {
+    // If the start and goal location are both close to nodes on
+    // the static graph, planning will happen on the static graph.
+    // This is specifically used in the frequentist competence-aware
+    // mode
+
+    // Max acceptable distance of the start and goal location to the
+    // closest static state in order to use the static node instead of
+    // adding a new dynamic state
+    const float kMaxDistanceToStaticState = 3.0;
+
+    uint64_t closest_static_state_id_st = 0;
+    uint64_t closest_static_state_id_goal = 0;
+    float dist_to_closest_static_state_st = 0;
+    float dist_to_closest_static_state_goal = 0;
+    bool found_st = planning_domain_.GetClosestStaticState(
+        planning_domain_.KeyToState(start_id).loc,
+        &closest_static_state_id_st,
+        &dist_to_closest_static_state_st);
+    bool found_goal = planning_domain_.GetClosestStaticState(
+        planning_domain_.KeyToState(goal_id).loc,
+        &closest_static_state_id_goal,
+        &dist_to_closest_static_state_goal);
+    if (found_st && found_goal) {
+      if (dist_to_closest_static_state_st < kMaxDistanceToStaticState &&
+          dist_to_closest_static_state_goal < kMaxDistanceToStaticState) {
+        start_id = closest_static_state_id_st;
+        goal_id = closest_static_state_id_goal;
+        plan_on_static_graph = true;
+      }
+    }
+  }
+
   // Prep the full map in json
-  json graph_json = planning_domain_.GetGraphInJSON();
+  json graph_json;
+  if (plan_on_static_graph) {
+    graph_json = planning_domain_.GetStaticGraphInJSON();
+  } else {
+    graph_json = planning_domain_.GetGraphInJSON();
+  }
   std::stringstream graph_ss;
   graph_ss << std::setw(4) << graph_json << std::endl;
 
@@ -1168,6 +1225,52 @@ bool Navigation::GetDynamicEdgesFailureProb(
   return true;
 }
 
+bool Navigation::GetStaticEdgesFailureProb(
+    std::vector<graph_navigation::IntrospectivePerceptionInfo>*
+        edges_failure_prob) {
+  if (!initialized_) {
+    return false;
+  }
+  // TODO(srabiee): Add the failure type number to the
+  // IntrospectivePerceptionInfo.msg and use that instead of hardcoding the
+  // value here
+  const int kFailureTypeCount = 2;
+  std::array<float, kFailureTypeCount> failure_prob_fwd {0, 0};
+  std::array<float, kFailureTypeCount> failure_prob_rev {0, 0};
+
+  for (auto& edge : planning_domain_.static_edges) {
+    // Compute the failure prob for forward direction
+    for (size_t i = 0; i < kFailureTypeCount; i++) {
+      failure_prob_fwd[i] = 0.0;
+      if (edge.traversal_count[0] > 0) {
+        failure_prob_fwd[i] = static_cast<float>(edge.failure_count_fwd[i]) /
+                              static_cast<float>(edge.traversal_count[0]);
+        failure_prob_fwd[i] =
+            std::min(static_cast<float>(failure_prob_fwd[i]), 0.99f);
+      }
+
+      edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
+          edge.s0_id, edge.s1_id, failure_prob_fwd[i], i));
+    }
+
+    // Compute the failure prob for reverse direction
+    for (size_t i = 0; i < kFailureTypeCount; i++) {
+      failure_prob_rev[i] = 0.0;
+      if (edge.traversal_count[1] > 0) {
+        failure_prob_rev[i] = static_cast<float>(edge.failure_count_rev[i]) /
+                              static_cast<float>(edge.traversal_count[1]);
+        failure_prob_rev[i] =
+            std::min(static_cast<float>(failure_prob_rev[i]), 0.99f);
+      }
+
+      edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
+          edge.s1_id, edge.s0_id, failure_prob_rev[i], i));
+    }
+  }
+
+  return true;
+}
+
 void Navigation::PublishDynamicEdgesFailureInfo() {
   std::vector<graph_navigation::IntrospectivePerceptionInfo> edges_failure_prob;
   graph_navigation::IntrospectivePerceptionInfoArray msg;
@@ -1178,6 +1281,57 @@ void Navigation::PublishDynamicEdgesFailureInfo() {
 
     introspective_perception_pub_.publish(msg);
   }
+}
+
+void Navigation::PublishAllEdgesFailureInfo() {
+  std::vector<graph_navigation::IntrospectivePerceptionInfo>
+      dyn_edges_failure_prob;
+  std::vector<graph_navigation::IntrospectivePerceptionInfo>
+      static_edges_failure_prob;
+  graph_navigation::IntrospectivePerceptionInfoArray msg;
+
+  // Estimate failure prob. for all dynamic edges
+  if (GetDynamicEdgesFailureProb(&dyn_edges_failure_prob)) {
+    for (auto& detection : dyn_edges_failure_prob) {
+      msg.detections.push_back(detection);
+    }
+  }
+
+  // Retrieve failure prob. for all static edges
+  if (GetStaticEdgesFailureProb(&static_edges_failure_prob)) {
+    for (auto& detection : static_edges_failure_prob) {
+      msg.detections.push_back(detection);
+    }
+  }
+
+  introspective_perception_pub_.publish(msg);
+}
+
+void Navigation::UpdatePlanProgress(int plan_progress_idx) {
+  const bool kDebug = false;
+  size_t next_sid = std::max((plan_progress_idx - 1), 0);
+
+  if (kDebug) {
+    std::cout << "Update plan prog " << plan_progress_idx
+              << "S_ID: " << plan_path_[plan_progress_idx].id << " -> "
+              << plan_path_[next_sid].id << std::endl;
+    std::cout << "plan path: ";
+    for (size_t i = 0; i < plan_path_.size(); i++) {
+      std::cout << plan_path_[i].id;
+      std::cout << " ";
+    }
+    std::cout << std::endl;
+  }
+
+  if (plan_progress_idx < static_cast<int>(plan_path_.size() - 1) &&
+       (plan_progress_idx != curr_plan_progress_)) {
+    planning_domain_.UpdateEdgeTraversalStats(
+        plan_path_[curr_plan_progress_].id,
+        plan_path_[plan_progress_idx].id,
+        1);
+  }
+
+  curr_plan_progress_ = plan_progress_idx;
 }
 
 DEFINE_double(tx, 0.4, "Test obstacle point - X");
@@ -1424,15 +1578,24 @@ void Navigation::SaveFailureInstancesToFile(const std::string& output_path) {
   }
   json_obj["failure_instances"] = failure_instances_json;
 
+  std::vector<json> edge_json;
+  for (const navigation::GraphDomain::NavigationEdge& e :
+       planning_domain_.static_edges) {
+    edge_json.push_back(e.TraversalInfoToJSON());
+  }
+  json_obj["edges"] = edge_json;
+
   std::ofstream output_file(output_path);
   output_file << std::setw(4) << json_obj << std::endl;
   output_file.close();
 }
 
 void Navigation::LoadFailureInstancesFromFile(const std::string& file) {
+  const bool kDebug = false;
+
   if (!FileExists(file)) {
     LOG(WARNING) << "Failure logs file was not found: " << file;
-    return; 
+    return;
   }
 
   std::ifstream f(file);
@@ -1440,6 +1603,7 @@ void Navigation::LoadFailureInstancesFromFile(const std::string& file) {
   f >> json_obj;
   f.close();
 
+  // Load individual filure instances
   CHECK(json_obj["failure_instances"].is_array());
   auto const failure_instances_json = json_obj["failure_instances"];
 
@@ -1449,10 +1613,28 @@ void Navigation::LoadFailureInstancesFromFile(const std::string& file) {
     FailureData failure_instance = FailureData::fromJSON(j);
     failure_data_.push_back(failure_instance);
   }
-
   printf("Loaded %s with %lu failure instances\n",
          file.c_str(),
          failure_instances_json.size());
+
+  // Load logged edge traversal statistics
+  CHECK(json_obj["edges"].is_array());
+  auto const edges_json = json_obj["edges"];
+  for (const json& j : edges_json) {
+    size_t edge_id = 0;
+    int edge_direction = 0;
+    if(planning_domain_.GetStaticEdgeID(j["s0_id"].get<uint64_t>(),
+                       j["s1_id"].get<uint64_t>(), 
+                       &edge_id,
+                       &edge_direction)) {
+      planning_domain_.static_edges[edge_id].UpdateTraversalInfoFromJSON(j);
+
+    }
+  }
+
+  if (kDebug) {
+    planning_domain_.PrintEdgeTraversalStats();
+  }
 }
 
 DEFINE_uint32(failure_data_queue_size, 200, "Maximum number of failure"     
@@ -1488,6 +1670,21 @@ void Navigation::AddFailureInstance(
     // to prevent exceeding the allocated buffer
     while (failure_data_.size() > FLAGS_failure_data_queue_size) {
       failure_data_.pop_front();
+    }
+
+    // Update the traversal stats of the current edge
+    // TODO(srabiee): Prune out duplicate reports
+    if (params_.frequentist_mode) {
+      std::array<uint64_t, 2> failure_count{0, 0};
+      CHECK_LT(failure_data.failure_type, failure_count.size());
+      failure_count[failure_data.failure_type] = 1;
+      if (curr_plan_progress_ > 0) {
+        planning_domain_.UpdateEdgeTraversalStats(
+            plan_path_[curr_plan_progress_].id,
+            plan_path_[curr_plan_progress_ - 1].id,
+            1,
+            failure_count);
+      }
     }
   }
 }
@@ -1558,6 +1755,11 @@ void Navigation::Run() {
   // Run local planner.
   if (nav_complete_) {
     Halt();
+    if (params_.competence_aware && params_.frequentist_mode) {
+      if (curr_plan_progress_ != 0) {
+        UpdatePlanProgress(0);
+      }
+    }
   } else {
     // TODO check if the robot needs to turn around.
     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);

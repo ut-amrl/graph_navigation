@@ -30,6 +30,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <array>
 #include <fstream>
 
 // Library headers.
@@ -91,6 +92,12 @@ struct GraphDomain {
     bool has_door;
     bool has_stairs;
 
+    // TODO(srabiee): Add support for variable number of failure types
+    // Traversal counts for forward direction (0) and reverse direction (1)
+    std::array<uint64_t, 2> traversal_count = {0, 0};
+    std::array<uint64_t, 2> failure_count_fwd{0, 0};
+    std::array<uint64_t, 2> failure_count_rev{0, 0};
+
     json toJSON() const {
       json data;
       data["s0_id"] = s0_id;
@@ -101,6 +108,41 @@ struct GraphDomain {
       data["has_stairs"] = has_stairs;
       // no need to save the edge, it's redundant data that can be recovered at load time
       return data;
+    }
+
+    json TraversalInfoToJSON() const {
+      json data;
+      json traversal_count_json(traversal_count);
+      json failure_count_fwd_json(failure_count_fwd);
+      json failure_count_rev_json(failure_count_rev);
+      data["traversal_count"] = traversal_count_json;
+      data["failure_count_fwd"] = failure_count_fwd_json;
+      data["failure_count_rev"] = failure_count_rev_json;
+      data["s0_id"] = s0_id;
+      data["s1_id"] = s1_id;
+
+      return data;
+    }
+
+    void UpdateTraversalInfoFromJSON(const json& json_obj) {
+      CHECK(json_obj["traversal_count"].is_array());
+      CHECK(json_obj["failure_count_fwd"].is_array());
+      CHECK(json_obj["failure_count_rev"].is_array());
+      CHECK_EQ(json_obj["traversal_count"].size(), traversal_count.size());
+      CHECK_EQ(json_obj["failure_count_fwd"].size(), failure_count_fwd.size());
+      CHECK_EQ(json_obj["failure_count_rev"].size(), failure_count_rev.size());
+
+      for (size_t i = 0; i < traversal_count.size(); i++) {
+        traversal_count[i] = json_obj["traversal_count"][i].get<uint64_t>();
+      }
+
+      for (size_t i = 0; i < failure_count_fwd.size(); i++) {
+        failure_count_fwd[i] = json_obj["failure_count_fwd"][i].get<uint64_t>();
+      }
+
+      for (size_t i = 0; i < failure_count_rev.size(); i++) {
+        failure_count_rev[i] = json_obj["failure_count_rev"][i].get<uint64_t>();
+      }
     }
 
     // Constructing a navigation edge from JSON assumes you already know the states that exist in the world
@@ -194,6 +236,25 @@ struct GraphDomain {
         closest_sq_dist = sq_dist;
       }
     }
+    return found;
+  }
+
+  bool GetClosestStaticState(const Eigen::Vector2f& v, 
+                             uint64_t* closest_state,
+                             float* distance_to_closest_state) {
+    float closest_sq_dist = FLT_MAX;
+    bool found = false;
+    for (size_t i = 0; i < static_states.size(); ++i) {
+      const State& s = static_states[i];
+      const float sq_dist = (s.loc - v).squaredNorm();
+      if (sq_dist < closest_sq_dist) {
+        found = true;
+        *closest_state = i;
+        closest_sq_dist = sq_dist;
+      }
+    }
+
+    *distance_to_closest_state = sqrt(closest_sq_dist);
     return found;
   }
 
@@ -354,7 +415,74 @@ struct GraphDomain {
     edges.push_back(e);
   }
 
-  uint64_t AddDynamicState(const Eigen::Vector2f& v) {
+  void UpdateEdgeTraversalStats(uint64_t s0_id,
+                                uint64_t s1_id,
+                                uint64_t traversal_count_diff,
+                                const std::array<uint64_t, 2>& failure_count) {
+    size_t edge_id = 0;
+    int direction = 0;
+    if (GetStaticEdgeID(s0_id, s1_id, &edge_id, &direction)) {
+      static_edges[edge_id].traversal_count[direction] += traversal_count_diff;
+      for (size_t i = 0; i < failure_count.size(); i++) {
+        if (direction == 0) {
+          static_edges[edge_id].failure_count_fwd[i] += failure_count[i];
+        } else {
+          static_edges[edge_id].failure_count_rev[i] += failure_count[i];
+        }
+      }
+    }
+
+    // PrintEdgeTraversalStats();
+  }
+
+  void UpdateEdgeTraversalStats(uint64_t s0_id,
+                                uint64_t s1_id,
+                                uint64_t traversal_count_diff) {
+    size_t edge_id = 0;
+    int direction = 0;
+    if (GetStaticEdgeID(s0_id, s1_id, &edge_id, & direction)) {
+      static_edges[edge_id].traversal_count[direction] += traversal_count_diff;
+    }
+
+    // PrintEdgeTraversalStats();
+  }
+
+  void PrintEdgeTraversalStats() {
+    for (size_t i = 0; i < static_edges.size(); i++) {
+      std::cout << static_edges[i].s0_id << "-> " << static_edges[i].s1_id
+          << ": " << static_edges[i].traversal_count[0] << ","
+          << static_edges[i].traversal_count[1] << std::endl;
+      std::cout << "Fwd fail " << static_edges[i].failure_count_fwd[0] << ", "
+                << static_edges[i].failure_count_fwd[1] << std::endl;
+      std::cout << "Rev fail " << static_edges[i].failure_count_rev[0] << ", "
+                << static_edges[i].failure_count_rev[1] << std::endl;
+      std::cout << std::endl;
+    }
+  }
+
+  // Finds the id of the static edge with the given start and end node ids
+  bool GetStaticEdgeID(uint64_t s0_id,
+                       uint64_t s1_id,
+                       size_t* edge_id,
+                       int* direction) {
+    for (size_t i = 0; i < static_edges.size(); i++) {
+      if (static_edges[i].s0_id == s0_id && static_edges[i].s1_id == s1_id) {
+        *edge_id = i;
+        *direction = 0;
+        return true;
+      } else if (static_edges[i].s0_id == s1_id &&
+                 static_edges[i].s1_id == s0_id) {
+        *edge_id = i;
+        *direction = 1;
+        return true;
+      }
+    }
+    // No such static edge was found
+    return false;
+  }
+
+  uint64_t AddDynamicState(const Eigen::Vector2f& v,
+                           bool enable_reduced_graph) {
     static const bool kDebug = false;
     CHECK(!states.empty());
     // Find the closest Edge.
@@ -364,6 +492,33 @@ struct GraphDomain {
       std::cerr << "Unable to find closest edge to point " << v << std::endl;
       return 0;
     }
+
+    // If reduced graph is enabled and the new node location is close to a 
+    // static node, connect it directly to the closest static node instead 
+    // of projecting it to the closest edge. 
+    if (enable_reduced_graph) {
+      uint64_t closest_static_state = 0;
+      float dist_to_closest_state = 0.0;
+      // Max acceptable distance of the input location to the
+      // closest static state in order to use the static node instead of
+      // adding a new dynamic state
+      const float kMaxDistanceToStaticState = 3.0;
+      if (GetClosestStaticState(
+              v, &closest_static_state, &dist_to_closest_state)) {
+        if (dist_to_closest_state < kMaxDistanceToStaticState) {
+          const uint64_t v_id = AddState(v);
+          AddUndirectedEdge(v_id,
+                            closest_static_state,
+                            closest_edge.max_speed,
+                            closest_edge.max_clearance,
+                            false,
+                            false);
+
+          return v_id;
+        }
+      }
+    }
+
     // Find the projection of v on to the line segment p0 : p1;
     const Eigen::Vector2f pmid =
         geometry::ProjectPointOntoLineSegment(v, closest_edge.edge.p0, closest_edge.edge.p1);
@@ -431,6 +586,25 @@ struct GraphDomain {
 
     std::vector<json> edge_jsons;
     for (const NavigationEdge& e: edges) {
+      edge_jsons.push_back(e.toJSON());
+    }
+    j["edges"] = edge_jsons;
+
+    return j;
+  }
+
+  // Get the static graph in JSON
+  json GetStaticGraphInJSON() const {
+    json j;
+    std::vector<json> state_jsons;
+    for (const State& s: static_states) {
+      state_jsons.push_back(s.toJSON());
+    }
+    j["nodes"] = state_jsons;
+
+
+    std::vector<json> edge_jsons;
+    for (const NavigationEdge& e: static_edges) {
       edge_jsons.push_back(e.toJSON());
     }
     j["edges"] = edge_jsons;

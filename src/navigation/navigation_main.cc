@@ -166,7 +166,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
   if (map != msg.map) {
     map = msg.map;
-    navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
+    navigation_.UpdateMap(FLAGS_maps_dir, msg.map);
   }
 }
 
@@ -232,6 +232,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_clearance);
   BOOL_PARAM(can_traverse_stairs);
   BOOL_PARAM(competence_aware);
+  BOOL_PARAM(frequentist_mode);
   BOOL_PARAM(airsim_compatible);
   BOOL_PARAM(load_failure_logs);
   BOOL_PARAM(memoryless);
@@ -257,6 +258,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->max_clearance = CONFIG_max_clearance;
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
   params->competence_aware = CONFIG_competence_aware;
+  params->frequentist_mode = CONFIG_frequentist_mode;
   params->airsim_compatible = CONFIG_airsim_compatible;
   params->load_failure_logs = CONFIG_load_failure_logs;
   params->memoryless = CONFIG_memoryless;

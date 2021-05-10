@@ -77,6 +77,10 @@ struct NavigationParameters {
 
   bool can_traverse_stairs;
   bool competence_aware;
+  // Whether to use the frequentist method for estimating the probability
+  // of navigation failure given previous experiences. This is only effective 
+  // in competence-aware mode.
+  bool frequentist_mode;
   // Make graph_nav run in airsim mode so that it can exploit control
   // services available by the simulator
   bool airsim_compatible;
@@ -105,6 +109,7 @@ struct NavigationParameters {
       max_clearance(1.0),
       can_traverse_stairs(false),
       competence_aware(false),
+      frequentist_mode(false),
       airsim_compatible(false),
       load_failure_logs(false),
       memoryless(false) {}
