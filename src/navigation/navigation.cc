@@ -1023,7 +1023,7 @@ bool Navigation::QueryMDPSolver(uint64_t start_id,
                                 uint64_t goal_id,
                                 Visualizer* const viz,
                                 std::vector<State>* path) {
-  const bool kDebug = true;
+  const bool kDebug = false;
   bool plan_on_static_graph = false;
   path->clear();
 
