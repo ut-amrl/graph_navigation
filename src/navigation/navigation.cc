@@ -1029,7 +1029,7 @@ void Navigation::RunObstacleAvoidance() {
     }
   }
   if (kDebug) printf("\n");
-  ApplyDynamicConstraints(&path_options);
+  // ApplyDynamicConstraints(&path_options);
   for (const auto& o : path_options) {
     visualization::DrawPathOption(o.curvature,
                                   o.free_path_length,
