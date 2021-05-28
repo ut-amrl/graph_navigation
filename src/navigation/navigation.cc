@@ -582,12 +582,16 @@ void Navigation::Plan() {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   static const bool kVisualize = true;
+  // When kEnableReducedGraph is enabled and the start/goal node location is 
+  // close to a static node, connect it directly to the closest static node 
+  // instead of projecting it to the closest edge. 
+  const bool kEnableReducedGraph = true; 
   typedef navigation::GraphDomain Domain;
   planning_domain_.ResetDynamicStates();
   const uint64_t start_id =
-      planning_domain_.AddDynamicState(robot_loc_, params_.frequentist_mode);
+      planning_domain_.AddDynamicState(robot_loc_, kEnableReducedGraph);
   const uint64_t goal_id =
-      planning_domain_.AddDynamicState(nav_goal_loc_, params_.frequentist_mode);
+      planning_domain_.AddDynamicState(nav_goal_loc_, kEnableReducedGraph);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
   visualization::ClearVisualizationMsg(global_viz_msg_);
