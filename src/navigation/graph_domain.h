@@ -114,6 +114,8 @@ struct GraphDomain {
     // traversal: 0: fwd and 1: rev
     std::array<std::array<float, kFailureTypeCount + 1>, 2> failure_belief = {{{
         0.025, 0.025, 0.95}, {0.025, 0.025, 0.95}}};
+    std::array<std::array<float, kFailureTypeCount + 1>, 2> failure_belief_normalized = {{{
+        0.025, 0.025, 0.95}, {0.025, 0.025, 0.95}}};
 
 
     std::array<std::array<float, kFailureTypeCount + 1>, 2>
@@ -212,9 +214,15 @@ struct GraphDomain {
         std::cout << std::endl;
       }
 
+      float sum = 0.0;
       for (size_t j = 0; j < failure_belief[direction].size(); j++) {
         failure_belief[direction][j] =
             1 - 1 / (1 + exp(failure_log_odds[direction][j]));
+        sum += failure_belief[direction][j];
+      }
+      for (size_t j = 0; j < failure_belief_normalized[direction].size(); j++) {
+        failure_belief_normalized[direction][j] = failure_belief[direction][j] 
+                                                  / sum;
       }
 
       if (kDebug) {
@@ -265,9 +273,15 @@ struct GraphDomain {
         std::cout << std::endl;
       }
 
+      float sum = 0.0;
       for (size_t j = 0; j < failure_belief[direction].size(); j++) {
         failure_belief[direction][j] =
             1 - 1 / (1 + exp(failure_log_odds[direction][j]));
+        sum += failure_belief[direction][j];
+      }
+      for (size_t j = 0; j < failure_belief_normalized[direction].size(); j++) {
+        failure_belief_normalized[direction][j] = failure_belief[direction][j] 
+                                                  / sum;
       }
 
       if (kDebug) {

@@ -1255,7 +1255,7 @@ bool Navigation::GetStaticEdgesFailureProb(
               std::min(static_cast<float>(failure_prob_fwd[i]), 0.99f);
         }
       } else {
-        failure_prob_fwd[i] = edge.failure_belief[0][i];
+        failure_prob_fwd[i] = edge.failure_belief_normalized[0][i];
       }
 
       edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
@@ -1273,7 +1273,7 @@ bool Navigation::GetStaticEdgesFailureProb(
               std::min(static_cast<float>(failure_prob_rev[i]), 0.99f);
         }
       } else {
-        failure_prob_rev[i] = edge.failure_belief[1][i];
+        failure_prob_rev[i] = edge.failure_belief_normalized[1][i];
       }
 
       edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
