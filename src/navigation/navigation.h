@@ -172,7 +172,12 @@ class Navigation {
   // Given the available database of logs of previous successful and 
   // unsuccessful traversals of the static edges, estimates the prob. 
   // of navigation failure for all static edges.
+  // If use_frequentist_estimates is set to false, the estimated 
+  // belief over such failures will be returned. This is based on not
+  // only the previous experiences of failures but also the predictions 
+  // made by introspective perception
   bool GetStaticEdgesFailureProb(
+      bool get_frequentist_estimates,
       std::vector<graph_navigation::IntrospectivePerceptionInfo>*
           edges_failure_prob);
 
@@ -185,7 +190,7 @@ class Navigation {
   // For all dynamic edges, it computes an estimate of navigation
   // failure based on the proximity of the individual instances of
   // logged failures. It then publishes all the estimated values on a ROS topic
-  void PublishAllEdgesFailureInfo();
+  void PublishAllEdgesFailureInfo(bool publish_frequentist_estimates);
   // Updates the state of the robot along the planned path and records 
   // instances of successful navigation
   void UpdatePlanProgress(int plan_progress_idx);

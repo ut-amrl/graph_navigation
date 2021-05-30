@@ -84,6 +84,16 @@ struct GraphDomain {
 
   // V2 Map Edge structure.
   struct NavigationEdge {
+    NavigationEdge() {
+      for (size_t i = 0; i < 2; i++) {
+        for (size_t j = 0; j < failure_log_odds_prior[i].size(); j++) {
+          failure_log_odds_prior[i][j] = 
+              std::log(failure_belief[i][j] / (1 - failure_belief[i][j]));
+          failure_log_odds[i][j] = failure_log_odds_prior[i][j];
+        }
+      }
+    }
+
     geometry::Line2f edge;
     uint64_t s0_id;
     uint64_t s1_id;
@@ -93,10 +103,24 @@ struct GraphDomain {
     bool has_stairs;
 
     // TODO(srabiee): Add support for variable number of failure types
+    const static int kFailureTypeCount = 2;
     // Traversal counts for forward direction (0) and reverse direction (1)
     std::array<uint64_t, 2> traversal_count = {0, 0};
-    std::array<uint64_t, 2> failure_count_fwd{0, 0};
-    std::array<uint64_t, 2> failure_count_rev{0, 0};
+    std::array<uint64_t, kFailureTypeCount> failure_count_fwd{0, 0};
+    std::array<uint64_t, kFailureTypeCount> failure_count_rev{0, 0};
+
+    // Failure belief for catastrophic failure (0), non-catastrophic_failure (1)
+    // and no failures (2). The first dimension represents the direction of
+    // traversal: 0: fwd and 1: rev
+    std::array<std::array<float, kFailureTypeCount + 1>, 2> failure_belief = {{{
+        0.025, 0.025, 0.95}, {0.025, 0.025, 0.95}}};
+
+
+    std::array<std::array<float, kFailureTypeCount + 1>, 2>
+                                  failure_log_odds;
+    std::array<std::array<float, kFailureTypeCount + 1>, 2>
+                                  failure_log_odds_prior;
+
 
     json toJSON() const {
       json data;
@@ -159,6 +183,103 @@ struct GraphDomain {
       e.edge.p0 = states[e.s0_id].loc;
       e.edge.p1 = states[e.s1_id].loc;
       return e;
+    }
+
+    // Update the belief over different failure states given the observation
+    // being the raw images. The "observation" argument here is actually
+    // the inverse measurement likelihood for each type of failure given the
+    // captured raw images. The value is provided by introspective perception.
+    void UpdateFailureBelief(
+        int direction,
+        const std::array<float, kFailureTypeCount + 1>& observation) {
+      const bool kDebug = false;
+      CHECK_LT(direction, 2);
+      for (size_t j = 0; j < observation.size(); j++) {
+        failure_log_odds[direction][j] =
+            std::log(observation[j] / (1 - observation[j])) +
+            failure_log_odds[direction][j] -
+            failure_log_odds_prior[direction][j];
+      }
+
+      if (kDebug) {
+        std::cout << "Before belief update: " << std::endl;
+        std::cout << s0_id << "-> " << s1_id << ": " << traversal_count[0]
+                  << std::endl;
+        std::cout << "Fwd fail " << failure_belief[0][0] << ", "
+                  << failure_belief[0][1] << std::endl;
+        std::cout << "Rev fail " << failure_belief[1][0] << ", "
+                  << failure_belief[1][1] << std::endl;
+        std::cout << std::endl;
+      }
+
+      for (size_t j = 0; j < failure_belief[direction].size(); j++) {
+        failure_belief[direction][j] =
+            1 - 1 / (1 + exp(failure_log_odds[direction][j]));
+      }
+
+      if (kDebug) {
+        std::cout << "After belief update: " << std::endl;
+        std::cout << s0_id << "-> " << s1_id << ": " << traversal_count[0]
+                  << std::endl;
+        std::cout << "Fwd fail " << failure_belief[0][0] << ", "
+                  << failure_belief[0][1] << std::endl;
+        std::cout << "Rev fail " << failure_belief[1][0] << ", "
+                  << failure_belief[1][1] << std::endl;
+        std::cout << std::endl << std::endl;
+      }
+    }
+
+    // Update the belief over different failure states given the observation
+    // being the experienced failure/ no-failure after traversing the edge.
+    // The observation is represented as a one-hot vector.
+    void UpdateFailureBelief(
+        int direction,
+        const std::array<bool, kFailureTypeCount + 1>& observation) {
+      const bool kDebug = false;
+      const float kDelta = 0.95;
+      const float kInvObsLikelihoodHit = kDelta;
+      const float kInvObsLikelihoodMiss = (1 - kDelta) / (kFailureTypeCount);
+      CHECK_LT(direction, 2);
+      for (size_t j = 0; j < observation.size(); j++) {
+        if (observation[j] == true) {
+          failure_log_odds[direction][j] =
+              std::log(kInvObsLikelihoodHit / (1 - kInvObsLikelihoodHit)) +
+              failure_log_odds[direction][j] -
+              failure_log_odds_prior[direction][j];
+        } else {
+          failure_log_odds[direction][j] =
+              std::log(kInvObsLikelihoodMiss / (1 - kInvObsLikelihoodMiss)) +
+              failure_log_odds[direction][j] -
+              failure_log_odds_prior[direction][j];
+        }
+      }
+
+      if (kDebug) {
+        std::cout << "Before belief update: " << std::endl;
+        std::cout << s0_id << "-> " << s1_id << ": " << traversal_count[0]
+                  << std::endl;
+        std::cout << "Fwd fail " << failure_belief[0][0] << ", "
+                  << failure_belief[0][1] << std::endl;
+        std::cout << "Rev fail " << failure_belief[1][0] << ", "
+                  << failure_belief[1][1] << std::endl;
+        std::cout << std::endl;
+      }
+
+      for (size_t j = 0; j < failure_belief[direction].size(); j++) {
+        failure_belief[direction][j] =
+            1 - 1 / (1 + exp(failure_log_odds[direction][j]));
+      }
+
+      if (kDebug) {
+        std::cout << "After belief update: " << std::endl;
+        std::cout << s0_id << "-> " << s1_id << ": " << traversal_count[0]
+                  << std::endl;
+        std::cout << "Fwd fail " << failure_belief[0][0] << ", "
+                  << failure_belief[0][1] << std::endl;
+        std::cout << "Rev fail " << failure_belief[1][0] << ", "
+                  << failure_belief[1][1] << std::endl;
+        std::cout << std::endl << std::endl;
+      }
     }
   };
 
@@ -419,6 +540,7 @@ struct GraphDomain {
                                 uint64_t s1_id,
                                 uint64_t traversal_count_diff,
                                 const std::array<uint64_t, 2>& failure_count) {
+    const bool kDebug = false;
     size_t edge_id = 0;
     int direction = 0;
     if (GetStaticEdgeID(s0_id, s1_id, &edge_id, &direction)) {
@@ -430,21 +552,43 @@ struct GraphDomain {
           static_edges[edge_id].failure_count_rev[i] += failure_count[i];
         }
       }
+
+      for (size_t i = 0; i < failure_count.size(); i++) {
+        for (size_t j = 0; j < failure_count[i]; j++) {
+          std::array<bool, 3> observation = {false, false, false};
+          observation[i] = true;
+          static_edges[edge_id].UpdateFailureBelief(direction, observation);
+        }
+      }
     }
 
-    // PrintEdgeTraversalStats();
+    if (kDebug) {
+      // PrintEdgeTraversalStats();
+      PrintFailureBelief();
+    }
   }
 
   void UpdateEdgeTraversalStats(uint64_t s0_id,
                                 uint64_t s1_id,
                                 uint64_t traversal_count_diff) {
+    const bool kDebug = false;
     size_t edge_id = 0;
     int direction = 0;
-    if (GetStaticEdgeID(s0_id, s1_id, &edge_id, & direction)) {
+    if (GetStaticEdgeID(s0_id, s1_id, &edge_id, &direction)) {
       static_edges[edge_id].traversal_count[direction] += traversal_count_diff;
+
+      // Update the belief over transitioning to failure states on this edge
+      // given the reported successful traversals of the edge
+      for (size_t i = 0; i < traversal_count_diff; i++) {
+        std::array<bool, 3> observation = {false, false, true};
+        static_edges[edge_id].UpdateFailureBelief(direction, observation);
+      }
     }
 
-    // PrintEdgeTraversalStats();
+    if (kDebug) {
+      // PrintEdgeTraversalStats();
+      PrintFailureBelief();
+    }
   }
 
   void PrintEdgeTraversalStats() {
@@ -456,6 +600,18 @@ struct GraphDomain {
                 << static_edges[i].failure_count_fwd[1] << std::endl;
       std::cout << "Rev fail " << static_edges[i].failure_count_rev[0] << ", "
                 << static_edges[i].failure_count_rev[1] << std::endl;
+      std::cout << std::endl;
+    }
+  }
+
+  void PrintFailureBelief() {
+    for (size_t i = 0; i < static_edges.size(); i++) {
+      std::cout << static_edges[i].s0_id << "-> " << static_edges[i].s1_id
+          << ": " << static_edges[i].traversal_count[0] << std::endl;
+      std::cout << "Fwd fail " << static_edges[i].failure_belief[0][0] << ", "
+                << static_edges[i].failure_belief[0][1] << std::endl;
+      std::cout << "Rev fail " << static_edges[i].failure_belief[1][0] << ", "
+                << static_edges[i].failure_belief[1][1] << std::endl;
       std::cout << std::endl;
     }
   }

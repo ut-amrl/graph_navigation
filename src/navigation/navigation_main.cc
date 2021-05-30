@@ -78,6 +78,7 @@ CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
+CONFIG_BOOL(bayes_mode, "NavigationParameters.bayes_mode");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 
@@ -186,14 +187,16 @@ void IntrospectivePerceptionCallback(
   static std::unordered_map<int, double> failure_type_to_last_time_map;
   graph_navigation::IntrospectivePerceptionInfo complemented_info;
 
-  complemented_info.failure_likelihood = msg.failure_likelihood;
-  complemented_info.failure_type = msg.failure_type;
-  navigation_edge_found = navigation_.GetClosestStaticEdgeInfo(
-      &complemented_info.s0_id, &complemented_info.s1_id);
+  if (!CONFIG_bayes_mode) {
+    complemented_info.failure_likelihood = msg.failure_likelihood;
+    complemented_info.failure_type = msg.failure_type;
+    navigation_edge_found = navigation_.GetClosestStaticEdgeInfo(
+        &complemented_info.s0_id, &complemented_info.s1_id);
 
-  // Republish along with information about the closes static edge
-  if (navigation_edge_found) {
-    introspective_perception_pub_.publish(complemented_info);
+    // Republish along with information about the closes static edge
+    if (navigation_edge_found) {
+      introspective_perception_pub_.publish(complemented_info);
+    }
   }
 
   // Add the failure instance to the database of predicted failures
@@ -233,6 +236,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(can_traverse_stairs);
   BOOL_PARAM(competence_aware);
   BOOL_PARAM(frequentist_mode);
+  BOOL_PARAM(bayes_mode);
   BOOL_PARAM(airsim_compatible);
   BOOL_PARAM(load_failure_logs);
   BOOL_PARAM(memoryless);
@@ -259,6 +263,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
   params->competence_aware = CONFIG_competence_aware;
   params->frequentist_mode = CONFIG_frequentist_mode;
+  params->bayes_mode = CONFIG_bayes_mode;
   params->airsim_compatible = CONFIG_airsim_compatible;
   params->load_failure_logs = CONFIG_load_failure_logs;
   params->memoryless = CONFIG_memoryless;

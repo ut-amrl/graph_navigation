@@ -3,6 +3,9 @@
 float32 failure_likelihood
 uint8 failure_type
 
+# Name of the node generating this msg
+string source
+
 # TODO: Introspective perception should provide the robot pose
 # from where the source of failure has been detected. Currently
 # navigation associates the failure likelihood to the pose of

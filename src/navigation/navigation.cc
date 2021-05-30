@@ -602,11 +602,11 @@ void Navigation::Plan() {
   if (!params_.competence_aware) {
     found_path = AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
   } else {
-    if (params_.frequentist_mode) {
+    if (params_.frequentist_mode || params_.bayes_mode) {
       // In frequentist mode, the probability of navigation failure for
       // each edge is stored in the graph structure hence will be published
       // to be received by the MDP solver
-      PublishAllEdgesFailureInfo();
+      PublishAllEdgesFailureInfo(params_.frequentist_mode);
     } else {
       // If not in frequentist mode, only the probability of navigation failure
       // for dynamic edges will be estimated and published since the
@@ -1230,6 +1230,7 @@ bool Navigation::GetDynamicEdgesFailureProb(
 }
 
 bool Navigation::GetStaticEdgesFailureProb(
+    bool get_frequentist_estimates,
     std::vector<graph_navigation::IntrospectivePerceptionInfo>*
         edges_failure_prob) {
   if (!initialized_) {
@@ -1246,11 +1247,15 @@ bool Navigation::GetStaticEdgesFailureProb(
     // Compute the failure prob for forward direction
     for (size_t i = 0; i < kFailureTypeCount; i++) {
       failure_prob_fwd[i] = 0.0;
-      if (edge.traversal_count[0] > 0) {
-        failure_prob_fwd[i] = static_cast<float>(edge.failure_count_fwd[i]) /
-                              static_cast<float>(edge.traversal_count[0]);
-        failure_prob_fwd[i] =
-            std::min(static_cast<float>(failure_prob_fwd[i]), 0.99f);
+      if (get_frequentist_estimates) {
+        if (edge.traversal_count[0] > 0) {
+          failure_prob_fwd[i] = static_cast<float>(edge.failure_count_fwd[i]) /
+                                static_cast<float>(edge.traversal_count[0]);
+          failure_prob_fwd[i] =
+              std::min(static_cast<float>(failure_prob_fwd[i]), 0.99f);
+        }
+      } else {
+        failure_prob_fwd[i] = edge.failure_belief[0][i];
       }
 
       edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
@@ -1260,11 +1265,15 @@ bool Navigation::GetStaticEdgesFailureProb(
     // Compute the failure prob for reverse direction
     for (size_t i = 0; i < kFailureTypeCount; i++) {
       failure_prob_rev[i] = 0.0;
-      if (edge.traversal_count[1] > 0) {
-        failure_prob_rev[i] = static_cast<float>(edge.failure_count_rev[i]) /
-                              static_cast<float>(edge.traversal_count[1]);
-        failure_prob_rev[i] =
-            std::min(static_cast<float>(failure_prob_rev[i]), 0.99f);
+      if (get_frequentist_estimates) {
+        if (edge.traversal_count[1] > 0) {
+          failure_prob_rev[i] = static_cast<float>(edge.failure_count_rev[i]) /
+                                static_cast<float>(edge.traversal_count[1]);
+          failure_prob_rev[i] =
+              std::min(static_cast<float>(failure_prob_rev[i]), 0.99f);
+        }
+      } else {
+        failure_prob_rev[i] = edge.failure_belief[1][i];
       }
 
       edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
@@ -1287,7 +1296,8 @@ void Navigation::PublishDynamicEdgesFailureInfo() {
   }
 }
 
-void Navigation::PublishAllEdgesFailureInfo() {
+void Navigation::PublishAllEdgesFailureInfo(
+    bool publish_frequentist_estimates) {
   std::vector<graph_navigation::IntrospectivePerceptionInfo>
       dyn_edges_failure_prob;
   std::vector<graph_navigation::IntrospectivePerceptionInfo>
@@ -1302,7 +1312,8 @@ void Navigation::PublishAllEdgesFailureInfo() {
   }
 
   // Retrieve failure prob. for all static edges
-  if (GetStaticEdgesFailureProb(&static_edges_failure_prob)) {
+  if (GetStaticEdgesFailureProb(publish_frequentist_estimates,
+                                &static_edges_failure_prob)) {
     for (auto& detection : static_edges_failure_prob) {
       msg.detections.push_back(detection);
     }
@@ -1650,9 +1661,29 @@ void Navigation::AddFailureInstance(
   // to log the predicted failure at (meters).
   const float kFailureLocationOffset = 3.0;
 
+  // TODO(srabiee): turn off debug mode
+  const bool kDebug = false;
+
+  // The observation type is either introspction, i.e. p(failure|obs) is
+  // via introspective perception and by using the raw sensory data. Or 
+  // the other type of observation is actually experiencing different types 
+  // of failures of successfully navigating an edge.
+  enum ObservationType {INTROSPECTION = 0, EXPERIENCE = 1};
+
   if (initialized_) {
     replan_requested_ = true;
     introspection::FailureData failure_data;
+
+    ObservationType obs_type;
+    if (msg.source == "ivoa") {
+      obs_type = INTROSPECTION;
+    } else if (msg.source == "simple_replanner") {
+      obs_type = EXPERIENCE;
+    } else {
+      LOG(WARNING) << "Unexpected source of introspective perception msg: " << 
+                      msg.source << ". Ignoring this received msg.";
+      return;
+    }
 
     failure_data.failure_prob = msg.failure_likelihood;
     failure_data.failure_type = msg.failure_type;
@@ -1678,7 +1709,8 @@ void Navigation::AddFailureInstance(
 
     // Update the traversal stats of the current edge
     // TODO(srabiee): Prune out duplicate reports
-    if (params_.frequentist_mode) {
+    if (params_.frequentist_mode ||
+        (params_.bayes_mode && obs_type == EXPERIENCE)) {
       std::array<uint64_t, 2> failure_count{0, 0};
       CHECK_LT(failure_data.failure_type, failure_count.size());
       failure_count[failure_data.failure_type] = 1;
@@ -1688,6 +1720,33 @@ void Navigation::AddFailureInstance(
             plan_path_[curr_plan_progress_ - 1].id,
             1,
             failure_count);
+      }
+    }
+
+    if (params_.bayes_mode && obs_type == INTROSPECTION) {
+      // TDOO(srabiee): The two following function calls can be implemented in
+      // a single function for a more efficient solution
+      const float kEps = 0.01;
+      uint64_t s0_id, s1_id;
+      bool navigation_edge_found = GetClosestStaticEdgeInfo(&s0_id, &s1_id);
+      if (navigation_edge_found) {
+        // TODO(srabiee): pass the failure prob for all types of failures in
+        // the introspection info msg
+        std::array<float, 3> observation = {kEps, kEps, kEps};
+        observation[failure_data.failure_type] = failure_data.failure_prob;
+        observation[2] = 1.0 - (failure_data.failure_prob + kEps);
+
+        size_t edge_id = 0;
+        int edge_direction = 0;
+        planning_domain_.GetStaticEdgeID(
+            s0_id, s1_id, &edge_id, &edge_direction);
+        planning_domain_.static_edges[edge_id].UpdateFailureBelief(
+            edge_direction, observation);
+
+        if (kDebug) {
+          planning_domain_.PrintFailureBelief();
+        }
+        
       }
     }
   }
@@ -1751,8 +1810,12 @@ void Navigation::Run() {
   carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
   auto msg_copy = global_viz_msg_;
   visualization::DrawCross(carrot, 0.2, 0x10E000, msg_copy);
-  visualization::DrawArc(
-      Vector2f(0, 0), params_.carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+  visualization::DrawArc(Vector2f(0, 0),
+                         params_.carrot_dist,
+                         -M_PI,
+                         M_PI,
+                         0xE0E0E0,
+                         local_viz_msg_);
   viz_pub_.publish(msg_copy);
   // Check if complete.
   nav_complete_ = (robot_loc_ - carrot).norm() < FLAGS_navigation_tolerance;
@@ -1773,8 +1836,10 @@ void Navigation::Run() {
       local_target_ = params_.carrot_dist * local_target_.normalized();
     }
     visualization::DrawCross(local_target_, 0.2, 0xFF0080, local_viz_msg_);
-    printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
-        local_target_.x(), local_target_.y(), RadToDeg(theta));
+    // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
+    //        local_target_.x(),
+    //        local_target_.y(),
+    //        RadToDeg(theta));
     if (fabs(theta) > kLocalFOV && FLAGS_can_turn_in_place) {
       printf("TurnInPlace\n");
       TurnInPlace();

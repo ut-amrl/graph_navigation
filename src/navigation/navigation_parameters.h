@@ -81,6 +81,11 @@ struct NavigationParameters {
   // of navigation failure given previous experiences. This is only effective 
   // in competence-aware mode.
   bool frequentist_mode;
+  // Whether to use the Bayesian belief update for estimating the probability 
+  // of navigation failure given both previous failure experiences and 
+  // prediction of navigation failure by introspective perception. This is only 
+  // effective in competence-aware mode.
+  bool bayes_mode;
   // Make graph_nav run in airsim mode so that it can exploit control
   // services available by the simulator
   bool airsim_compatible;
@@ -110,6 +115,7 @@ struct NavigationParameters {
       can_traverse_stairs(false),
       competence_aware(false),
       frequentist_mode(false),
+      bayes_mode(false),
       airsim_compatible(false),
       load_failure_logs(false),
       memoryless(false) {}
