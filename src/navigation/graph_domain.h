@@ -113,9 +113,9 @@ struct GraphDomain {
     // and no failures (2). The first dimension represents the direction of
     // traversal: 0: fwd and 1: rev
     std::array<std::array<float, kFailureTypeCount + 1>, 2> failure_belief = {{{
-        0.025, 0.025, 0.95}, {0.025, 0.025, 0.95}}};
+        0.0001, 0.0001, 0.9998}, {0.0001, 0.0001, 0.9998}}};
     std::array<std::array<float, kFailureTypeCount + 1>, 2> failure_belief_normalized = {{{
-        0.025, 0.025, 0.95}, {0.025, 0.025, 0.95}}};
+        0.0001, 0.0001, 0.9998}, { 0.0001, 0.0001, 0.9998}}};
 
 
     std::array<std::array<float, kFailureTypeCount + 1>, 2>
@@ -244,7 +244,12 @@ struct GraphDomain {
         int direction,
         const std::array<bool, kFailureTypeCount + 1>& observation) {
       const bool kDebug = false;
-      const float kDelta = 0.95;
+      // P(failure | failure_experienced)
+      float kDelta = 0.96;
+      if (observation.back()) {
+        // P(No_failure | successful_traversal)
+        kDelta = 0.9998;
+      }
       const float kInvObsLikelihoodHit = kDelta;
       const float kInvObsLikelihoodMiss = (1 - kDelta) / (kFailureTypeCount);
       CHECK_LT(direction, 2);

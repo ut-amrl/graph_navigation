@@ -1726,12 +1726,13 @@ void Navigation::AddFailureInstance(
     if (params_.bayes_mode && obs_type == INTROSPECTION) {
       // TDOO(srabiee): The two following function calls can be implemented in
       // a single function for a more efficient solution
-      const float kEps = 0.01;
+      float kEps = 0.02;
       uint64_t s0_id, s1_id;
       bool navigation_edge_found = GetClosestStaticEdgeInfo(&s0_id, &s1_id);
       if (navigation_edge_found) {
         // TODO(srabiee): pass the failure prob for all types of failures in
         // the introspection info msg
+        kEps = std::min(kEps, 1.0f - failure_data.failure_prob);
         std::array<float, 3> observation = {kEps, kEps, kEps};
         observation[failure_data.failure_type] = failure_data.failure_prob;
         observation[2] = 1.0 - (failure_data.failure_prob + kEps);
