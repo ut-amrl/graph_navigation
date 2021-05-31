@@ -141,11 +141,20 @@ struct GraphDomain {
       json traversal_count_json(traversal_count);
       json failure_count_fwd_json(failure_count_fwd);
       json failure_count_rev_json(failure_count_rev);
+      json failure_belief_fwd_json(failure_belief[0]);
+      json failure_belief_rev_json(failure_belief[1]);
+      json failure_log_odds_prior_fwd_json(failure_log_odds_prior[0]);
+      json failure_log_odds_prior_rev_json(failure_log_odds_prior[1]);
       data["traversal_count"] = traversal_count_json;
       data["failure_count_fwd"] = failure_count_fwd_json;
       data["failure_count_rev"] = failure_count_rev_json;
+      data["failure_belief_fwd"] = failure_belief_fwd_json;
+      data["failure_belief_rev"] = failure_belief_rev_json;
+      data["failure_log_odds_prior_fwd"] = failure_log_odds_prior_fwd_json;
+      data["failure_log_odds_prior_rev"] = failure_log_odds_prior_rev_json;
       data["s0_id"] = s0_id;
       data["s1_id"] = s1_id;
+
 
       return data;
     }
@@ -154,9 +163,19 @@ struct GraphDomain {
       CHECK(json_obj["traversal_count"].is_array());
       CHECK(json_obj["failure_count_fwd"].is_array());
       CHECK(json_obj["failure_count_rev"].is_array());
+      CHECK(json_obj["failure_belief_fwd"].is_array());
+      CHECK(json_obj["failure_belief_rev"].is_array());
+      CHECK(json_obj["failure_log_odds_prior_fwd"].is_array());
+      CHECK(json_obj["failure_log_odds_prior_rev"].is_array());
       CHECK_EQ(json_obj["traversal_count"].size(), traversal_count.size());
       CHECK_EQ(json_obj["failure_count_fwd"].size(), failure_count_fwd.size());
       CHECK_EQ(json_obj["failure_count_rev"].size(), failure_count_rev.size());
+      CHECK_EQ(json_obj["failure_belief_fwd"].size(), failure_belief[0].size());
+      CHECK_EQ(json_obj["failure_belief_rev"].size(), failure_belief[1].size());
+      CHECK_EQ(json_obj["failure_log_odds_prior_fwd"].size(),
+               failure_log_odds_prior[0].size());
+      CHECK_EQ(json_obj["failure_log_odds_prior_rev"].size(), 
+               failure_log_odds_prior[1].size());
 
       for (size_t i = 0; i < traversal_count.size(); i++) {
         traversal_count[i] = json_obj["traversal_count"][i].get<uint64_t>();
@@ -168,6 +187,41 @@ struct GraphDomain {
 
       for (size_t i = 0; i < failure_count_rev.size(); i++) {
         failure_count_rev[i] = json_obj["failure_count_rev"][i].get<uint64_t>();
+      }
+
+      for (size_t i = 0; i < failure_belief[0].size(); i++) {
+        failure_belief[0][i] = json_obj["failure_belief_fwd"][i].get<float>();
+      }
+
+      for (size_t i = 0; i < failure_belief[1].size(); i++) {
+        failure_belief[1][i] = json_obj["failure_belief_rev"][i].get<float>();
+      }
+
+      for (size_t i = 0; i < failure_log_odds_prior[0].size(); i++) {
+        failure_log_odds_prior[0][i] = json_obj["failure_log_odds_prior_fwd"][i].get<float>();
+      }
+
+      for (size_t i = 0; i < failure_log_odds_prior[1].size(); i++) {
+        failure_log_odds_prior[1][i] = json_obj["failure_log_odds_prior_rev"][i].get<float>();
+      }
+
+      // Compute the failure_log_odds
+      for (size_t i = 0; i < 2; i++) {
+        for (size_t j = 0; j < failure_log_odds_prior[i].size(); j++) {
+          failure_log_odds[i][j] = 
+              std::log(failure_belief[i][j] / (1 - failure_belief[i][j]));
+        }
+      }
+
+      // Compute the normalized failure belief
+      for (size_t i = 0; i < 2; i++) {
+        float sum = 0.0;
+        for (size_t j = 0; j < failure_belief[i].size(); j++) {
+          sum += failure_belief[i][j];
+        }
+        for (size_t j = 0; j < failure_belief_normalized[i].size(); j++) {
+          failure_belief_normalized[i][j] = failure_belief[i][j] / sum;
+        }
       }
     }
 
