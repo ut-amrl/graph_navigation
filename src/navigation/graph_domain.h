@@ -469,9 +469,11 @@ struct GraphDomain {
   }
 
   bool GetClosestEdge(const Eigen::Vector2f& v,
+                      const std::vector<uint64_t> &ignore_node_ids,
                       NavigationEdge* closest_edge,
                       float* closest_dist,
                       bool* is_dynamic_edge) const {
+    const bool kDebug = false;
     bool found = false;
     closest_edge->s0_id = -1;
     closest_edge->s1_id = -1;
@@ -480,6 +482,27 @@ struct GraphDomain {
       const float dist = e.edge.Distance(v);
       if (dist < *closest_dist &&
           (!e.has_stairs || params_->can_traverse_stairs)) {
+        bool skip_edge = false;
+        for (const uint64_t& ignored_node_id : ignore_node_ids) {
+          if (e.s0_id == ignored_node_id || e.s1_id == ignored_node_id) {
+            skip_edge = true;
+            break;
+          }
+        }
+        if (skip_edge) {
+          if (kDebug) {
+            std::cout << "Skipping edge " << e.s0_id << " to " << e.s1_id 
+                      << std::endl;
+            std::cout << "start goal ids: " << ignore_node_ids[0] << ", " 
+                      << ignore_node_ids[1] << std::endl;
+            std::cout << "*****************************************"
+                      << std::endl 
+                      << "*****************************************"
+                      << std::endl;
+          }
+          continue;
+        }
+
         *closest_dist = dist;
         *closest_edge = e;
         found = true;

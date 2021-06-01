@@ -168,7 +168,8 @@ class Navigation {
   // to be sent to the MDP solver before requesting a replan
   bool GetDynamicEdgesFailureProb(
       std::vector<graph_navigation::IntrospectivePerceptionInfo>*
-          edges_failure_prob);
+          edges_failure_prob,
+      const std::vector<uint64_t> &ignore_node_ids);
   // Given the available database of logs of previous successful and 
   // unsuccessful traversals of the static edges, estimates the prob. 
   // of navigation failure for all static edges.
@@ -184,13 +185,21 @@ class Navigation {
   // Updates the correspondences between logged sources of failure and the 
   // dynamic edges of the navigation graph. It then publishes the updated
   // info on a ROS topic
-  void PublishDynamicEdgesFailureInfo();
+  // Failure instances will not be associated with edges connected to nodes 
+  // provided in the "ignore_node_ids" vector. The list is supposed to include
+  // the start and goal node ids.
+  void PublishDynamicEdgesFailureInfo(
+      const std::vector<uint64_t> &ignore_node_ids);
   // Uses the logged frequency of failures for each static edge to 
   // compute the probability of navigation failure for that edge.
   // For all dynamic edges, it computes an estimate of navigation
   // failure based on the proximity of the individual instances of
-  // logged failures. It then publishes all the estimated values on a ROS topic
-  void PublishAllEdgesFailureInfo(bool publish_frequentist_estimates);
+  // logged failures. It then publishes all the estimated values on a ROS topic.
+  // Failure instances will not be associated with edges connected to nodes 
+  // provided in the "ignore_node_ids" vector. The list is supposed to include
+  // the start and goal node ids.
+  void PublishAllEdgesFailureInfo(bool publish_frequentist_estimates, 
+                                  const std::vector<uint64_t> &ignore_node_ids);
   // Updates the state of the robot along the planned path and records 
   // instances of successful navigation
   void UpdatePlanProgress(int plan_progress_idx);

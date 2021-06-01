@@ -602,17 +602,18 @@ void Navigation::Plan() {
   if (!params_.competence_aware) {
     found_path = AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
   } else {
+    std::vector<uint64_t> start_goal_ids {start_id, goal_id};
     if (params_.frequentist_mode || params_.bayes_mode) {
       // In frequentist mode, the probability of navigation failure for
       // each edge is stored in the graph structure hence will be published
       // to be received by the MDP solver
-      PublishAllEdgesFailureInfo(params_.frequentist_mode);
+      PublishAllEdgesFailureInfo(params_.frequentist_mode, start_goal_ids);
     } else {
       // If not in frequentist mode, only the probability of navigation failure
       // for dynamic edges will be estimated and published since the
       // corresponding values for the static edges are already tracked by 
       // the MDP solver.
-      PublishDynamicEdgesFailureInfo();
+      PublishDynamicEdgesFailureInfo(start_goal_ids);
     }
  
     found_path = QueryMDPSolver(start_id, goal_id, &graph_viz, &plan_path_);
@@ -1119,7 +1120,8 @@ bool Navigation::QueryMDPSolver(uint64_t start_id,
 
 bool Navigation::GetDynamicEdgesFailureProb(
     std::vector<graph_navigation::IntrospectivePerceptionInfo>*
-        edges_failure_prob) {
+        edges_failure_prob,
+    const std::vector<uint64_t> &ignore_node_ids) {
   if (!initialized_) {
     return false;
   }
@@ -1136,7 +1138,11 @@ bool Navigation::GetDynamicEdgesFailureProb(
     navigation::GraphDomain::NavigationEdge edge;
     float closest_dist = FLT_MAX;
     if (!planning_domain_.GetClosestEdge(
-            failure.location, &edge, &closest_dist, &is_dyanmic)) {
+            failure.location, 
+            ignore_node_ids, 
+            &edge, 
+            &closest_dist, 
+            &is_dyanmic)) {
       continue;
     }
 
@@ -1284,10 +1290,11 @@ bool Navigation::GetStaticEdgesFailureProb(
   return true;
 }
 
-void Navigation::PublishDynamicEdgesFailureInfo() {
+void Navigation::PublishDynamicEdgesFailureInfo(
+    const std::vector<uint64_t> &ignore_node_ids) {
   std::vector<graph_navigation::IntrospectivePerceptionInfo> edges_failure_prob;
   graph_navigation::IntrospectivePerceptionInfoArray msg;
-  if (GetDynamicEdgesFailureProb(&edges_failure_prob)) {
+  if (GetDynamicEdgesFailureProb(&edges_failure_prob, ignore_node_ids)) {
     for (auto& detection : edges_failure_prob) {
       msg.detections.push_back(detection);
     }
@@ -1297,7 +1304,8 @@ void Navigation::PublishDynamicEdgesFailureInfo() {
 }
 
 void Navigation::PublishAllEdgesFailureInfo(
-    bool publish_frequentist_estimates) {
+    bool publish_frequentist_estimates,
+    const std::vector<uint64_t> &ignore_node_ids) {
   std::vector<graph_navigation::IntrospectivePerceptionInfo>
       dyn_edges_failure_prob;
   std::vector<graph_navigation::IntrospectivePerceptionInfo>
@@ -1305,7 +1313,7 @@ void Navigation::PublishAllEdgesFailureInfo(
   graph_navigation::IntrospectivePerceptionInfoArray msg;
 
   // Estimate failure prob. for all dynamic edges
-  if (GetDynamicEdgesFailureProb(&dyn_edges_failure_prob)) {
+  if (GetDynamicEdgesFailureProb(&dyn_edges_failure_prob, ignore_node_ids)) {
     for (auto& detection : dyn_edges_failure_prob) {
       msg.detections.push_back(detection);
     }
