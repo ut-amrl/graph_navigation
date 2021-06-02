@@ -1,0 +1,6 @@
+# This service is used to request graph_navigation to save the current 
+# state of the traversal statistics including the edge traversal counts
+# and number of navigation failures for each edge.
+string output_path
+---
+bool success

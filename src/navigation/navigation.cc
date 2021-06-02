@@ -602,20 +602,22 @@ void Navigation::Plan() {
   if (!params_.competence_aware) {
     found_path = AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
   } else {
-    std::vector<uint64_t> start_goal_ids {start_id, goal_id};
-    if (params_.frequentist_mode || params_.bayes_mode) {
-      // In frequentist mode, the probability of navigation failure for
-      // each edge is stored in the graph structure hence will be published
-      // to be received by the MDP solver
-      PublishAllEdgesFailureInfo(params_.frequentist_mode, start_goal_ids);
-    } else {
-      // If not in frequentist mode, only the probability of navigation failure
-      // for dynamic edges will be estimated and published since the
-      // corresponding values for the static edges are already tracked by 
-      // the MDP solver.
-      PublishDynamicEdgesFailureInfo(start_goal_ids);
+    std::vector<uint64_t> start_goal_ids{start_id, goal_id};
+    if (!params_.only_collect_traversal_stats) {
+      if (params_.frequentist_mode || params_.bayes_mode) {
+        // In frequentist mode, the probability of navigation failure for
+        // each edge is stored in the graph structure hence will be published
+        // to be received by the MDP solver
+        PublishAllEdgesFailureInfo(params_.frequentist_mode, start_goal_ids);
+      } else {
+        // If not in frequentist mode, only the probability of navigation
+        // failure for dynamic edges will be estimated and published since the
+        // corresponding values for the static edges are already tracked by
+        // the MDP solver.
+        PublishDynamicEdgesFailureInfo(start_goal_ids);
+      }
     }
- 
+
     found_path = QueryMDPSolver(start_id, goal_id, &graph_viz, &plan_path_);
   }
       
@@ -1032,6 +1034,8 @@ bool Navigation::QueryMDPSolver(uint64_t start_id,
   bool plan_on_static_graph = false;
   path->clear();
 
+  // TODO(srabiee): This feature can be safely removed when kEnableReducedGraph
+  // is enabled in Plan()
   if (params_.frequentist_mode) {
     // If the start and goal location are both close to nodes on
     // the static graph, planning will happen on the static graph.
@@ -1346,12 +1350,14 @@ void Navigation::UpdatePlanProgress(int plan_progress_idx) {
     std::cout << std::endl;
   }
 
-  if (plan_progress_idx < static_cast<int>(plan_path_.size() - 1) &&
-       (plan_progress_idx != curr_plan_progress_)) {
-    planning_domain_.UpdateEdgeTraversalStats(
-        plan_path_[curr_plan_progress_].id,
-        plan_path_[plan_progress_idx].id,
-        1);
+  if (!params_.lock_traversal_stats) {
+    if (plan_progress_idx < static_cast<int>(plan_path_.size() - 1) &&
+        (plan_progress_idx != curr_plan_progress_)) {
+      planning_domain_.UpdateEdgeTraversalStats(
+          plan_path_[curr_plan_progress_].id,
+          plan_path_[plan_progress_idx].id,
+          1);
+    }
   }
 
   curr_plan_progress_ = plan_progress_idx;
@@ -1672,17 +1678,15 @@ void Navigation::AddFailureInstance(
   // TODO(srabiee): turn off debug mode
   const bool kDebug = false;
 
-  // The observation type is either introspction, i.e. p(failure|obs) is
-  // via introspective perception and by using the raw sensory data. Or 
-  // the other type of observation is actually experiencing different types 
-  // of failures of successfully navigating an edge.
-  enum ObservationType {INTROSPECTION = 0, EXPERIENCE = 1};
-
   if (initialized_) {
-    replan_requested_ = true;
+    if (!params_.only_collect_traversal_stats) {
+      // In only_collect_traversal_stats mode, experienced or predicted failures
+      // do not trigger replanning
+      replan_requested_ = true;
+    }
     introspection::FailureData failure_data;
 
-    ObservationType obs_type;
+    introspection::ObservationType obs_type;
     if (msg.source == "ivoa") {
       obs_type = INTROSPECTION;
     } else if (msg.source == "simple_replanner") {
@@ -1717,8 +1721,8 @@ void Navigation::AddFailureInstance(
 
     // Update the traversal stats of the current edge
     // TODO(srabiee): Prune out duplicate reports
-    if (params_.frequentist_mode ||
-        (params_.bayes_mode && obs_type == EXPERIENCE)) {
+    if ((params_.frequentist_mode || params_.bayes_mode) &&
+        obs_type == EXPERIENCE && !params_.lock_traversal_stats) {
       std::array<uint64_t, 2> failure_count{0, 0};
       CHECK_LT(failure_data.failure_type, failure_count.size());
       failure_count[failure_data.failure_type] = 1;
@@ -1731,7 +1735,8 @@ void Navigation::AddFailureInstance(
       }
     }
 
-    if (params_.bayes_mode && obs_type == INTROSPECTION) {
+    if (params_.bayes_mode && obs_type == INTROSPECTION &&
+        !params_.lock_traversal_stats) {
       // TDOO(srabiee): The two following function calls can be implemented in
       // a single function for a more efficient solution
       float kEps = 0.02;

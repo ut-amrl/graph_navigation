@@ -97,6 +97,16 @@ struct NavigationParameters {
   // competence-aware mode (only set to True for implementation
   // of a simple baseline method)
   bool memoryless;
+  // If enabled, traversal stats will not be updated during deployment (either 
+  // for bayes mode or frequentist mode) and the failure likelihood values
+  // that are loaded upon startup will be used for path planning.
+  bool lock_traversal_stats;
+  // If enabled, traversal stats wll be collected during deployment but will
+  // not be used for competence-aware path planning. In this mode, no failure
+  // likelihood value will be published to the MDP solver. This mode is to be
+  // used for collecting data from repeated traversals of the same navigation
+  // edges for obtaining ground truth estimate of the failure likelihood.
+  bool only_collect_traversal_stats;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -118,7 +128,9 @@ struct NavigationParameters {
       bayes_mode(false),
       airsim_compatible(false),
       load_failure_logs(false),
-      memoryless(false) {}
+      memoryless(false),
+      lock_traversal_stats(false),
+      only_collect_traversal_stats(false) {}
 };
 
 }  // namespace navigation

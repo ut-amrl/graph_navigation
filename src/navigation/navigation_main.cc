@@ -51,6 +51,7 @@
 #include "std_msgs/Bool.h"
 #include "graph_navigation/IntrospectivePerceptionRawInfo.h"
 #include "graph_navigation/IntrospectivePerceptionInfo.h"
+#include "graph_navigation/SaveTraversalStats.h"
 
 #include "navigation.h"
 
@@ -79,6 +80,7 @@ CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 CONFIG_BOOL(bayes_mode, "NavigationParameters.bayes_mode");
+CONFIG_BOOL(frequentist_mode, "NavigationParameters.frequentist_mode");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 
@@ -187,7 +189,18 @@ void IntrospectivePerceptionCallback(
   static std::unordered_map<int, double> failure_type_to_last_time_map;
   graph_navigation::IntrospectivePerceptionInfo complemented_info;
 
-  if (!CONFIG_bayes_mode) {
+  introspection::ObservationType obs_type;
+  if (msg.source == "ivoa") {
+    obs_type = introspection::INTROSPECTION;
+  } else if (msg.source == "simple_replanner") {
+    obs_type = introspection::EXPERIENCE;
+  } else {
+    LOG(WARNING) << "Unexpected source of introspective perception msg: " << 
+                    msg.source << ". Ignoring this received msg.";
+    return;
+  }
+
+  if (!CONFIG_bayes_mode && !CONFIG_frequentist_mode) {
     complemented_info.failure_likelihood = msg.failure_likelihood;
     complemented_info.failure_type = msg.failure_type;
     navigation_edge_found = navigation_.GetClosestStaticEdgeInfo(
@@ -199,17 +212,37 @@ void IntrospectivePerceptionCallback(
     }
   }
 
-  // Add the failure instance to the database of predicted failures
-  // if more than kMinPeriod seconds has passed since last failure of the
-  // same type
-  double curr_time = ros::Time::now().toSec();
-  if (!((failure_type_to_last_time_map.find(msg.failure_type) !=
-         failure_type_to_last_time_map.end()) &&
-        (curr_time - failure_type_to_last_time_map[msg.failure_type] <
-         kMinPeriod))) {
-    failure_type_to_last_time_map[msg.failure_type] = curr_time;
+  // Pass through observations of type "Experience" but for other
+  // introspection msgs apply a minimum time period thershold. This
+  // is because the introspection type observations are higher frequency
+  if (obs_type == introspection::EXPERIENCE) {
     navigation_.AddFailureInstance(msg);
+  } else {
+    // Add the failure instance to the database of predicted failures
+    // if more than kMinPeriod seconds has passed since last failure of the
+    // same type
+    double curr_time = ros::Time::now().toSec();
+    if (!((failure_type_to_last_time_map.find(msg.failure_type) !=
+           failure_type_to_last_time_map.end()) &&
+          (curr_time - failure_type_to_last_time_map[msg.failure_type] <
+           kMinPeriod))) {
+      failure_type_to_last_time_map[msg.failure_type] = curr_time;
+      navigation_.AddFailureInstance(msg);
+    }
   }
+}
+
+bool SaveTraversalStatistics(
+    graph_navigation::SaveTraversalStats::Request& request,
+    graph_navigation::SaveTraversalStats::Response& response) {
+  std::string output_file_path =
+      request.output_path + "/" + FLAGS_map + ".failure_logs.json";
+  ROS_INFO("Saving failure logs to %s", output_file_path.c_str())
+  navigation_.SaveFailureInstancesToFile(output_file_path);
+
+  response.success = true;
+
+  return true;
 }
 
 void LoadConfig(navigation::NavigationParameters* params) {
@@ -240,6 +273,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(airsim_compatible);
   BOOL_PARAM(load_failure_logs);
   BOOL_PARAM(memoryless);
+  BOOL_PARAM(lock_traversal_stats);
+  BOOL_PARAM(only_collect_traversal_stats);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -267,6 +302,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->airsim_compatible = CONFIG_airsim_compatible;
   params->load_failure_logs = CONFIG_load_failure_logs;
   params->memoryless = CONFIG_memoryless;
+  params->lock_traversal_stats = CONFIG_lock_traversal_stats;
+  params->only_collect_traversal_stats = CONFIG_only_collect_traversal_stats;
 }
 
 int main(int argc, char** argv) {
@@ -312,6 +349,8 @@ int main(int argc, char** argv) {
   introspective_perception_pub_ =
       n.advertise<graph_navigation::IntrospectivePerceptionInfo>(
           "/introspective_perception/info", 1);
+  ros::ServiceServer save_traversal_stats_srv_ = n.advertiseService(
+      "/graph_nav/save_traversal_stats", SaveTraversalStatistics);
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {

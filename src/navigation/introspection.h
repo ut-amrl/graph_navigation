@@ -35,6 +35,12 @@ namespace introspection {
 
 using json = nlohmann::json;
 
+// The observation type is either introspction, i.e. p(failure|obs) is
+// via introspective perception and by using the raw sensory data. Or 
+// the other type of observation is actually experiencing different types 
+// of failures or successfully navigating an edge.
+enum ObservationType {INTROSPECTION = 0, EXPERIENCE = 1};
+
 struct FailureData {
   FailureData(const float& failure_prob,
               const int& failure_type,
