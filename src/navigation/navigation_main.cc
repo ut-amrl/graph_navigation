@@ -237,7 +237,6 @@ bool SaveTraversalStatistics(
     graph_navigation::SaveTraversalStats::Response& response) {
   std::string output_file_path =
       request.output_path + "/" + FLAGS_map + ".failure_logs.json";
-  ROS_INFO("Saving failure logs to %s", output_file_path.c_str())
   navigation_.SaveFailureInstancesToFile(output_file_path);
 
   response.success = true;
