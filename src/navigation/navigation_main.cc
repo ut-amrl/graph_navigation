@@ -274,6 +274,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(memoryless);
   BOOL_PARAM(lock_traversal_stats);
   BOOL_PARAM(only_collect_traversal_stats);
+  REAL_PARAM(waypoint_distance_thresh);
+  REAL_PARAM(local_fov);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -303,6 +305,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->memoryless = CONFIG_memoryless;
   params->lock_traversal_stats = CONFIG_lock_traversal_stats;
   params->only_collect_traversal_stats = CONFIG_only_collect_traversal_stats;
+  params->waypoint_distance_thresh = CONFIG_waypoint_distance_thresh;
+  params->local_fov = CONFIG_local_fov;
 }
 
 int main(int argc, char** argv) {

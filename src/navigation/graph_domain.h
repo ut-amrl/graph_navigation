@@ -754,19 +754,23 @@ struct GraphDomain {
       // Max acceptable distance of the input location to the
       // closest static state in order to use the static node instead of
       // adding a new dynamic state
-      const float kMaxDistanceToStaticState = 3.0;
+      const float kMaxDistanceToStaticState = 1.0;
       if (GetClosestStaticState(
               v, &closest_static_state, &dist_to_closest_state)) {
         if (dist_to_closest_state < kMaxDistanceToStaticState) {
-          const uint64_t v_id = AddState(v);
-          AddUndirectedEdge(v_id,
-                            closest_static_state,
-                            closest_edge.max_speed,
-                            closest_edge.max_clearance,
-                            false,
-                            false);
+          std::vector<uint64_t> state_neighbors;
+          GetNeighborsKeys(closest_static_state, &state_neighbors);
+          if (!state_neighbors.empty()) {
+            const uint64_t v_id = AddState(v);
+            AddUndirectedEdge(v_id,
+                              closest_static_state,
+                              closest_edge.max_speed,
+                              closest_edge.max_clearance,
+                              false,
+                              false);
 
-          return v_id;
+            return v_id;
+          }
         }
       }
     }

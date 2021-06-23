@@ -108,6 +108,14 @@ struct NavigationParameters {
   // edges for obtaining ground truth estimate of the failure likelihood.
   bool only_collect_traversal_stats;
 
+  // If set to a positive number, the navigation carrot will be selected as the // closest of the next waypoint (navigation graph node) and the intersection
+  // of the planned path and the circle centered at the robot, of radius 
+  // kCarrotDist. Next waypoint will not be enforced as the navigation carrot
+  // if it is closer than waypoint_distance_thresh.
+  float waypoint_distance_thresh;
+
+  float local_fov;
+
   // Default constructor, just set defaults.
   NavigationParameters() :
       dt(0.025),
@@ -130,7 +138,9 @@ struct NavigationParameters {
       load_failure_logs(false),
       memoryless(false),
       lock_traversal_stats(false),
-      only_collect_traversal_stats(false) {}
+      only_collect_traversal_stats(false),
+      waypoint_distance_thresh(-1.0),
+      local_fov(60.0) {}
 };
 
 }  // namespace navigation

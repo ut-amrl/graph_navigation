@@ -663,7 +663,11 @@ Vector2f Navigation::GetCarrot() {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
 
-  if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
+  bool enforce_waypoint_dist_thresh = params_.waypoint_distance_thresh > 0;
+  float sq_waypoint_dist_thresh = Sq(params_.waypoint_distance_thresh);
+
+  if (((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist)
+      && !enforce_waypoint_dist_thresh) {
     // Goal is within the carrot dist.
     return plan_path_[0].loc;
   }
@@ -705,11 +709,29 @@ Vector2f Navigation::GetCarrot() {
     i0 = i;
     // const Vector2f v0 = plan_path_[i].loc;
     const Vector2f v1 = plan_path_[i - 1].loc;
+
+    // Return the next waypoint as the carrot if it is closer than the carrot
+    // distance but farther than the waypoint_dist_thresh
+    if (enforce_waypoint_dist_thresh &&
+        ((v1 - robot_loc_).squaredNorm() < kSqCarrotDist) &&
+        ((v1 - robot_loc_).squaredNorm() > sq_waypoint_dist_thresh)) {
+      return v1;
+    }
+
     if ((v1 - robot_loc_).squaredNorm() > kSqCarrotDist) {
       break;
     }
   }
   i1 = i0 -1;
+
+  // If waypoint_dist_thresh is enforced, check if the goal itself should be
+  // returned as the carrot only after the waypoint distance criteria has been
+  // checked
+  if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
+    // Goal is within the carrot dist.
+    return plan_path_[0].loc;
+  }
+
   // printf("i0:%d i1:%d\n", i0, i1);
   const Vector2f v0 = plan_path_[i0].loc;
   const Vector2f v1 = plan_path_[i1].loc;
@@ -1036,7 +1058,7 @@ bool Navigation::QueryMDPSolver(uint64_t start_id,
 
   // TODO(srabiee): This feature can be safely removed when kEnableReducedGraph
   // is enabled in Plan()
-  if (params_.frequentist_mode) {
+  if (params_.frequentist_mode && false) {
     // If the start and goal location are both close to nodes on
     // the static graph, planning will happen on the static graph.
     // This is specifically used in the frequentist competence-aware
@@ -1117,7 +1139,9 @@ bool Navigation::QueryMDPSolver(uint64_t start_id,
     std::cout << std::endl;
   }
 
-  // TODO(srabiee): Add visualizations
+  for (size_t i = 0; i < path->size() - 1; i++) {
+    viz->DrawEdge(path->at(i), path->at(i + 1));
+  }
 
   return true;
 }
@@ -1517,7 +1541,7 @@ void Navigation::TurnInPlace() {
     airsim_skip_counter++;
     if (airsim_skip_counter % kAirSimSkipFrames != 0) {
       return;
-}
+    }
 
     // Call the AirSim's turn-in-place service
     graph_navigation::TurnInPlace turn_in_place_srv;
@@ -1844,7 +1868,7 @@ void Navigation::Run() {
   } else {
     // TODO check if the robot needs to turn around.
     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
-    static const float kLocalFOV = DegToRad(60.0);
+    float local_fov_rad = DegToRad(params_.local_fov);
     const float theta = atan2(local_target_.y(), local_target_.x());
     if (local_target_.squaredNorm() > Sq(params_.carrot_dist)) {
       local_target_ = params_.carrot_dist * local_target_.normalized();
@@ -1854,7 +1878,7 @@ void Navigation::Run() {
     //        local_target_.x(),
     //        local_target_.y(),
     //        RadToDeg(theta));
-    if (fabs(theta) > kLocalFOV && FLAGS_can_turn_in_place) {
+    if (fabs(theta) > local_fov_rad && FLAGS_can_turn_in_place) {
       printf("TurnInPlace\n");
       TurnInPlace();
     } else {
