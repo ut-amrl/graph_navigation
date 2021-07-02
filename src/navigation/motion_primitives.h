@@ -23,15 +23,41 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
+#include "opencv2/core/mat.hpp"
 
 #include "math/line2d.h"
 #include "math/poses_2d.h"
 #include "navigation_parameters.h"
+#include "eigen3/Eigen/Dense"
 
 #ifndef MOTION_PRIMITIVES_H
 #define MOTION_PRIMITIVES_H
 
 namespace motion_primitives {
+
+struct MotionLimits {
+  // Maximum permissible acceleration magnitude.
+  // NOTE: Must be positive!
+  float max_acceleration;
+  // Maximum permissible deceleration magnitude.
+  // NOTE: Must be positive!
+  float max_deceleration;
+  // Maximum permissible speed.
+  // NOTE: Must be positive!
+  float max_speed;
+
+  MotionLimits() : 
+      max_acceleration(0),
+      max_deceleration(0),
+      max_speed(0) {}
+
+  MotionLimits(float max_acceleration,
+               float max_deceleration,
+               float max_speed) : 
+      max_acceleration(max_acceleration),
+      max_deceleration(max_deceleration),
+      max_speed(max_speed) {}
+};
 
 // A path rollout, with the start being the robot's current pose in the robot
 // frame - 0,0,0.
@@ -41,6 +67,11 @@ struct PathRolloutBase {
   // velocity. 
   virtual float Length() const = 0;
 
+  // Free path length of the rollout -- this is the cumulative free space distance along the direction of the rollout
+  // along the path, $\int ||v(t)||dt$ where $v(t)$ is the instantaneous
+  // velocity. 
+  virtual float FPL() const = 0;
+
   // Angular Length of the path rollout -- this is cumulative angular distance
   // (not displacement) traversed: $\int ||\dot{\theta}(t)||dt$ where
   // $\dot{\theta}(t)$ is the instantaneous angular velocity.
@@ -48,6 +79,9 @@ struct PathRolloutBase {
 
   // The pose of the robot at the end of the path rollout.
   virtual pose_2d::Pose2Df EndPoint() const = 0;
+
+  // Return the pose the robot would be at for fraction f into the path rollout. f \in [0, 1]
+  virtual pose_2d::Pose2Df GetIntermediateState(float f) const = 0;
 
   // The obstacle clearance along the path.
   virtual float Clearance() const = 0;
@@ -70,17 +104,22 @@ struct PathRolloutSamplerBase {
   // a set of n valid path rollout options that are collision-free.
   virtual std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) = 0;
 
+  // Augment some already generated path rollout options
+  virtual void AugmentSamples(std::vector<std::shared_ptr<PathRolloutBase>>& samples) = 0;
+
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
   virtual void Update(const Eigen::Vector2f& new_vel, 
                       const float new_ang_vel, 
                       const Eigen::Vector2f& new_local_target,
-                      const std::vector<Eigen::Vector2f>& new_point_cloud) {
+                      const std::vector<Eigen::Vector2f>& new_point_cloud,
+                      const cv::Mat& new_image) {
     vel = new_vel;
     ang_vel = new_ang_vel;
     local_target = new_local_target;
     point_cloud = new_point_cloud;
+    image = new_image;
   }
 
   void SetNavParams(const navigation::NavigationParameters& new_params) {
@@ -97,6 +136,8 @@ struct PathRolloutSamplerBase {
   std::vector<Eigen::Vector2f> point_cloud;
   // Navigation parameters.
   navigation::NavigationParameters nav_params;
+  // Latest image observation.
+  cv::Mat image;
 };
 
 // Evaluator of path rollout options.
@@ -107,20 +148,30 @@ struct PathEvaluatorBase {
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
-  virtual void Update(const Eigen::Vector2f& new_vel, 
+  virtual void Update(const Eigen::Vector2f& new_loc, 
+                      const float new_ang,
+                      const Eigen::Vector2f& new_vel, 
                       const float new_ang_vel, 
                       const Eigen::Vector2f& new_local_target,
-                      const std::vector<Eigen::Vector2f>& new_point_cloud) {
+                      const std::vector<Eigen::Vector2f>& new_point_cloud,
+                      const cv::Mat& new_image) {
+    curr_loc = new_loc;
+    curr_ang = new_ang;
     vel = new_vel;
     ang_vel = new_ang_vel;
     local_target = new_local_target;
     point_cloud = new_point_cloud;
+    image = new_image;
   }
 
   // Return the best path rollout from the provided set of paths.
   virtual std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) = 0;
 
+  // Current location
+  Eigen::Vector2f curr_loc;
+  // Current angle
+  float curr_ang;
   // Current linear velocity.
   Eigen::Vector2f vel;
   // Current angular velocity.
@@ -129,9 +180,11 @@ struct PathEvaluatorBase {
   Eigen::Vector2f local_target;
   // Obstacle point cloud.
   std::vector<Eigen::Vector2f> point_cloud;
+  // Latest image observation.
+  cv::Mat image;
 };
 
-float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,
+float Run1DTimeOptimalControl(const MotionLimits& limits,
                               const float x_init, 
                               const float v_init, 
                               const float x_final, 

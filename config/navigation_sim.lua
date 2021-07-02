@@ -1,15 +1,9 @@
-function deg2rad(deg)
-  return deg * (math.pi / 180)
-end
-
 NavigationParameters = {
-  image_topic = "/terrain_patch/compressed";
-  laser_topic = "/velodyne_2dscan";
-  odom_topic = "/jackal_velocity_controller/odom";
-  accel_topic = "/camera/accel/sample";
-  gyro_topic = "/camera/gyro/sample";
-  localization_topic = "localization";
-  init_topic = "initialpose";
+  image_topic = "/left/image_color/compressed";
+  laser_topic = "/robot0/scan";
+  odom_topic = "/robot0/odom";
+  localization_topic = "/robot0/localization";
+  init_topic = "/robot0/initialpose";
   enable_topic = "autonomy_arbiter/enabled";
   laser_loc = {
     x = 0.065;
@@ -26,21 +20,23 @@ NavigationParameters = {
   system_latency = 0.24;
   obstacle_margin = 0.3;
   num_options = 31;
-  robot_width = 0.44;
+  robot_width = 0.6;
   robot_length = 0.5;
   base_link_offset = 0;
   max_free_path_length = 4.0;
   max_clearance = 1.0;
   can_traverse_stairs = false;
   use_map_speed = true;
-  target_dist_tolerance = 0.1;
+  use_kinect = false;
+  target_dist_tolerance = 1.2;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  model_path = "/home/administrator/preference_learning/comprehensive_models/jit_cost_model_outdoor.pt";
-  use_ikd = true;
+  model_path = "../preference_learning/comprehensive_models/jit_cost_model_indoor_6dim.pt";
+  embedding_model_path = "../preference_learning/comprehensive_models/jit_emb_model_indoor_6dim.pt";
+  evaluator_type = "cost_map";
+  blur = true;
 };
 
 AckermannSampler = {
-  max_curvature = 3;
-  clearance_path_clip_fraction = 0.8;
+  max_curvature = 2;
 };

@@ -23,7 +23,13 @@
 #include <memory>
 #include <vector>
 
+#include "torch/torch.h"
+
 #include "eigen3/Eigen/Dense"
+#include "geometry_msgs/TwistStamped.h"
+#include "nav_msgs/Odometry.h"
+#include "opencv2/core/mat.hpp"
+#include "sensor_msgs/Imu.h"
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -87,8 +93,14 @@ class Navigation {
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
+  void UpdateLocalImage(cv::Mat image);
+
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
+                         
+  void ObserveImage(cv::Mat image, double time);
+  void ObserveGyro(sensor_msgs::Imu msg);
+  void ObserveAccel(sensor_msgs::Imu msg);
   bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
@@ -138,6 +150,8 @@ class Navigation {
   float GetObstacleMargin();
   float GetRobotWidth();
   float GetRobotLength();
+  cv::Mat GetLatestEvaluationImage();
+  std::vector<float> GetLatestCostComponents();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
@@ -180,6 +194,9 @@ class Navigation {
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
 
+  bool LoadIKDModel();
+  void UpdateControls(Eigen::Vector2f& vel_cmd, float& ang_vel_cmd, const cv::Mat& warped_image);
+
   // Current robot location.
   Eigen::Vector2f robot_loc_;
   // Current robot orientation.
@@ -193,7 +210,20 @@ class Navigation {
   // Odometry-reported robot angle.
   float odom_angle_;
   // Newest odometry message received.
-  Odom latest_odom_msg_;
+  nav_msgs::Odometry latest_odom_msg_;
+  // Newest image received.
+  cv::Mat latest_image_;
+  // GT local image.
+  cv::Mat local_image_;
+  
+  
+  // retain the last 15 odom messages
+  std::vector<nav_msts::Odometry> odom_history_;
+  const size_t kOdomHistorySize = 15;
+  bool should_add_odom_to_history;
+
+  sensor_msgs::Imu latest_accelerometer_msg_;
+  sensor_msgs::Imu latest_gyroscope_msg_;
 
   NavigationState nav_state_;
   
@@ -217,6 +247,8 @@ class Navigation {
   double t_point_cloud_;
   // Time stamp of latest odometry message.
   double t_odometry_;
+  // Time stamp of observation of image.
+  double t_image_;
 
   const std::string maps_dir_;
 
@@ -257,6 +289,9 @@ class Navigation {
       last_options_;
   // Last PathOption taken
   std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
+
+  torch::jit::script::Module ikd_module_;
+
 };
 
 }  // namespace navigation

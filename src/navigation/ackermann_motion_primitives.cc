@@ -57,21 +57,22 @@ AckermannSampler::AckermannSampler() {
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
-    path.length = min(nav_params.max_free_path_length, local_target.x());
+    // path.length = min(nav_params.max_free_path_length, local_target.x());
+    path.length = nav_params.max_free_path_length;
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
-  const Vector2f turn_center(0, turn_radius);
-  const Vector2f target_radial = local_target - turn_center;
-  const Vector2f middle_radial =
-      fabs(turn_radius) * target_radial.normalized();
-  const float middle_angle =
-      atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
-  const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
+  // const Vector2f turn_center(0, turn_radius);
+  // const Vector2f target_radial = local_target - turn_center;
+  // const Vector2f middle_radial =
+  //     fabs(turn_radius) * target_radial.normalized();
+  // const float middle_angle =
+  //     atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
+  // const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
   const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
   path.length = min<float>({
       nav_params.max_free_path_length, 
-      dist_closest_to_goal,
+      // dist_closest_to_goal,
       quarter_circle_dist});
   const float stopping_dist = 
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
@@ -108,6 +109,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
+      sample->fpl = sample->length;
       sample->angular_length = fabs(sample->length * c);
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
@@ -118,11 +120,28 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       SetMaxPathLength(sample);
       CheckObstacles(sample);
       sample->angular_length = fabs(sample->length * c);
+      sample->fpl = sample->length;
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   }
   
   return samples;
+}
+
+void AckermannSampler::AugmentSamples(std::vector<std::shared_ptr<PathRolloutBase>>& samples) {
+  std::vector<shared_ptr<PathRolloutBase>> augmentedSamples;
+  for (shared_ptr<PathRolloutBase> sample : samples) {
+    auto arc = (ConstantCurvatureArc*) sample.get();
+    auto augmented = new ConstantCurvatureArc(arc->curvature);
+    augmented->length = arc->Length() / 2.0f;
+    augmented->fpl = arc->fpl;
+    CheckObstacles(augmented);
+    augmented->angular_length = fabs(augmented->length * augmented->curvature);
+    augmentedSamples.push_back(shared_ptr<PathRolloutBase>(augmented));
+  }
+  
+
+  samples.insert(samples.end(), augmentedSamples.begin(), augmentedSamples.end());
 }
 
 void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
@@ -147,9 +166,15 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     const float stopping_dist = 
       vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
     if (path.length < stopping_dist) {
+<<<<<<< HEAD
       path.length = 0;
     }
     
+=======
+      printf("STOPPING DIST %f %f\n", stopping_dist, path.length);
+      path.length = 0;
+    }
+>>>>>>> 07eb586... update blurring
     return;
   }
   const float path_radius = 1.0 / path.curvature;
@@ -222,7 +247,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   path.length = max(0.0f, path.length);
   angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
   path.clearance = nav_params.max_clearance;
-
 
   for (const Vector2f& p : point_cloud) {
     const float theta = ((path.curvature > 0.0f) ?

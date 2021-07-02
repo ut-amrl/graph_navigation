@@ -30,6 +30,7 @@
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
+#include "sensor_msgs/Imu.h"
 #include "config_reader/config_reader.h"
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
@@ -48,6 +49,8 @@
 #include "graph_navigation/graphNavSrv.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
+#include "sensor_msgs/CompressedImage.h"
+#include "sensor_msgs/image_encodings.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "nav_msgs/Odometry.h"
@@ -59,16 +62,23 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Float32MultiArray.h"
+#include "nav_msgs/OccupancyGrid.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/viz/types.hpp>
+
 
 #include "motion_primitives.h"
 #include "navigation.h"
+// #include "CImg.h"
 
 using actionlib_msgs::GoalStatus;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
+// using cimg_library::CImg;
 using math_util::DegToRad;
 using math_util::RadToDeg;
 using motion_primitives::PathRolloutBase;
@@ -91,12 +101,18 @@ using navigation::MotionLimits;
 using ros_helpers::InitRosHeader;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
+const string kOpenCVWindow = "Image window";
+
+cv::Mat global_image_map_;
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
+CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
+CONFIG_STRING(accel_topic, "NavigationParameters.accel_topic");
+CONFIG_STRING(gyro_topic, "NavigationParameters.gyro_topic");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
@@ -106,6 +122,7 @@ CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_string(global_image, "", "Global image map");
 
 // DECLARE_int32(v);
 
@@ -123,6 +140,7 @@ navigation::Odom odom_;
 vector<Vector2f> point_cloud_;
 sensor_msgs::LaserScan last_laser_msg_;
 Navigation navigation_;
+cv::Mat last_image_;
 
 // Publishers
 ros::Publisher ackermann_drive_pub_;
@@ -131,21 +149,57 @@ ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher map_lines_publisher_;
 ros::Publisher pose_marker_publisher_;
+ros::Publisher global_map_publisher_;
 ros::Publisher nav_status_pub_;
 ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+ros::Publisher local_image_pub_;
+ros::Publisher viz_image_pub_;
+ros::Publisher cost_components_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
 visualization_msgs::Marker pose_marker_;
 visualization_msgs::Marker target_marker_;
+visualization_msgs::Marker global_map_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 
+
 void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
+}
+
+void DrawGlobalMap() {
+  global_map_marker_.points.clear();
+  global_map_marker_.colors.clear();
+  for(int i = 0; i < global_image_map_.size().width; i+= 10) {
+    for(int j = 0; j < global_image_map_.size().height; j+= 10) {
+      auto map_coord = Eigen::Vector2f((i - 1500) / 100.0f, -(j - 1500) / 100.0f);
+      auto color = global_image_map_.at<cv::Vec3b>(j, i);
+      const uint32_t r = color[2];
+      const uint32_t g = color[1];
+      const uint32_t b = color[0];
+      const uint32_t rgb = 0xFF000000 | (r << 16) | (g << 8) | b; 
+      // uint32_t color_code;   
+      // std::string hex = "0x" + rgb2hex(color[0], color[1], color[2], false);
+      // std::cout << "map_coord: " << map_coord << std::endl;
+      visualization::DrawPoint(map_coord, rgb, global_viz_msg_);
+      geometry_msgs::Point point;
+      point.x = map_coord.x();
+      point.y = map_coord.y();
+      point.z = 0;
+      global_map_marker_.points.push_back(point);
+      std_msgs::ColorRGBA vis_color;
+      vis_color.r = r;
+      vis_color.g = g;
+      vis_color.b = b;
+      vis_color.a = 1;
+      global_map_marker_.colors.push_back(vis_color);
+    }
+  }
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
@@ -262,6 +316,53 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   if (map != msg.map) {
     map = msg.map;
     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
+  }
+
+  current_loc_ = {msg.pose.x, msg.pose.y};
+  current_angle_ = msg.pose.theta;
+
+  if (FLAGS_global_image.empty()) {
+    return;
+  }
+
+  {
+    static const float kImageScale = 100.0; // pixels per meter.
+    static const Vector2f kImageOffset(1500, 1500);
+    const Vector2f image_coord = 
+        Vector2f(msg.pose.x, -msg.pose.y) * kImageScale + kImageOffset;
+    static const float kImageHalfWidth = 400;
+
+
+    // to prevent clipping, grab a bigget segment
+    auto roi = cv::Rect(
+        cv::Point(
+          image_coord.x() - kImageHalfWidth,
+          image_coord.y() - kImageHalfWidth),
+        cv::Point(
+          image_coord.x() + kImageHalfWidth,
+          image_coord.y() + kImageHalfWidth
+        )
+    );
+
+    // Create rect representing the image
+    auto image_rect = cv::Rect({}, global_image_map_.size());
+    // Find intersection, i.e. valid crop region
+    auto intersection = image_rect & roi;
+
+    cv::Mat local_image = global_image_map_(intersection).clone();
+    cv::rotate(local_image, local_image, cv::ROTATE_90_COUNTERCLOCKWISE);
+    auto transformMatrix = cv::getRotationMatrix2D(
+      cv::Point2f(intersection.width / 2, intersection.height / 2),
+      // cv::Point2f(image_coord.x() - intersection.tl().x, image_coord.y() - intersection.tl().y),
+      -(msg.pose.theta) * (180. / M_PI), 1.0
+    );
+    cv::warpAffine(local_image, local_image, transformMatrix, local_image.size(), cv::INTER_LINEAR);
+
+    cv_bridge::CvImage out_msg;
+    out_msg.encoding = sensor_msgs::image_encodings::BGR8;
+    out_msg.image = local_image;
+    local_image_pub_.publish(out_msg);
+    navigation_.UpdateLocalImage(local_image);
   }
 }
 
@@ -554,7 +655,7 @@ void InitVizMarker(visualization_msgs::Marker& vizMarker, string ns,
   vizMarker.action = visualization_msgs::Marker::ADD;
 }
 
-void InitSimulatorVizMarkers() {
+void InitSimulatorVizMarkers(const navigation::NavigationParameters& params) {
   geometry_msgs::PoseStamped p;
   geometry_msgs::Point32 scale;
   vector<float> color;
@@ -576,8 +677,8 @@ void InitSimulatorVizMarkers() {
   p.pose.position.z = 0.0;
   p.pose.position.x = 0.0;
   p.pose.position.y = 0.0;
-  scale.x = 0.5;
-  scale.y = 0.44;
+  scale.x = params.robot_length;
+  scale.y = params.robot_width;
   scale.z = 0.5;
   color[0] = 94.0 / 255.0;
   color[1] = 156.0 / 255.0;
@@ -598,7 +699,17 @@ void InitSimulatorVizMarkers() {
   scale.z = 0.05;
 
   InitVizMarker(target_marker_,
-      "targets",
+      "targ`ets",
+      1,
+      "points",
+      p,
+      scale,
+      0.0,
+      color);
+
+
+  InitVizMarker(global_map_marker_,
+      "global_map",
       1,
       "points",
       p,
@@ -648,6 +759,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_linear_speed);
   REAL_PARAM(max_angular_accel);
   REAL_PARAM(max_angular_decel);
+
   REAL_PARAM(max_angular_speed);
   REAL_PARAM(carrot_dist);
   REAL_PARAM(system_latency);
@@ -662,8 +774,14 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(use_map_speed);
   REAL_PARAM(target_dist_tolerance);
   REAL_PARAM(target_vel_tolerance);
+<<<<<<< HEAD
   REAL_PARAM(target_angle_tolerance);
   REAL_PARAM(local_fov);
+  BOOL_PARAM(use_kinect);
+=======
+  BOOL_PARAM(use_ikd);
+>>>>>>> 304d255... start on visual ikd
+  STRING_PARAM(model_path);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -688,8 +806,47 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->use_map_speed = CONFIG_use_map_speed;
   params->target_dist_tolerance = CONFIG_target_dist_tolerance;
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
+<<<<<<< HEAD
   params->target_angle_tolerance = CONFIG_target_angle_tolerance;
   params->local_fov = CONFIG_local_fov;
+  params->use_kinect = CONFIG_use_kinect;
+=======
+  params->use_ikd = CONFIG_use_ikd;
+>>>>>>> 304d255... start on visual ikd
+  params->model_path = CONFIG_model_path;
+}
+
+void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
+  try {
+    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
+        msg, sensor_msgs::image_encodings::BGR8);
+    last_image_ = image->image;
+  } catch (cv_bridge::Exception& e) {
+    fprintf(stderr, "cv_bridge exception: %s\n", e.what());
+    return;
+  }
+  navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
+  // Update GUI Window
+  if (FLAGS_debug_images) {
+    cv::imshow(kOpenCVWindow, last_image_);
+    cv::waitKey(3);
+  }
+}
+
+void AccelCallback(const sensor_msgs::ImuConstPtr& msg) {
+  navigation_.ObserveAccel(*msg);
+}
+
+void GyroCallback(const sensor_msgs::ImuConstPtr& msg) {
+  navigation_.ObserveGyro(*msg);
+}
+
+
+cv_bridge::CvImage cv2msg(const cv::Mat& img_mat) {
+  cv_bridge::CvImage out_msg;
+  out_msg.encoding = sensor_msgs::image_encodings::RGB8;
+  out_msg.image = img_mat;
+  return out_msg;
 }
 
 int main(int argc, char** argv) {
@@ -702,11 +859,14 @@ int main(int argc, char** argv) {
 
   // Map Loading
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
-  std::string deprecated_path =
-      navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
+  std::string deprecated_path = navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
+  if (!FLAGS_global_image.empty()) {
+    printf("Using global image %s\n", FLAGS_global_image.c_str());
+    global_image_map_ = cv::imread(FLAGS_global_image.c_str());
+  }
   if (!FileExists(map_path) && FileExists(deprecated_path)) {
     printf("Could not find navigation map file at %s. An V1 nav-map was found\
-            at %s. Please run map_upgrade from vector_display to upgrade this\
+            at %s. Please run map_upgrade from vector_display to upgrade thiss\
             map.\n", map_path.c_str(), deprecated_path.c_str());
     return 1;
   } else if (!FileExists(map_path)) {
@@ -733,13 +893,21 @@ int main(int argc, char** argv) {
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
+  local_image_pub_ = n.advertise<sensor_msgs::Image>("local_image", 1);
+  viz_image_pub_ = n.advertise<sensor_msgs::Image>("vis_image", 1);
+  cost_components_pub_ = n.advertise<std_msgs::Float32MultiArray>("nav_cost_components", 1);
+
+  global_map_publisher_ =
+      n.advertise<visualization_msgs::Marker>("/nav_marker_visualization", 6);
+  pose_marker_publisher_ =
+      n.advertise<visualization_msgs::Marker>("/nav_marker_visualization", 6);
 
   // Messages
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
-  InitSimulatorVizMarkers();
+  InitSimulatorVizMarkers(params);
 
   // Services
   ros::ServiceServer nav_srv =
@@ -762,12 +930,24 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+<<<<<<< HEAD
+  ros::Subscriber image_sub = n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
+=======
+  
+  ros::Subscriber accel_sub = n.subscribe(CONFIG_accel_topic, 1, &AccelCallback);
+  ros::Subscriber gyro_sub = n.subscribe(CONFIG_gyro_topic, 1, &GyroCallback);
+>>>>>>> 304d255... start on visual ikd
 
+  if (FLAGS_debug_images) cv::namedWindow(kOpenCVWindow);
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
+    if (!FLAGS_global_image.empty()) {
+      DrawGlobalMap();
+      PublishVisualizationMarkers();
+    }
 
     // Run Navigation to get commands
     Vector2f cmd_vel(0, 0);
@@ -793,7 +973,10 @@ int main(int argc, char** argv) {
       // Publish Commands
       SendCommand(cmd_vel, cmd_angle_vel);
     }
+    viz_pub_.publish(global_viz_msg_);
+    global_map_publisher_.publish(global_map_marker_);
     loop.Sleep();
   }
+  if (FLAGS_debug_images) cv::destroyWindow(kOpenCVWindow);
   return 0;
 }

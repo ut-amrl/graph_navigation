@@ -39,6 +39,8 @@ struct AckermannSampler : PathRolloutSamplerBase {
   // a set of valid path rollout options that are collision-free.
   std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) override;
 
+  void AugmentSamples(std::vector<std::shared_ptr<PathRolloutBase>>& samples) override;
+  
   // Default constructor, init parameters.
   AckermannSampler();
 
@@ -52,6 +54,23 @@ struct AckermannSampler : PathRolloutSamplerBase {
 
   void CheckObstacles(ConstantCurvatureArc* path);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+  MotionLimits angular_limits;
+  MotionLimits linear_limits;
+  float dt;
+
+  float max_curvature;
+  float max_free_path_length;
+  float robot_length;
+  float robot_width;
+  float base_link_offset;
+  float obstacle_margin;
+  float max_clearance;
+>>>>>>> 6d93f5f... WIP refactoring models
+=======
+>>>>>>> ca5ca27... Updates from lots of testing in simulation
 };
 
 }  // namespace motion_primitives

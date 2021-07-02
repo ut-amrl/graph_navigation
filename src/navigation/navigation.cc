@@ -25,6 +25,8 @@
 #include <memory>
 #include <string>
 
+
+#include "torch/script.h"
 #include "navigation.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "gflags/gflags.h"
@@ -149,7 +151,6 @@ Navigation::Navigation() :
     sampler_(nullptr),
     evaluator_(nullptr) {
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
-  evaluator_ = std::unique_ptr<PathEvaluatorBase>(new LinearEvaluator());
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
@@ -159,6 +160,16 @@ void Navigation::Initialize(const NavigationParameters& params,
   planning_domain_ = GraphDomain(map_file, &params_);
   initialized_ = true;
   sampler_->SetNavParams(params);
+
+
+  if (!LoadIKDModel()) {
+    printf("Failed to load IKD model\n");
+    exit(1);
+  }
+  
+  PathEvaluatorBase* evaluator = (PathEvaluatorBase*) new LinearEvaluator();
+
+  evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
 }
 
 bool Navigation::Enabled() const {
@@ -226,6 +237,15 @@ void Navigation::UpdateOdometry(const Odom& msg) {
   if (!odom_initialized_) {
     starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
     odom_initialized_ = true;
+  }
+  if (should_add_odom_to_history) {
+    odom_history_.insert(std::begin(odom_history_), msg);
+    if (odom_history_.size() > kOdomHistorySize) {
+      odom_history_.pop_back();
+    }
+    should_add_odom_to_history = false;
+  } else {
+    should_add_odom_to_history = true;
   }
 }
 
@@ -327,6 +347,18 @@ void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const Vector2f kTarget(4, 0);
   local_target_ = kTarget;
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+}
+
+void Navigation::ObserveImage(cv::Mat image, double time) {
+  latest_image_ = image;
+  t_image_ = time;
+}
+
+void Navigation::ObserveAccel(const sensor_msgs::Imu accel) {
+  latest_accelerometer_msg_ = accel;
+}
+void Navigation::ObserveGyro(const sensor_msgs::Imu gyro) {
+  latest_gyroscope_msg_ = gyro;
 }
 
 void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
@@ -572,8 +604,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     local_target = override_target_;
   }
 
-  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
-  evaluator_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
+  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);  
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     printf("%lu options\n", paths.size());
@@ -591,6 +623,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     if (debug) printf("No paths found\n");
     return;
   }
+
+  sampler_->AugmentSamples(paths);
+
   auto best_path = evaluator_->FindBest(paths);
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");
@@ -612,8 +647,40 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          robot_omega_,
                          vel_cmd,
                          ang_vel_cmd);
+
+  UpdateControls(vel_cmd, ang_vel_cmd, latest_image_);
   last_options_ = paths;
   best_option_ = best_path;
+}
+
+
+bool Navigation::LoadIKDModel() {
+  try {
+    auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+    ikd_module_ = torch::jit::load(params_.model_path, device);
+    return true;
+  } catch(const c10::Error& e) {
+    std::cout << "Error loading cost model:\n" << e.msg();
+    return false;
+  }
+}
+
+void Navigation::UpdateControls(Vector2f& vel_cmd, float& ang_vel_cmd, const cv::Mat& warped_image) {
+  if (params_.use_ikd) {
+    printf("USING IKD\n");
+    // torch::Tensor input = torch::zeros({1, warped_image.rows, warped_image.cols, 3});
+    // for (int i = 0; i < warped_image.rows; i++) {
+    //   for (int j = 0; j < warped_image.cols; j++) {
+    //     input[0][i][j][0] = warped_image.at<cv::Vec3b>(i, j)[0] / 255.0;
+    //     input[0][i][j][1] = warped_image.at<cv::Vec3b>(i, j)[1] / 255.0;
+    //     input[0][i][j][2] = warped_image.at<cv::Vec3b>(i, j)[2] / 255.0;
+    //   }
+    // }
+    // auto output = ikd_module_->forward({input});
+    // auto output_vec = output.toTensor().to(torch::kCPU).data<float>();
+    // vel_cmd = {output_vec[0], output_vec[1]};
+    // ang_vel_cmd = output_vec[2];
+  }
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
@@ -737,7 +804,7 @@ Eigen::Vector2f Navigation::GetVelocity() {
 float Navigation::GetAngularVelocity() {
   return robot_omega_;
 }
-
+// contents
 string Navigation::GetNavStatus() {
   switch (nav_state_) {
     case NavigationState::kStopped: {
