@@ -377,7 +377,8 @@ struct GraphDomain {
 
   // Load from a V2 map file.
   bool Load(const std::string& file) {
-    static const bool kDebug = true;
+    static const bool kDebug = false;
+    printf("Loading %s...\n", file.c_str());
     std::ifstream i(file);
     json j;
     i >> j;

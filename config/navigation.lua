@@ -1,6 +1,6 @@
 NavigationParameters = {
-  laser_topic = "velodyne_2dscan";
-  odom_topic = "jackal_velocity_controller/odom";
+  laser_topic = "scan";
+  odom_topic = "odom";
   localization_topic = "localization";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
