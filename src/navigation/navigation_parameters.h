@@ -24,35 +24,18 @@
 #ifndef NAVIGATION_PARAMETERS_H
 #define NAVIGATION_PARAMETERS_H
 
+#include "motion_primitives.h"
 #include "config_reader/config_reader.h"
 
 namespace navigation {
-
-struct MotionLimit {
-  // Maximum permissible acceleration magnitude.
-  // NOTE: Must be positive!
-  float accel;
-  // Maximum permissible deceleration magnitude.
-  // NOTE: Must be positive!
-  float decel;
-  // Maximum permissible speed.
-  float speed;
-
-  // Default constructor: set all to zero.
-  MotionLimit() : accel(0), decel(0), speed(0) {}
-
-  // Convenience constructor: init values.
-  MotionLimit(float accel, float decel, float speed) :
-      accel(accel), decel(decel), speed(speed) {}
-};
 
 struct NavigationParameters {
   // Control period in seconds.
   double dt;
   // Motion limits for linear motion.
-  MotionLimit linear_limits;
+  motion_primitives::MotionLimits linear_limits;
   // Motion limits for angular motion.
-  MotionLimit angular_limits;
+  motion_primitives::MotionLimits angular_limits;
   // Distance of carrot from robot to compute local planner goal from
   // global plan.
   float carrot_dist;

@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <memory>
 #include <string>
 
 #include "geometry_msgs/Twist.h"
@@ -51,6 +52,11 @@
 #include "astar.h"
 #include "visualization/visualization.h"
 
+#include "motion_primitives.h"
+#include "constant_curvature_arcs.h"
+#include "ackermann_motion_primitives.h"
+#include "linear_evaluator.h"
+
 using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -71,11 +77,13 @@ using std::deque;
 using std::max;
 using std::min;
 using std::swap;
+using std::shared_ptr;
 using std::string;
 using std::vector;
 
 using namespace math_util;
 using namespace ros_helpers;
+using namespace motion_primitives;
 
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
@@ -105,22 +113,36 @@ ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
-AckermannCurvatureDriveMsg drive_msg_;
+geometry_msgs::TwistStamped drive_msg_;
 PointCloud fp_pcl_msg_;
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
 
-geometry_msgs::TwistStamped AckermannToTwist(
-    const AckermannCurvatureDriveMsg& msg) {
-  geometry_msgs::TwistStamped  twist_msg;
-  twist_msg.header = msg.header;
-  twist_msg.twist.linear.x = msg.velocity;
-  twist_msg.twist.linear.y = 0;
-  twist_msg.twist.linear.z = 0;
-  twist_msg.twist.angular.x = 0;
-  twist_msg.twist.angular.y = 0;
-  twist_msg.twist.angular.z = msg.velocity * msg.curvature;
-  return twist_msg;
+// geometry_msgs::TwistStamped AckermannToTwist(
+//     const AckermannCurvatureDriveMsg& msg) {
+//   geometry_msgs::TwistStamped  twist_msg;
+//   twist_msg.header = msg.header;
+//   twist_msg.twist.linear.x = msg.velocity;
+//   twist_msg.twist.linear.y = 0;
+//   twist_msg.twist.linear.z = 0;
+//   twist_msg.twist.angular.x = 0;
+//   twist_msg.twist.angular.y = 0;
+//   twist_msg.twist.angular.z = msg.velocity * msg.curvature;
+//   CHECK(isfinite(twist_msg.twist.angular.z));
+//   return twist_msg;
+// }
+
+AckermannCurvatureDriveMsg TwistToAckermann(
+    const geometry_msgs::TwistStamped& twist) {
+  AckermannCurvatureDriveMsg ackermann_msg;
+  ackermann_msg.header = twist.header;
+  ackermann_msg.velocity = twist.twist.linear.x;
+  if (fabs(ackermann_msg.velocity) < kEpsilon) {
+    ackermann_msg.curvature = 0;
+  } else {
+    ackermann_msg.curvature = twist.twist.angular.z / ackermann_msg.velocity;
+  }
+  return ackermann_msg;
 }
 
 nav_msgs::Path CarrotToNavMsgsPath (
@@ -206,7 +228,12 @@ Navigation::Navigation() :
     t_point_cloud_(0),
     t_odometry_(0),
     enabled_(false),
-    initialized_(false) { }
+    initialized_(false),
+    sampler_(nullptr),
+    evaluator_(nullptr) {
+  sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+  evaluator_ = std::unique_ptr<PathEvaluatorBase>(new LinearEvaluator());
+}
 
 void Navigation::Initialize(const NavigationParameters& params,
                             const string& map_file,
@@ -286,25 +313,33 @@ void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
   loc_initialized_ = true;
 }
 
-void Navigation::SendCommand(float vel, float curvature) {
+void Navigation::SendCommand(Eigen::Vector2f vel, float ang_vel) {
   drive_msg_.header.stamp = ros::Time::now();
   if (!FLAGS_no_joystick && !enabled_) {
-    vel = 0;
-    curvature = 0;
+    vel.setZero();
+    ang_vel = 0;
   }
-  drive_msg_.curvature = curvature;
-  drive_msg_.velocity = vel;
-  ackermann_drive_pub_.publish(drive_msg_);
-  auto twist = AckermannToTwist(drive_msg_);
-  twist_drive_pub_.publish(twist.twist);
+  
+  drive_msg_.twist.angular.x = 0;
+  drive_msg_.twist.angular.y = 0;
+  drive_msg_.twist.angular.z = ang_vel;
+  drive_msg_.twist.linear.x = vel.x();
+  drive_msg_.twist.linear.y = vel.y();
+  drive_msg_.twist.linear.z = 0;
+  
+  auto ackermann_msg = TwistToAckermann(drive_msg_);
+  ackermann_drive_pub_.publish(ackermann_msg);
+  twist_drive_pub_.publish(drive_msg_);
   // This command is going to take effect system latency period after. Hence
   // modify the timestamp to reflect the time when it will take effect.
-  twist.header.stamp += ros::Duration(params_.system_latency);
-  command_history_.push_back(twist);
+  auto cmd_copy = drive_msg_;
+  cmd_copy.header.stamp += ros::Duration(params_.system_latency);
+  command_history_.push_back(cmd_copy);
   if (false) {
-    printf("Push %f %f\n",
-          twist.twist.linear.x,
-          command_history_.back().twist.linear.x);
+    printf("Push %7.3f %7.3f %7.3f\n",
+          command_history_.back().twist.linear.x,
+          command_history_.back().twist.linear.y,
+          command_history_.back().twist.angular.z);
   }
 }
 
@@ -402,84 +437,18 @@ void Navigation::ForwardPredict(double t) {
   PublishForwardPredictedPCL(fp_point_cloud_);
 }
 
-float Navigation::Run1DTOC(float x_now,
-                           float x_target,
-                           float v_now,
-                           float max_speed,
-                           float a_max,
-                           float d_max,
-                           float dt) const {
-  static FILE* fid = nullptr;
-  // const bool test_mode = false;
-  const bool test_mode =
-      FLAGS_test_toc || FLAGS_test_obstacle || FLAGS_test_avoidance;
-  if (test_mode && !FLAGS_test_log_file.empty() && fid == nullptr) {
-    fid = fopen(FLAGS_test_log_file.c_str(), "w");
-  }
-  const float dist_left = x_target - x_now;
-  float velocity_cmd = 0;
-  const float speed = fabs(v_now);
-  const float dv_a = dt * a_max;
-  const float dv_d = dt * d_max;
-  float accel_stopping_dist =
-      (speed + 0.5 * dv_a) * dt +
-      Sq(speed + dv_a) / (2.0 * d_max);
-  float cruise_stopping_dist =
-      speed * dt +
-      Sq(speed) / (2.0 * d_max);
-  char phase = '?';
-  if (dist_left >  0) {
-    if (speed > max_speed) {
-      // Over max speed, slow down.
-      phase = 'O';
-      velocity_cmd = max<float>(0.0f, speed - dv_a);
-    } else if (speed < max_speed && accel_stopping_dist < dist_left) {
-      // Acceleration possible.
-      phase = 'A';
-      velocity_cmd = min<float>(max_speed, speed + dv_a);
-    } else if (cruise_stopping_dist < dist_left) {
-      // Must maintain speed, cruise phase.
-      phase = 'C';
-      velocity_cmd = speed;
-    } else {
-      // Must decelerate.
-      phase = 'D';
-      velocity_cmd = max<float>(0, speed - dv_d);
-    }
-  } else if (speed > 0.0f) {
-    phase = 'X';
-    velocity_cmd = max<float>(0, speed - dv_d);
-  }
-  if (test_mode) {
-    printf("%c x:%f dist_left:%f a_dist:%f c_dist:%f v:%f cmd:%f\n",
-           phase,
-           x_now,
-           dist_left,
-           accel_stopping_dist,
-           cruise_stopping_dist,
-           v_now,
-           velocity_cmd);
-    if (fid != nullptr) {
-      fprintf(fid, "%f %f %f %f %f %f\n",
-              x_now,
-              dist_left,
-              accel_stopping_dist,
-              cruise_stopping_dist,
-              v_now,
-              velocity_cmd);
-      fflush(fid);
-    }
-  }
-  return velocity_cmd;
-}
-
 void Navigation::TrapezoidTest() {
   if (!odom_initialized_) return;
   const float x = (odom_loc_ - starting_loc_).norm();
   const float speed = robot_vel_.norm();
-  const float velocity_cmd = Run1DTOC(x, FLAGS_test_dist, speed,
-    params_.linear_limits.speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
-  SendCommand(velocity_cmd, 0);
+  const float velocity_cmd = Run1DTimeOptimalControl(
+      params_.linear_limits,
+      x,
+      speed,
+      FLAGS_test_dist,
+      0, 
+      params_.dt);
+  SendCommand(Vector2f(velocity_cmd, 0), 0);
 }
 
 void Navigation::ObstacleTest() {
@@ -490,8 +459,14 @@ void Navigation::ObstacleTest() {
   const float dist_left =
       max<float>(0.0f, free_path_length - params_.obstacle_margin);
   printf("%f\n", free_path_length);
-  const float velocity_cmd = Run1DTOC(0, dist_left, speed, params_.linear_limits.speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
-  SendCommand(velocity_cmd, 0);
+  const float velocity_cmd = Run1DTimeOptimalControl(
+      params_.linear_limits,
+      0,
+      speed,
+      dist_left,
+      0, 
+      params_.dt);
+  SendCommand(Vector2f(velocity_cmd, 0), 0);
 }
 
 Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
@@ -691,240 +666,6 @@ void Navigation::GetStraightFreePathLength(float* free_path_length,
   *free_path_length = max(0.0f, *free_path_length);
 }
 
-void Navigation::GetFreePathLength(float curvature,
-                                   float* free_path_length,
-                                   float* clearance,
-                                   Vector2f* obstruction) {
-  if (fabs(curvature) < kEpsilon) {
-    GetStraightFreePathLength(free_path_length, clearance);
-    return;
-  }
-  const float path_radius = 1.0 / curvature;
-  // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
-  const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
-  const Vector2f c(0, path_radius );
-  const float s = ((path_radius > 0.0) ? 1.0 : -1.0);
-  const Vector2f inner_front_corner(l, s * w);
-  const Vector2f outer_front_corner(l, -s * w);
-  const float r1 = max<float>(0.0f, fabs(path_radius) - w);
-  const float r1_sq = Sq(r1);
-  const float r2_sq = (inner_front_corner - c).squaredNorm();
-  const float r3_sq = (outer_front_corner - c).squaredNorm();
-  float angle_min = M_PI;
-  *obstruction = Vector2f(-params_.max_free_path_length, 0);
-  for (size_t i = 0; i < fp_point_cloud_.size(); ++i) {
-    const Vector2f& p = fp_point_cloud_[i];
-    if (p.x() < 0.0f) continue;
-    const float r_sq = (p - c).squaredNorm();
-    // printf("c:%.2f r:%.3f r1:%.3f r2:%.3f r3:%.3f\n",
-    //        curvature, sqrt(r_sq), r1, sqrt(r2_sq), sqrt(r3_sq));
-    if (r_sq < r1_sq || r_sq > r3_sq) continue;
-    const float r = sqrt(r_sq);
-    const float theta = ((curvature > 0.0f) ?
-      atan2<float>(p.x(), path_radius - p.y()) :
-      atan2<float>(p.x(), p.y() - path_radius));
-    float alpha;
-    if (r_sq < r2_sq) {
-      // Point will hit the side of the robot first.
-      alpha = acosf((fabs(path_radius) - w) / r);
-    } else {
-      // Point will hit the front of the robot first.
-      alpha = asinf(l / r);
-    }
-    // if (theta < 0.0f) continue;
-    const float path_length =
-        max<float>(0.0f, fabs(path_radius) * (theta - alpha));
-    if (*free_path_length > path_length) {
-      *free_path_length = path_length;
-      *obstruction = p;
-      angle_min = theta;
-    }
-  }
-  *free_path_length = max(0.0f, *free_path_length);
-  angle_min = min<float>(angle_min, *free_path_length * fabs(curvature));
-  *clearance = params_.max_clearance;
-
-  for (const Vector2f& p : fp_point_cloud_) {
-    const float theta = ((curvature > 0.0f) ?
-        atan2<float>(p.x(), path_radius - p.y()) :
-        atan2<float>(p.x(), p.y() - path_radius));
-    if (theta < angle_min && theta > 0.0) {
-      const float r = (p - c).norm();
-      const float current_clearance = fabs(r - fabs(path_radius));
-      if (*clearance > current_clearance) {
-        *clearance = current_clearance;
-      }
-    }
-  }
-  *clearance = max(0.0f, *clearance);
-}
-
-DEFINE_double(dw, 1, "Distance weight");
-DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
-DEFINE_double(subopt, 1.5, "Max path increase for clearance");
-
-PathOption GetBestOption(const vector<PathOption>& options,
-                         const Vector2f& target) {
-  static const bool kDebug = false;
-
-  PathOption best_option;
-  best_option.clearance = 0;
-  best_option.free_path_length = 0;
-  best_option.curvature = 0;
-
-  float closest_dist = FLT_MAX;
-  bool option_to_goal_exists = false;
-  for (const PathOption& o : options) {
-    if (o.free_path_length > 0.0f && o.dist_to_goal < 100.0f) {
-      option_to_goal_exists = true;
-      break;
-    }
-  }
-  for (const PathOption& o : options) {
-    if (o.free_path_length <= 0.0f) continue;
-    const float d = (option_to_goal_exists ?
-        (o.free_path_length + o.dist_to_goal) : GetClosestDistance(o, target));
-
-    if (d < closest_dist) {
-      closest_dist = d;
-      best_option = o;
-    }
-  }
-  const float d = (option_to_goal_exists ?
-        (best_option.free_path_length + best_option.dist_to_goal) :
-        GetClosestDistance(best_option, target));
-  float best_cost = FLAGS_dw * d +
-      FLAGS_fw * best_option.free_path_length +
-      FLAGS_cw * best_option.clearance;
-  if (kDebug) {
-    printf("\nBest: %f %f %f %f %f = %f\n",
-           best_option.curvature,
-           best_option.free_path_length,
-           best_option.clearance,
-           best_option.dist_to_goal,
-           best_option.clearance_to_goal,
-           best_cost);
-  }
-  for (const PathOption& o : options) {
-    const float d = (option_to_goal_exists ?
-        (o.free_path_length + o.dist_to_goal) : GetClosestDistance(o, target));
-    if (d < closest_dist * FLAGS_subopt) {
-      const float cost = FLAGS_dw * d +
-          FLAGS_fw * o.free_path_length +
-          FLAGS_cw * o.clearance;
-      if (cost < best_cost) {
-        best_option = o;
-        best_cost = cost;
-        if (kDebug) {
-          printf("Better: %f %f %f %f %f = %f\n",
-                best_option.curvature,
-                best_option.free_path_length,
-                best_option.clearance,
-                best_option.dist_to_goal,
-                best_option.clearance_to_goal,
-                cost);
-        }
-      } else if (kDebug) {
-        printf("NOT Better: %f %f %f %f %f = %f\n",
-              o.curvature,
-              o.free_path_length,
-              o.clearance,
-              o.dist_to_goal,
-              o.clearance_to_goal,
-              cost);
-      }
-    } else {
-      if (kDebug) {
-        printf("NOT Considered: %f %f %f %f %f\n",
-              o.curvature,
-              o.free_path_length,
-              o.clearance,
-              o.dist_to_goal,
-              o.clearance_to_goal);
-      }
-    }
-  }
-  // TODO: Check a window of options areound the best. If the best has
-  // clearance less than ideally desired, and any have a better
-  // clearance within th chosen suboptimality, prefer that.
-  return best_option;
-}
-
-void Navigation::ApplyDynamicConstraints(vector<PathOption>* options_ptr) {
-  vector<PathOption>& options = *options_ptr;
-  const float max_domega = params_.dt * params_.angular_limits.accel;
-  const float stopping_dist =
-      robot_vel_.squaredNorm() / (2.0 * params_.linear_limits.decel);
-  for (PathOption& o : options) {
-    if (o.free_path_length < stopping_dist) {
-      o.free_path_length = 0;
-      o.dist_to_goal = FLT_MAX;
-      o.clearance = 0;
-    }
-    const float omega_next = robot_vel_.x() * o.curvature;
-    if (omega_next < robot_omega_ - max_domega ||
-        omega_next > robot_omega_ + max_domega) {
-      o.free_path_length = 0;
-      o.dist_to_goal = FLT_MAX;
-    }
-  }
-}
-
-void Navigation::GetPathOptions(vector<PathOption>* options_ptr) {
-  vector<PathOption>& options = *options_ptr;
-  if (false) {
-    options = {
-      PathOption(-0.1),
-      PathOption(0),
-      PathOption(0.1),
-    };
-    return;
-  }
-  const float max_domega = params_.dt * params_.angular_limits.accel;
-  const float max_dv = params_.dt * params_.linear_limits.accel;
-  const float robot_speed = fabs(robot_vel_.x());
-  float c_min = -FLAGS_max_curvature;
-  float c_max = FLAGS_max_curvature;
-  if (robot_speed > max_dv + 0.001) {
-    c_min = max<float>(
-        c_min, (robot_omega_ - max_domega) / (robot_speed - max_dv));
-    c_max = min<float>(
-        c_max, (robot_omega_ + max_domega) / (robot_speed - max_dv));
-  }
-  const float dc = (c_max - c_min) / static_cast<float>(
-      params_.num_options - 1);
-  // printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
-  if (false) {
-    for (float c = c_min; c <= c_max; c+= dc) {
-      PathOption o;
-      o.curvature = c;
-      options.push_back(o);
-    }
-  } else {
-    const float dc = (2.0f * FLAGS_max_curvature) /
-        static_cast<float>(params_.num_options - 1);
-    for (float c = -FLAGS_max_curvature; c <= FLAGS_max_curvature; c+= dc) {
-      PathOption o;
-      o.curvature = c;
-      options.push_back(o);
-    }
-  }
-}
-
-float Clearance(const Line2f& l, const vector<Vector2f>& points) {
-  const Vector2f d = l.Dir();
-  const float len = l.Length();
-  float clearance = 10;
-  for (const Vector2f& p  : points) {
-    const float x = d.dot(p - l.p0);
-    if (x < 0.0f || x > len) continue;
-    clearance = min<float>(clearance, l.Distance(p));
-  }
-  return clearance;
-}
-
 Vector2f GetFinalPoint(const PathOption& o) {
   if (fabs(o.curvature) < 0.01) {
     return Vector2f(o.free_path_length, 0);
@@ -973,15 +714,10 @@ DEFINE_double(tx, 0.4, "Test obstacle point - X");
 DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 
 void Navigation::RunObstacleAvoidance() {
+  const bool debug = false;
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const bool kDebug = false;
-  float curvature_cmd = 0;
-  float velocity_cmd = 0;
-
-  float max_map_speed = params_.linear_limits.speed;
-  planning_domain_.GetClearanceAndSpeedFromLoc(
-      robot_loc_, nullptr, &max_map_speed);
+  // static const bool kDebug = false;
 
   if (false) {
     fp_point_cloud_ = {
@@ -992,71 +728,69 @@ void Navigation::RunObstacleAvoidance() {
     }
   }
 
-  vector<PathOption> path_options;
-  GetPathOptions(&path_options);
-
-  for (PathOption& o : path_options) {
-    if (fabs(o.curvature) < kEpsilon) {
-      o.free_path_length = min(params_.max_free_path_length, local_target_.x());
-    } else {
-      const float turn_radius = 1.0f / o.curvature;
-      const Vector2f turn_center(0, turn_radius);
-      const Vector2f target_radial = local_target_ - turn_center;
-      const Vector2f middle_radial =
-          fabs(turn_radius) * target_radial.normalized();
-      const float middle_angle =
-          atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
-      o.free_path_length =
-          min<float>(params_.max_free_path_length, middle_angle * fabs(turn_radius));
-      o.free_path_length =
-          min<float>(o.free_path_length, fabs(turn_radius) * M_PI_2);
-    }
-    // o.free_path_length = 1;
-    GetFreePathLength(
-        o.curvature, &o.free_path_length, &o.clearance, &o.obstruction);
-    o.closest_point = GetClosestApproach(o, local_target_);
-    o.clearance_to_goal =
-        Clearance(Line2f(GetFinalPoint(o), local_target_), fp_point_cloud_);
-    // visualization::DrawCross(GetFinalPoint(o), 0.1, 0x00C0C0, local_viz_msg_);
-    // o.clearance_to_goal = max(0.0f, o.clearance_to_goal - w);
-    if (o.clearance_to_goal > 0.0f) {
-      o.dist_to_goal = (o.closest_point - local_target_).norm();
-    } else {
-      o.dist_to_goal = FLT_MAX;
-    }
-    if (kDebug) {
-      // printf("%3.2f ", o.free_path_length);
-      printf("%3.2f|%3.2f|%f\n", o.curvature, o.free_path_length, o.clearance_to_goal);
+  sampler_->Update(robot_vel_, robot_omega_, local_target_, fp_point_cloud_);
+  evaluator_->Update(robot_vel_, robot_omega_, local_target_, fp_point_cloud_);
+  auto paths = sampler_->GetSamples(params_.num_options);
+  if (debug) {
+    printf("%lu options\n", paths.size());
+    int i = 0;
+    for (auto p : paths) {
+      ConstantCurvatureArc arc = 
+          *reinterpret_cast<ConstantCurvatureArc*>(p.get());
+      printf("%3d: %7.5f %7.3f %7.3f\n",
+          i++, arc.curvature, arc.length, arc.curvature);
+      visualization::DrawCross(arc.obstruction, 0.1, 0xFF0000, local_viz_msg_);
     }
   }
-  if (kDebug) printf("\n");
-  // ApplyDynamicConstraints(&path_options);
-  for (const auto& o : path_options) {
-    visualization::DrawPathOption(o.curvature,
-                                  o.free_path_length,
-                                  o.clearance,
+  if (paths.size() == 0) {
+    // No options, just stop.
+    Halt();
+    return;
+  }
+  auto best_path = evaluator_->FindBest(paths);
+  if (best_path == nullptr) {
+    // No valid path found!
+    Halt();
+    return;
+  }
+  for (shared_ptr<PathRolloutBase>& o : paths) {
+    ConstantCurvatureArc arc = 
+        *reinterpret_cast<ConstantCurvatureArc*>(o.get());
+    visualization::DrawPathOption(arc.curvature,
+                                  arc.length,
+                                  arc.clearance,
                                   0x0000FF,
                                   local_viz_msg_);
   }
-  const PathOption best_option = GetBestOption(path_options, local_target_);
-  visualization::DrawPathOption(best_option.curvature,
-                                best_option.free_path_length,
-                                best_option.clearance,
+  ConstantCurvatureArc arc = 
+        *reinterpret_cast<ConstantCurvatureArc*>(best_path.get());
+  visualization::DrawPathOption(arc.curvature,
+                                arc.length,
+                                arc.clearance,
                                 0xFF0000,
                                 local_viz_msg_);
 
-  const Vector2f closest_point = GetClosestApproach(best_option, local_target_);
+  const Vector2f closest_point = best_path->EndPoint().translation;
   visualization::DrawCross(closest_point, 0.05, 0x00A000, local_viz_msg_);
-  curvature_cmd = best_option.curvature;
-  const float dist_left =
-      max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
+  float ang_vel_cmd = 0;
+  Vector2f vel_cmd(0, 0);
 
-  const float speed = robot_vel_.norm();
-  float max_speed = min<float>(params_.linear_limits.speed,
-      sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
-  max_speed = min(max_map_speed, max_speed);
-  velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
-  SendCommand(velocity_cmd, curvature_cmd);
+  float max_map_speed = params_.linear_limits.max_speed;
+  planning_domain_.GetClearanceAndSpeedFromLoc(
+      robot_loc_, nullptr, &max_map_speed);
+  auto linear_limits = params_.linear_limits;
+  linear_limits.max_speed = max_map_speed;
+  best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
+  printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
+  // const float dist_left =
+  //     max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
+
+  // const float speed = robot_vel_.norm();
+  // float max_speed = min<float>(params_.linear_limits.speed,
+  //     sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
+  // max_speed = min(max_map_speed, max_speed);
+  // velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
+  SendCommand(vel_cmd, ang_vel_cmd);
 }
 
 void Navigation::Halt() {
@@ -1064,7 +798,7 @@ void Navigation::Halt() {
   const float velocity = robot_vel_.x();
   float velocity_cmd = 0;
   if (fabs(velocity) > kEpsSpeed) {
-    const float dv = params_.linear_limits.decel * params_.dt;
+    const float dv = params_.linear_limits.max_deceleration * params_.dt;
     if (velocity < -dv) {
       velocity_cmd = velocity + dv;
     } else if (velocity > dv) {
@@ -1075,7 +809,7 @@ void Navigation::Halt() {
   }
   // TODO: Motion profiling for omega.
   // printf("%8.3f %8.3f\n", velocity, velocity_cmd);
-  SendCommand(velocity_cmd, 0);
+  SendCommand(Vector2f(velocity_cmd, 0), 0);
 }
 
 void Navigation::TurnInPlace() {
@@ -1087,7 +821,7 @@ void Navigation::TurnInPlace() {
     return;
   }
   const float goal_theta = atan2(local_target_.y(), local_target_.x());
-  const float dv = params_.dt * params_.angular_limits.accel;
+  const float dv = params_.dt * params_.angular_limits.max_acceleration;
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
     if (fabs(robot_omega_) < dv) {
@@ -1098,18 +832,20 @@ void Navigation::TurnInPlace() {
   } else {
     // printf("Running TOC\n");
     const float s = Sign(goal_theta);
-    angular_cmd = s * Run1DTOC(0, s * goal_theta, s * robot_omega_,
-        params_.angular_limits.speed, params_.angular_limits.accel,
-        params_.angular_limits.decel, params_.dt);
+    angular_cmd = Run1DTimeOptimalControl(
+        params_.linear_limits,
+        0,
+        robot_omega_,
+        s * goal_theta,
+        0, 
+        params_.dt);
   }
   // TODO: Motion profiling for omega.
   // printf("TurnInPlace: %8.3f %8.3f %8.3f\n",
   //        RadToDeg(goal_theta),
   //        RadToDeg(robot_omega_),
   //        RadToDeg(angular_cmd));
-  const float curvature = Sign(goal_theta) * 10000.0;
-  const float velocity_cmd = angular_cmd / curvature;
-  SendCommand(velocity_cmd, curvature);
+  SendCommand(Vector2f(0, 0), angular_cmd);
 }
 
 void Navigation::LatencyTest() {
@@ -1125,11 +861,7 @@ void Navigation::LatencyTest() {
   float v_current = robot_vel_.x();
   float v_cmd = kMaxSpeed *
       sin(2.0 * M_PI * kFrequency * t);
-  drive_msg_.curvature = 0;
-  drive_msg_.velocity = v_cmd;
-  drive_msg_.header.stamp = ros::Time::now();
-  ackermann_drive_pub_.publish(drive_msg_);
-  twist_drive_pub_.publish(AckermannToTwist(drive_msg_));
+  SendCommand(Vector2f(v_cmd, 0), 0);
   printf("t:%f current:%f cmd:%f\n", t, v_current, v_cmd);
   if (fid != nullptr) {
     fprintf(fid, "%f %f %f\n", t, v_current, v_cmd);

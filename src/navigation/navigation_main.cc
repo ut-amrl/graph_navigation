@@ -50,6 +50,7 @@
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
 
+#include "motion_primitives.h"
 #include "navigation.h"
 
 using math_util::DegToRad;
@@ -210,11 +211,11 @@ void LoadConfig(navigation::NavigationParameters* params) {
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
-  params->linear_limits = navigation::MotionLimit(
+  params->linear_limits = motion_primitives::MotionLimits(
       CONFIG_max_linear_accel,
       CONFIG_max_linear_decel,
       CONFIG_max_linear_speed);
-  params->angular_limits = navigation::MotionLimit(
+  params->angular_limits = motion_primitives::MotionLimits(
       CONFIG_max_angular_accel,
       CONFIG_max_angular_decel,
       CONFIG_max_angular_speed);

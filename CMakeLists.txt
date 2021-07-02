@@ -44,5 +44,20 @@ MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
-                        src/navigation/navigation.cc)
+                        src/navigation/navigation.cc
+                        src/navigation/motion_primitives.cc
+                        src/navigation/ackermann_motion_primitives.cc
+                        src/navigation/constant_curvature_arcs.cc
+                        src/navigation/linear_evaluator.cc
+                        )
 TARGET_LINK_LIBRARIES(navigation shared_library ${libs})
+
+
+ADD_EXECUTABLE(navigation_tests
+    src/navigation/navigation_tests.cc
+    src/navigation/motion_primitives.cc
+)
+TARGET_LINK_LIBRARIES(navigation_tests
+    gtest
+    gtest_main
+    ${libs})

@@ -20,6 +20,7 @@
 //========================================================================
 
 #include <deque>
+#include <memory>
 #include <vector>
 
 #include "actionlib_msgs/GoalStatus.h"
@@ -31,6 +32,7 @@
 #include "eight_connected_domain.h"
 #include "graph_domain.h"
 #include "navigation_parameters.h"
+#include "motion_primitives.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -109,7 +111,7 @@ class Navigation {
   // Latency testing routine.
   void LatencyTest();
   // Send and queue command for latency compensation.
-  void SendCommand(float vel, float curvature);
+  void SendCommand(Eigen::Vector2f vel, float ang_vel);
   // Remove commands older than latest real robot updates (odometry and LIDAR),
   // accounting for latency.
   void PruneLatencyQueue();
@@ -199,6 +201,12 @@ class Navigation {
 
   // Whether or not things have been initialized.
   bool initialized_;
+
+  // Path sampler.
+  std::unique_ptr<motion_primitives::PathRolloutSamplerBase> sampler_;
+
+  // Path evaluator.
+  std::unique_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
 };
 
 }  // namespace navigation
