@@ -70,6 +70,7 @@ using amrl_msgs::VisualizationMsg;
 using geometry_msgs::Twist;
 using geometry_msgs::TwistStamped;
 using geometry_msgs::PoseStamped;
+using navigation::MotionLimits;
 using ros_helpers::DrawEigen2DLine;
 using sensor_msgs::PointCloud;
 using std::atan2;
@@ -261,6 +262,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   params_ = params;
   planning_domain_ = GraphDomain(map_file, &params_);
   initialized_ = true;
+  sampler_->SetNavParams(params);
 }
 
 bool Navigation::Enabled() const {
@@ -781,7 +783,7 @@ void Navigation::RunObstacleAvoidance() {
   auto linear_limits = params_.linear_limits;
   linear_limits.max_speed = max_map_speed;
   best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
-  printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
+  // printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
   // const float dist_left =
   //     max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
 
@@ -809,6 +811,7 @@ void Navigation::Halt() {
   }
   // TODO: Motion profiling for omega.
   // printf("%8.3f %8.3f\n", velocity, velocity_cmd);
+  // printf("cmd: %7.3f %7.3f %7.3f\n", velocity_cmd, 0.0, 0.0);
   SendCommand(Vector2f(velocity_cmd, 0), 0);
 }
 
@@ -881,7 +884,6 @@ void Navigation::Run() {
   DrawRobot();
   if (!odom_initialized_) return;
   ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
-  const float kNavTolerance = 0.5;
   if (FLAGS_test_toc) {
     TrapezoidTest();
     return;
@@ -922,7 +924,9 @@ void Navigation::Run() {
       Vector2f(0, 0), params_.carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
   // Check if complete.
-  nav_complete_ = (robot_loc_ - carrot).norm() < kNavTolerance;
+  nav_complete_ = 
+      (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
+      (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
   // Run local planner.
   if (nav_complete_) {
     Halt();

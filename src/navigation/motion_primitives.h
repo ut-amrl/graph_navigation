@@ -22,38 +22,16 @@
 #include <memory>
 #include <vector>
 
+#include "eigen3/Eigen/Dense"
+
 #include "math/line2d.h"
 #include "math/poses_2d.h"
-#include "eigen3/Eigen/Dense"
+#include "navigation_parameters.h"
 
 #ifndef MOTION_PRIMITIVES_H
 #define MOTION_PRIMITIVES_H
 
 namespace motion_primitives {
-
-struct MotionLimits {
-  // Maximum permissible acceleration magnitude.
-  // NOTE: Must be positive!
-  float max_acceleration;
-  // Maximum permissible deceleration magnitude.
-  // NOTE: Must be positive!
-  float max_deceleration;
-  // Maximum permissible speed.
-  // NOTE: Must be positive!
-  float max_speed;
-
-  MotionLimits() : 
-      max_acceleration(0),
-      max_deceleration(0),
-      max_speed(0) {}
-
-  MotionLimits(float max_acceleration,
-               float max_deceleration,
-               float max_speed) : 
-      max_acceleration(max_acceleration),
-      max_deceleration(max_deceleration),
-      max_speed(max_speed) {}
-};
 
 // A path rollout, with the start being the robot's current pose in the robot
 // frame - 0,0,0.
@@ -77,8 +55,8 @@ struct PathRolloutBase {
   // Get actuation commands for the robot to execute this rollout in terms of
   // the robot's linear and angular velocity commands for the specified control
   // period.
-  virtual void GetControls(const MotionLimits& linear_limits,
-                           const MotionLimits& angular_limits,
+  virtual void GetControls(const navigation::MotionLimits& linear_limits,
+                           const navigation::MotionLimits& angular_limits,
                            const float dt,
                            const Eigen::Vector2f& linear_vel,
                            const float angular_vel,
@@ -91,7 +69,6 @@ struct PathRolloutSamplerBase {
   // Given the robot's current dynamic state and an obstacle point cloud, return
   // a set of n valid path rollout options that are collision-free.
   virtual std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) = 0;
-
 
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
@@ -106,6 +83,10 @@ struct PathRolloutSamplerBase {
     point_cloud = new_point_cloud;
   }
 
+  void SetNavParams(const navigation::NavigationParameters& new_params) {
+    nav_params = new_params;
+  }
+
   // Current linear velocity.
   Eigen::Vector2f vel;
   // Current angular velocity.
@@ -114,6 +95,8 @@ struct PathRolloutSamplerBase {
   Eigen::Vector2f local_target;
   // Obstacle point cloud.
   std::vector<Eigen::Vector2f> point_cloud;
+  // Navigation parameters.
+  navigation::NavigationParameters nav_params;
 };
 
 // Evaluator of path rollout options.
@@ -148,7 +131,7 @@ struct PathEvaluatorBase {
   std::vector<Eigen::Vector2f> point_cloud;
 };
 
-float Run1DTimeOptimalControl(const MotionLimits& limits,
+float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,
                               const float x_init, 
                               const float v_init, 
                               const float x_final, 

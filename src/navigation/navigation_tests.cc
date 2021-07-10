@@ -27,11 +27,13 @@
 #include "math/geometry.h"
 
 #include "motion_primitives.h"
+#include "navigation_parameters.h"
 
 TEST(Run1DTimeOptimalControl, SimpleCases) {
   {
-    motion_primitives::MotionLimits limits(1, 1, 1);
-    const float v_cmd = Run1DTimeOptimalControl(limits, 0, 0, 2, 0, 0.1);
+    navigation::MotionLimits limits(1, 1, 1);
+    const float v_cmd = motion_primitives::Run1DTimeOptimalControl(
+        limits, 0, 0, 2, 0, 0.1);
     EXPECT_FLOAT_EQ(v_cmd, 0.1);
   }
 }

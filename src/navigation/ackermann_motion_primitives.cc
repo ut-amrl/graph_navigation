@@ -28,7 +28,7 @@
 #include "math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-
+#include "config_reader/config_reader.h"
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
@@ -41,6 +41,8 @@ using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 using namespace math_util;
 
+CONFIG_FLOAT(max_curvature, "AckermannSampler.max_curvature");
+
 namespace {
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
@@ -49,22 +51,12 @@ const float kEpsilon = 1e-5;
 namespace motion_primitives {
 
 AckermannSampler::AckermannSampler() {
-  angular_limits = MotionLimits(5.0 * M_PI, 5.0 * M_PI, 3.0 * M_PI);
-  linear_limits = MotionLimits(5.0, 5.0, 1.0);
-  dt = 0.05;
-  max_curvature = 1.5;
-  max_free_path_length = 6;
-  robot_length = 0.5;
-  robot_width = 0.5;
-  base_link_offset = 0;
-  obstacle_margin = 0.2;
-  max_clearance = 0.5;
 }
 
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
-    path.length = min(max_free_path_length, local_target.x());
+    path.length = min(nav_params.max_free_path_length, local_target.x());
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
@@ -74,10 +66,15 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
       fabs(turn_radius) * target_radial.normalized();
   const float middle_angle =
       atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
+  const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
+  const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
   path.length = min<float>({
-      max_free_path_length, 
-      middle_angle * float(abs(turn_radius)),
-      float(fabs(turn_radius) * M_PI_2)});
+      nav_params.max_free_path_length, 
+      dist_closest_to_goal,
+      quarter_circle_dist});
+  const float stopping_dist = 
+      Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
+  path.length = max(path.length, stopping_dist);
 }
 
 vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
@@ -90,11 +87,13 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     };
     return samples;
   }
-  const float max_domega = dt * angular_limits.max_acceleration;
-  const float max_dv = dt * linear_limits.max_acceleration;
+  const float max_domega = 
+      nav_params.dt * nav_params.angular_limits.max_acceleration;
+  const float max_dv = 
+      nav_params.dt * nav_params.linear_limits.max_acceleration;
   const float robot_speed = fabs(vel.x());
-  float c_min = -max_curvature;
-  float c_max = max_curvature;
+  float c_min = -CONFIG_max_curvature;
+  float c_max = CONFIG_max_curvature;
   if (robot_speed > max_dv + kEpsilon) {
     c_min = max<float>(
         c_min, (ang_vel - max_domega) / (robot_speed - max_dv));
@@ -112,8 +111,8 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   } else {
-    const float dc = (2.0f * max_curvature) / static_cast<float>(n - 1);
-    for (float c = -max_curvature; c <= max_curvature; c+= dc) {
+    const float dc = (2.0f * CONFIG_max_curvature) / static_cast<float>(n - 1);
+    for (float c = -CONFIG_max_curvature; c <= CONFIG_max_curvature; c+= dc) {
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
@@ -128,15 +127,15 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
 void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * robot_length - base_link_offset + obstacle_margin;
+  const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
   // The robot's half-width.
-  const float w = 0.5 * robot_width + obstacle_margin;
+  const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;
   if (fabs(path.curvature) < kEpsilon) {
     for (const Vector2f& p : point_cloud) {
       if (fabs(p.y()) > w || p.x() < 0.0f) continue;
       path.length = min(path.length, p.x() - l);
     }
-    path.clearance = max_clearance;
+    path.clearance = nav_params.max_clearance;
     for (const Vector2f& p : point_cloud) {
       if (p.x() - l > path.length || p.x() < 0.0) continue;
       path.clearance = min<float>(path.clearance, fabs(fabs(p.y() - w)));
@@ -155,7 +154,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   const float r2_sq = (inner_front_corner - c).squaredNorm();
   const float r3_sq = (outer_front_corner - c).squaredNorm();
   float angle_min = M_PI;
-  path.obstruction = Vector2f(-max_free_path_length, 0);
+  path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
   // printf("%7.3f %7.3f %7.3f %7.3f\n", 
   //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
   using std::isfinite;
@@ -173,10 +172,13 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     if (r_sq < r2_sq) {
       // Point will hit the side of the robot first.
       alpha = acosf((fabs(path_radius) - w) / r);
+      if (!isfinite(alpha)) printf("%f %f %f\n", path_radius, w, r);
     } else {
       // Point will hit the front of the robot first.
       alpha = asinf(l / r);
+      if (!isfinite(alpha)) printf("%f %f\n", l, r);
     }
+    CHECK(isfinite(alpha));
     // if (theta < 0.0f) continue;
     CHECK(std::isfinite(r));
     CHECK(std::isfinite(path_radius));
@@ -190,9 +192,12 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       angle_min = theta;
     }
   }
+  const float stopping_dist = 
+      vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
+  if (path.length < stopping_dist) path.length = 0;
   path.length = max(0.0f, path.length);
   angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
-  path.clearance = max_clearance;
+  path.clearance = nav_params.max_clearance;
 
   for (const Vector2f& p : point_cloud) {
     const float theta = ((path.curvature > 0.0f) ?

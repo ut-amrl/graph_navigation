@@ -54,8 +54,8 @@ struct ConstantCurvatureArc : PathRolloutBase {
   pose_2d::Pose2Df EndPoint() const override;
 
   // The pose of the robot at the end of the path rollout.
-  void GetControls(const MotionLimits& linear_limits,
-                   const MotionLimits& angular_limits,
+  void GetControls(const navigation::MotionLimits& linear_limits,
+                   const navigation::MotionLimits& angular_limits,
                    const float dt,
                    const Eigen::Vector2f& linear_vel,
                    const float angular_vel,
