@@ -33,6 +33,7 @@
 #include "eigen3/Eigen/Geometry"
 
 #include "motion_primitives.h"
+#include "navigation_parameters.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "linear_evaluator.h"
@@ -43,6 +44,7 @@ using std::vector;
 using std::shared_ptr;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
+using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
 

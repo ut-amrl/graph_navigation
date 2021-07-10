@@ -29,14 +29,15 @@
 #include "eigen3/Eigen/Dense"
 
 #include "motion_primitives.h"
+#include "navigation_parameters.h"
 #include "constant_curvature_arcs.h"
 
 using Eigen::Vector2f;
 using pose_2d::Pose2Df;
 using namespace math_util;
+using navigation::MotionLimits;
 
 namespace motion_primitives {
-
 
 float ConstantCurvatureArc::Length() const {
   return length;

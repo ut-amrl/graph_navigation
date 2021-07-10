@@ -52,17 +52,6 @@ struct AckermannSampler : PathRolloutSamplerBase {
 
   void CheckObstacles(ConstantCurvatureArc* path);
 
-  MotionLimits angular_limits;
-  MotionLimits linear_limits;
-  float dt;
-
-  float max_curvature;
-  float max_free_path_length;
-  float robot_length;
-  float robot_width;
-  float base_link_offset;
-  float obstacle_margin;
-  float max_clearance;
 };
 
 }  // namespace motion_primitives

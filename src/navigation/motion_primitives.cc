@@ -33,6 +33,7 @@
 
 #include "shared/math/math_util.h"
 #include "motion_primitives.h"
+#include "navigation_parameters.h"
 
 using Eigen::Vector2f;
 using std::max;
@@ -40,6 +41,7 @@ using std::min;
 using std::shared_ptr;
 using std::string;
 using std::vector;
+using navigation::MotionLimits;
 using namespace math_util;
 using namespace geometry;
 

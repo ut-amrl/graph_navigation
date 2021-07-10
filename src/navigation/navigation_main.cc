@@ -64,6 +64,7 @@ using ros_helpers::SetRosVector;
 using std::string;
 using std::vector;
 using Eigen::Vector2f;
+using navigation::MotionLimits;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 
@@ -208,14 +209,16 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_free_path_length);
   REAL_PARAM(max_clearance);
   BOOL_PARAM(can_traverse_stairs);
+  REAL_PARAM(target_dist_tolerance);
+  REAL_PARAM(target_vel_tolerance);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
-  params->linear_limits = motion_primitives::MotionLimits(
+  params->linear_limits = MotionLimits(
       CONFIG_max_linear_accel,
       CONFIG_max_linear_decel,
       CONFIG_max_linear_speed);
-  params->angular_limits = motion_primitives::MotionLimits(
+  params->angular_limits = MotionLimits(
       CONFIG_max_angular_accel,
       CONFIG_max_angular_decel,
       CONFIG_max_angular_speed);
@@ -229,6 +232,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->max_free_path_length = CONFIG_max_free_path_length;
   params->max_clearance = CONFIG_max_clearance;
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
+  params->target_dist_tolerance = CONFIG_target_dist_tolerance;
+  params->target_vel_tolerance = CONFIG_target_vel_tolerance;
 }
 
 int main(int argc, char** argv) {

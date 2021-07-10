@@ -24,18 +24,39 @@
 #ifndef NAVIGATION_PARAMETERS_H
 #define NAVIGATION_PARAMETERS_H
 
-#include "motion_primitives.h"
-#include "config_reader/config_reader.h"
-
 namespace navigation {
+
+struct MotionLimits {
+  // Maximum permissible acceleration magnitude.
+  // NOTE: Must be positive!
+  float max_acceleration;
+  // Maximum permissible deceleration magnitude.
+  // NOTE: Must be positive!
+  float max_deceleration;
+  // Maximum permissible speed.
+  // NOTE: Must be positive!
+  float max_speed;
+
+  MotionLimits() : 
+      max_acceleration(0),
+      max_deceleration(0),
+      max_speed(0) {}
+
+  MotionLimits(float max_acceleration,
+               float max_deceleration,
+               float max_speed) : 
+      max_acceleration(max_acceleration),
+      max_deceleration(max_deceleration),
+      max_speed(max_speed) {}
+};
 
 struct NavigationParameters {
   // Control period in seconds.
   double dt;
   // Motion limits for linear motion.
-  motion_primitives::MotionLimits linear_limits;
+  MotionLimits linear_limits;
   // Motion limits for angular motion.
-  motion_primitives::MotionLimits angular_limits;
+  MotionLimits angular_limits;
   // Distance of carrot from robot to compute local planner goal from
   // global plan.
   float carrot_dist;
@@ -60,6 +81,12 @@ struct NavigationParameters {
 
   bool can_traverse_stairs;
 
+  // Distance tolerance to reaching target.
+  float target_dist_tolerance;
+  // Velocity tolerance to reaching target.
+  float target_vel_tolerance;
+
+
   // Default constructor, just set defaults.
   NavigationParameters() :
       dt(0.025),
@@ -74,7 +101,9 @@ struct NavigationParameters {
       base_link_offset(0),
       max_free_path_length(6.0),
       max_clearance(1.0),
-      can_traverse_stairs(false) {}
+      can_traverse_stairs(false),
+      target_dist_tolerance(0.1),
+      target_vel_tolerance(0.1) {}
 };
 
 }  // namespace navigation
