@@ -879,7 +879,11 @@ void Navigation::Abort() {
 }
 
 void Navigation::Run() {
-  if (!initialized_) return;
+  const bool kDebug = false;
+  if (!initialized_) {
+    if (kDebug) printf("Not initialized\n");
+    return;
+  }
   visualization::ClearVisualizationMsg(local_viz_msg_);
   DrawRobot();
   if (!odom_initialized_) return;
@@ -904,6 +908,7 @@ void Navigation::Run() {
 
   // Publish Navigation Status
   if (nav_complete_) {
+    if (kDebug) printf("Nav complete\n");
     Halt();
     status_msg_.status = 3;
     status_pub_.publish(status_msg_);
@@ -929,6 +934,7 @@ void Navigation::Run() {
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
   // Run local planner.
   if (nav_complete_) {
+    if (kDebug) printf("Now complete\n");
     Halt();
   } else {
     // TODO check if the robot needs to turn around.
@@ -943,10 +949,10 @@ void Navigation::Run() {
       // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
       //     local_target_.x(), local_target_.y(), RadToDeg(theta));
       if (fabs(theta) > kLocalFOV) {
-        // printf("TurnInPlace\n");
+        if (kDebug) printf("TurnInPlace\n");
         TurnInPlace();
       } else {
-        // printf("ObstAv\n");
+        if (kDebug) printf("ObstAv\n");
         RunObstacleAvoidance();
       }
     }

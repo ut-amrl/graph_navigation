@@ -157,9 +157,20 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
   // printf("%7.3f %7.3f %7.3f %7.3f\n", 
   //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
+  // The x-coordinate of the rear margin.
+  const float x_min = -0.5 * nav_params.robot_length + 
+      nav_params.base_link_offset - nav_params.obstacle_margin;
   using std::isfinite;
   for (const Vector2f& p : point_cloud) {
     if (!isfinite(p.x()) || !isfinite(p.y()) || p.x() < 0.0f) continue;
+    if (p.x() > x_min && p.x() < l && fabs(p.y()) < w) {
+      // This point is within the robot plus margin boundary.
+      printf("Obstacle within robot boundary\n");
+      path.length = 0;
+      path.obstruction = p;
+      angle_min = 0;
+      break;
+    }
     const float r_sq = (p - c).squaredNorm();
     // printf("c:%.2f r:%.3f r1:%.3f r2:%.3f r3:%.3f\n",
     //        path.curvature, sqrt(r_sq), r1, sqrt(r2_sq), sqrt(r3_sq));
@@ -171,7 +182,12 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     float alpha;
     if (r_sq < r2_sq) {
       // Point will hit the side of the robot first.
-      alpha = acosf((fabs(path_radius) - w) / r);
+      const float x = fabs(path_radius) - w;
+      if (x > 0) {
+        alpha = acosf(x / r);
+      } else {
+        alpha = M_PI_2 + acosf(-x / r);
+      }
       if (!isfinite(alpha)) printf("%f %f %f\n", path_radius, w, r);
     } else {
       // Point will hit the front of the robot first.
