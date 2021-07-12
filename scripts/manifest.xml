@@ -1,0 +1,17 @@
+<package>
+  <description brief="graph_naviation_waypoint nav">
+
+    Waypoint navigation for graph navigation.
+
+  </description>
+  <name>graph_navigation_waypoint_nav</name>
+  <author>Kavan Sikand</author>
+  <license>MIT</license>
+  <review status="unreviewed" notes=""/>
+  <url></url>
+  <depend package="std_msgs"/>
+  <depend package="amrl_msgs"/>
+
+</package>
+
+
