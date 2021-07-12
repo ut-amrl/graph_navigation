@@ -13,8 +13,8 @@ import numpy as np
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--loop', action='store_true')
-parser.add_argument('--map', type=str, default='UT_Campus')
-parser.add_argument('--waypoints', type=str, default='AHG_dock.json', help='json file containing an array of waypoints')
+parser.add_argument('--map', type=str, required=True)
+parser.add_argument('--waypoints', type=str, required=True, help='json file containing an array of waypoints')
 
 args = parser.parse_args()
 
