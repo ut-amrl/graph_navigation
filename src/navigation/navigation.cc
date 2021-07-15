@@ -257,7 +257,6 @@ void Navigation::Initialize(const NavigationParameters& params,
   // Initialize status message
   status_msg_.status = 3;
   status_msg_.text = "Navigation Status";
-  drive_msg_ = geometry_msgs::TwistStamped();
   InitRosHeader("base_link", &drive_msg_.header);
   InitRosHeader("base_link", &fp_pcl_msg_.header);
   params_ = params;
