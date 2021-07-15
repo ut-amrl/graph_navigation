@@ -16,7 +16,6 @@
   <depend package="sensor_msgs"/>
   <depend package="roscpp"/>
   <depend package="rosbag"/>
-  <depend package="tf"/>
   <depend package="amrl_msgs"/>
 
 </package>
