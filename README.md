@@ -7,6 +7,8 @@
 1. [glog](https://github.com/google/glog)
 1. [gflags](https://github.com/gflags/gflags)
 1. [Lua5.1](http://www.lua.org/)
+1. [LibTorch](https://pytorch.org/get-started/locally/): Unpack the libtorch zip
+   file to `/opt/libtorch`.
 
 You can install the system dependencies on *buntu using:
 ```
