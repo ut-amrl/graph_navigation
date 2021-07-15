@@ -328,10 +328,12 @@ void Navigation::SendCommand(Eigen::Vector2f vel, float ang_vel) {
   drive_msg_.twist.linear.x = vel.x();
   drive_msg_.twist.linear.y = vel.y();
   drive_msg_.twist.linear.z = 0;
-  
+  // printf("SendCommand: %f %f %f\n", drive_msg_.twist.linear.x, drive_msg_.twist.linear.y, drive_msg_.twist.angular.z);
+
+  twist_drive_pub_.publish(drive_msg_.twist);
+
   auto ackermann_msg = TwistToAckermann(drive_msg_);
   ackermann_drive_pub_.publish(ackermann_msg);
-  twist_drive_pub_.publish(drive_msg_);
   // This command is going to take effect system latency period after. Hence
   // modify the timestamp to reflect the time when it will take effect.
   auto cmd_copy = drive_msg_;
@@ -746,11 +748,13 @@ void Navigation::RunObstacleAvoidance() {
   }
   if (paths.size() == 0) {
     // No options, just stop.
+    if (debug) printf("No paths found\n");
     Halt();
     return;
   }
   auto best_path = evaluator_->FindBest(paths);
   if (best_path == nullptr) {
+    if (debug) printf("No best path found\n");
     // No valid path found!
     Halt();
     return;
@@ -771,6 +775,7 @@ void Navigation::RunObstacleAvoidance() {
                                 arc.clearance,
                                 0xFF0000,
                                 local_viz_msg_);
+  if (debug) printf("Best Path Chosen %f\n", arc.curvature);
 
   const Vector2f closest_point = best_path->EndPoint().translation;
   visualization::DrawCross(closest_point, 0.05, 0x00A000, local_viz_msg_);
@@ -783,7 +788,7 @@ void Navigation::RunObstacleAvoidance() {
   auto linear_limits = params_.linear_limits;
   linear_limits.max_speed = max_map_speed;
   best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
-  // printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
+  if (debug) printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
   // const float dist_left =
   //     max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
 
@@ -886,7 +891,10 @@ void Navigation::Run() {
   }
   visualization::ClearVisualizationMsg(local_viz_msg_);
   DrawRobot();
-  if (!odom_initialized_) return;
+  if (!odom_initialized_) {
+    if (kDebug) printf("Odometry not initialized\n");
+    return;
+  }
   ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
   if (FLAGS_test_toc) {
     TrapezoidTest();
@@ -918,6 +926,7 @@ void Navigation::Run() {
   status_msg_.status = 1;
   status_pub_.publish(status_msg_);
   if (!PlanStillValid()) {
+    if (kDebug) printf("Replanning\n");
     Plan(nav_goal_loc_);
   }
   // Get Carrot.
