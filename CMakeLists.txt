@@ -53,6 +53,11 @@ INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
+ADD_LIBRARY(deep_irl_evaluator  
+            src/navigation/deep_irl_evaluator.cc)
+TARGET_LINK_LIBRARIES(deep_irl_evaluator 
+    shared_library ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
                         src/navigation/navigation.cc
@@ -60,10 +65,9 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/ackermann_motion_primitives.cc
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
-                        src/navigation/deep_irl_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
-    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+    shared_library deep_irl_evaluator ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
 
 ADD_EXECUTABLE(navigation_tests
