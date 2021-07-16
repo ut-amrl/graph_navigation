@@ -57,8 +57,8 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-#define VIS_IMAGES 0
-#define PERF_BENCHMARK 1
+#define VIS_IMAGES 1
+#define PERF_BENCHMARK False
 
 namespace motion_primitives {
 
@@ -98,19 +98,22 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
       float validity;
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, false).clone();
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, true).clone();
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
         cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
 
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
+
+        auto future_target = local_target - state.translation;
         
-        const float angle_progress = 0.0f; // TODO: Compute angle progress (how much closer is the angle at this state to facing the goal vs. the original angle)
+        const float future_target_angle = atan2(-future_target[1], -future_target[0]);
+        const float angle_progress = abs(min(fmod(future_target_angle - state.angle, M_PI), fmod(state.angle - future_target_angle, M_PI)));
         auto tensor_angle = torch::full(1, angle_progress);
         const float distance_travelled = state.translation.norm();
         auto tensor_distance = torch::full(1, distance_travelled);
-        const float goal_progress = local_target.norm() - (local_target - state.translation).norm();
+        const float goal_progress = local_target.norm() - future_target.norm();
         auto tensor_progress = torch::full(1, goal_progress);
         auto tensor_validity = torch::full(1, validity);
 
@@ -134,53 +137,60 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
   printf("Evaluating %ld values...\n", patch_tensors.size());
   #endif
 
-  auto patch_tensor = torch::stack(patch_tensors);
 
-  std::vector<torch::jit::IValue> emb_input;
-  emb_input.push_back(patch_tensor);
+  at::Tensor output;
+  if (patch_tensors.size() > 0) {
+    auto patch_tensor = torch::stack(patch_tensors);
 
-  at::Tensor embeddings = embedding_module.forward(emb_input).toTensor();
+    std::vector<torch::jit::IValue> emb_input;
+    emb_input.push_back(patch_tensor);
 
-  auto feature_tensor = torch::stack(irl_feature_tensors);
+    at::Tensor embeddings = embedding_module.forward(emb_input).toTensor();
 
-  auto input_tensor = torch::cat({feature_tensor, embeddings}, 1);
+    auto feature_tensor = torch::stack(irl_feature_tensors);
 
-  std::vector<torch::jit::IValue> input;
-  input.push_back(input_tensor);
+    auto input_tensor = torch::cat({feature_tensor, embeddings}, 1);
 
-  // std::cout << input_tensor.size() << std::endl;
-  at::Tensor output = irl_module.forward(input).toTensor();
+    std::vector<torch::jit::IValue> input;
+    input.push_back(input_tensor);
+
+    output = irl_module.forward(input).toTensor();
+
+    for(int i = 0; i < output.size(0); i++) {
+      auto patch_loc_index = patch_location_indices[i];
+      patch_rewards[patch_loc_index.first] += output[i];
+    }
+  }
 
   #if PERF_BENCHMARK
   auto t3 = high_resolution_clock::now();
   #endif
 
-  for(int i = 0; i < output.size(0); i++) {
-    auto patch_loc_index = patch_location_indices[i];
-    patch_rewards[patch_loc_index.first] += output[i];
-  }
-
   auto best_idx = torch::argmax(patch_rewards).item<int>();
+  std::cout << "Best" << best_idx << std::endl;
+
   best = paths[best_idx];
   #if PERF_BENCHMARK
   auto t4 = high_resolution_clock::now();
   #endif
 
   # if VIS_IMAGES
-  cv::Mat rewards = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
-  cv::Mat vis_rewards;
-  cv::normalize(rewards, vis_rewards, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
-  for(int i = 0; i < vis_rewards.rows; i++) {
-    auto patch_loc_index = patch_location_indices[i];
-    float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
-    auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
-    auto image_loc = GetImageLocation(state.translation);
-    cv::rectangle(warped_vis,
-      cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
-      cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
-      cv::Scalar(int(vis_costs.at<float>(i, 0), 0, 0)),
-      cv::FILLED
-    );
+  if (patch_tensors.size() > 0) {
+    cv::Mat rewards = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
+    cv::Mat vis_rewards;
+    cv::normalize(rewards, vis_rewards, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
+    for(int i = 0; i < vis_rewards.rows; i++) {
+      auto patch_loc_index = patch_location_indices[i];
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
+      auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+      auto image_loc = GetImageLocation(state.translation);
+      cv::rectangle(warped_vis,
+        cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
+        cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
+        cv::Scalar(int(vis_rewards.at<float>(i, 0)), 0, 0),
+        cv::FILLED
+      );
+    }
   }
 
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {

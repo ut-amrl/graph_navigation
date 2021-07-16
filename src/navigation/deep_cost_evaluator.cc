@@ -61,7 +61,7 @@ using std::chrono::milliseconds;
 DEFINE_double(dw, 1, "Distance weight");
 DEFINE_double(cw, -0.5, "Clearance weight");
 DEFINE_double(fw, -1, "Free path weight");
-DEFINE_double(costw, 0.1, "Image Cost weight");
+DEFINE_double(costw, 1.0, "Image Cost weight");
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 0
@@ -122,26 +122,28 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     }
   }
 
-  auto input_tensor = torch::stack(patch_tensors);
-
-  std::vector<torch::jit::IValue> input;
-  input.push_back(input_tensor);
-
   #if PERF_BENCHMARK
   auto t2 = high_resolution_clock::now();
-  printf("Evaluating %ld values...\n", input_tensor.size(0));
   #endif
 
-  at::Tensor output = cost_module.forward(input).toTensor();
+  at::Tensor output;
+  if (patch_tensors.size() > 0) {
+    auto input_tensor = torch::stack(patch_tensors);
+
+    std::vector<torch::jit::IValue> input;
+    input.push_back(input_tensor);
+
+    output = cost_module.forward(input).toTensor();
+
+    for(int i = 0; i < output.size(0); i++) {
+      auto patch_loc_index = patch_location_indices[i];
+      path_costs[patch_loc_index.first] += output[i];
+    }
+  }
 
   #if PERF_BENCHMARK
   auto t3 = high_resolution_clock::now();
   #endif
-
-  for(int i = 0; i < output.size(0); i++) {
-    auto patch_loc_index = patch_location_indices[i];
-    path_costs[patch_loc_index.first] += output[i];
-  }
 
   cv::Mat path_cost_mat = cv::Mat(path_costs.size(0), path_costs.size(1), CV_32F, path_costs.data_ptr());
   cv::Mat normalized_path_costs;
@@ -206,22 +208,23 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
-  cv::Mat costs = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
-  cv::Mat vis_costs;
-  cv::normalize(costs, vis_costs, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
-  for(int i = 0; i < vis_costs.rows; i++) {
-    auto patch_loc_index = patch_location_indices[i];
-    float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
-    auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
-    auto image_loc = GetImageLocation(state.translation);
-    cv::rectangle(warped_vis,
-      cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
-      cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
-      cv::Scalar(0, 0, int(vis_costs.at<float>(i, 0))),
-      cv::FILLED
-    );
+  if (patch_tensors.size() > 0) {
+    cv::Mat costs = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
+    cv::Mat vis_costs;
+    cv::normalize(costs, vis_costs, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
+    for(int i = 0; i < vis_costs.rows; i++) {
+      auto patch_loc_index = patch_location_indices[i];
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
+      auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+      auto image_loc = GetImageLocation(state.translation);
+      cv::rectangle(warped_vis,
+        cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
+        cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
+        cv::Scalar(0, 0, int(vis_costs.at<float>(i, 0))),
+        cv::FILLED
+      );
+    }
   }
-  
 
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);

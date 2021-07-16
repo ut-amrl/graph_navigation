@@ -47,7 +47,7 @@ struct DeepCostEvaluator :  ImageBasedEvaluator {
   // Torch definition of the network.
   torch::jit::script::Module cost_module;
 
-  static constexpr float UNCERTAINTY_COST = 20.0f;
+  static constexpr float UNCERTAINTY_COST = 2.0f;
 };
 
 }  // namespace motion_primitives

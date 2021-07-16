@@ -1,5 +1,5 @@
 NavigationParameters = {
-  image_topic = "/left/image_color/compressed";
+  image_topic = "/camera/rgb/image_raw/compressed";
   laser_topic = "/velodyne_2dscan";
   odom_topic = "/jackal_velocity_controller/odom";
   localization_topic = "localization";
@@ -16,22 +16,22 @@ NavigationParameters = {
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
-  carrot_dist = 6.0;
+  carrot_dist = 100.0;
   system_latency = 0.24;
-  obstacle_margin = 0.15;
+  obstacle_margin = 0.1;
   num_options = 41;
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
-  max_free_path_length = 10.0;
+  max_free_path_length = 4.0;
   max_clearance = 1.0;
   can_traverse_stairs = false;
-  use_kinect = false;
+  use_kinect = true;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
-  model_path = "/home/kavan/Research/AMRL/preference_learning/comprehensive_models/jit_irl_model_indoor.pt";
-  embedding_model_path = "/home/kavan/Research/AMRL/preference_learning/comprehensive_models/jit_emb_model_indoor.pt";
-  evaluator_type = "irl";
+  model_path = "/home/administrator/preference_learning/comprehensive_models/jit_cost_model_outdoor.pt";
+  embedding_model_path = "/home/administrator/preference_learning/comprehensive_models/jit_emb_model_indoor.pt";
+  evaluator_type = "cost";
 };
 
 AckermannSampler = {

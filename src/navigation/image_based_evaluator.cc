@@ -82,7 +82,7 @@ namespace motion_primitives {
       if (val > ImageBasedEvaluator::PATCH_EMPTY_THRESHOLD) {
         return cv::Mat();
       }
-      *validity = val;
+      *validity = 1.0f - val;
     }
 
     return patch;
