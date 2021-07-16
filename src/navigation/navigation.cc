@@ -958,7 +958,7 @@ void Navigation::Run() {
   } else {
     // TODO check if the robot needs to turn around.
     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
-    static const float kLocalFOV = DegToRad(60.0);
+    static const float kLocalFOV = DegToRad(360.0);
     const float theta = atan2(local_target_.y(), local_target_.x());
     if (local_target_.squaredNorm() > Sq(params_.carrot_dist)) {
       local_target_ = params_.carrot_dist * local_target_.normalized();

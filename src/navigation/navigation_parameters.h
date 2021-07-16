@@ -106,7 +106,7 @@ struct NavigationParameters {
       robot_width(0.44),
       robot_length(0.5),
       base_link_offset(0),
-      max_free_path_length(6.0),
+      max_free_path_length(10.0),
       max_clearance(1.0),
       can_traverse_stairs(false),
       target_dist_tolerance(0.1),

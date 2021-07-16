@@ -59,8 +59,10 @@ using std::chrono::duration;
 using std::chrono::milliseconds;
 
 
-#define PERF_BENCHMARK 1
+#define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
+
+size_t ROLLOUT_DENSITY = 20;
 
 namespace motion_primitives {
 
@@ -95,8 +97,8 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
-    for(size_t j = 0; j <= 10; j++) {
-      float f = 0.1 * j;
+    for(size_t j = 0; j <= ROLLOUT_DENSITY; j++) {
+      float f = 1.0f / ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
 
       // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
@@ -146,15 +148,18 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
-  for(int i = 0; i < output.size(0); i++) {
+  cv::Mat costs = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
+  cv::Mat vis_costs;
+  cv::normalize(costs, vis_costs, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
+  for(int i = 0; i < vis_costs.rows; i++) {
     auto patch_loc_index = patch_location_indices[i];
-    float f = 0.1 * patch_loc_index.second;
+    float f = 1.0f / ROLLOUT_DENSITY * patch_loc_index.second;
     auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
     auto image_loc = GetImageLocation(state.translation);
     cv::rectangle(warped_vis,
       cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
       cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
-      cv::Scalar(0, 0, (int) (output[i].item<float>() * 2.0)),
+      cv::Scalar(0, 0, int(vis_costs.at<float>(i, 0))),
       cv::FILLED
     );
   }

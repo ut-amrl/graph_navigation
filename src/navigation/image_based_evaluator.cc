@@ -44,7 +44,7 @@ namespace motion_primitives {
 
   cv::Mat ImageBasedEvaluator::GetWarpedImage() {
     cv::Mat image_undistorted = image.clone();
-    cv::undistort(image, image_undistorted, cameraMatrix, distortionMatrix);
+    cv::undistort(image.clone(), image_undistorted, cameraMatrix, distortionMatrix);
     cv::Mat warped;
     cv::warpPerspective(image_undistorted, warped, homography, image_undistorted.size());
     return warped;
