@@ -80,7 +80,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       auto state = paths[i]->GetIntermediateState(f);
 
       // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation);
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, false);
       patches[i][j] = patch;
     }
   }

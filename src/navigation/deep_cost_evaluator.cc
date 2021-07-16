@@ -93,19 +93,29 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   auto t1 = high_resolution_clock::now();
   #endif
 
+  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
     for(size_t j = 0; j <= 10; j++) {
       float f = 0.1 * j;
       auto state = paths[i]->GetIntermediateState(f);
 
       // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation).clone();
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, true).clone();
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
         cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
+
+        // # if VIS_IMAGES
+        //   char buffer [50];
+        //   sprintf(buffer, "vis/patch_%ld_%ld.png", i, j);
+        //   cv::imwrite(buffer, patch);
+        // #endif
+
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
         patch_tensors.push_back(tensor_patch);
+      } else {
+        path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST;
       }
     }
   }
@@ -117,6 +127,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   #if PERF_BENCHMARK
   auto t2 = high_resolution_clock::now();
+  printf("Evaluating %ld values...\n", input_tensor.size(0));
   #endif
 
   at::Tensor output = cost_module.forward(input).toTensor();
@@ -125,7 +136,6 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   auto t3 = high_resolution_clock::now();
   #endif
 
-  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for(int i = 0; i < output.size(0); i++) {
     auto patch_loc_index = patch_location_indices[i];
     path_costs[patch_loc_index.first] += output[i];
@@ -149,7 +159,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     );
   }
 
-  cv::imwrite("warped_vis.png", warped_vis);
+  cv::imwrite("vis/warped_vis.png", warped_vis);
   #endif
 
 

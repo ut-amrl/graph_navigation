@@ -63,7 +63,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     homography = cv::findHomography(input_points, output_points);
   }
 
-  cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location);
+  cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, bool filter_empty);
 
   Eigen::Vector2f GetImageLocation(const Eigen::Vector2f& rel_loc);
 
@@ -76,6 +76,8 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   Eigen::Vector2f SCALING;
   Eigen::Vector2f CENTER;
   static const int PATCH_SIZE = 40;
+  static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
+  static constexpr float PATCH_EMPTY_THRESHOLD = 0.35f;
 };
 
 }  // namespace motion_primitives
