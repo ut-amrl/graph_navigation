@@ -50,10 +50,13 @@ namespace motion_primitives {
     return warped;
   }
 
-  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, Eigen::Vector2f location) {
-    Eigen::Vector2f transformed = Eigen::Vector2f(-location.y(), -location.x()).cwiseProduct(SCALING) + CENTER;
+  Eigen::Vector2f ImageBasedEvaluator::GetImageLocation(const Eigen::Vector2f& rel_loc) {
+    return Eigen::Vector2f(-rel_loc.y(), -rel_loc.x()).cwiseProduct(SCALING) + CENTER;
+  }
 
-    cv::Point coord = cv::Point(transformed.x(), transformed.y());
+  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location) {
+    Eigen::Vector2f image_loc = GetImageLocation(location);
+    cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
 
     if ((coord.y - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||
         (coord.x - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||

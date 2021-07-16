@@ -34,6 +34,7 @@
 #include "eigen3/Eigen/Geometry"
 #include "torch/torch.h"
 #include "torch/script.h"
+#include <chrono>
 
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
@@ -52,6 +53,14 @@ using Eigen::Vector2f;
 using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::duration;
+using std::chrono::milliseconds;
+
+
+#define PERF_BENCHMARK 1
+#define VIS_IMAGES 1
 
 namespace motion_primitives {
 
@@ -72,14 +81,21 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   cv::Mat warped = GetWarpedImage();
 
+  # if VIS_IMAGES
+  cv::Mat warped_vis = warped.clone();
+  #endif
+
   // std::vector<std::vector<cv::Mat>> patches;
   std::vector<std::pair<size_t, size_t>> patch_location_indices;
   std::vector<at::Tensor> patch_tensors;
 
+  #if PERF_BENCHMARK
+  auto t1 = high_resolution_clock::now();
+  #endif
+
   for (size_t i = 0; i < paths.size(); i++) {
-    float f = 0;
     for(size_t j = 0; j <= 10; j++) {
-      f += 0.1;
+      float f = 0.1 * j;
       auto state = paths[i]->GetIntermediateState(f);
 
       // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
@@ -93,12 +109,21 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       }
     }
   }
+
   auto input_tensor = torch::stack(patch_tensors);
 
   std::vector<torch::jit::IValue> input;
   input.push_back(input_tensor);
 
+  #if PERF_BENCHMARK
+  auto t2 = high_resolution_clock::now();
+  #endif
+
   at::Tensor output = cost_module.forward(input).toTensor();
+
+  #if PERF_BENCHMARK
+  auto t3 = high_resolution_clock::now();
+  #endif
 
   at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for(int i = 0; i < output.size(0); i++) {
@@ -106,9 +131,33 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     path_costs[patch_loc_index.first] += output[i];
   }
 
-  std::cout << path_costs << std::endl;
+  #if PERF_BENCHMARK
+  auto t4 = high_resolution_clock::now();
+  #endif
+
+  # if VIS_IMAGES
+  for(int i = 0; i < output.size(0); i++) {
+    auto patch_loc_index = patch_location_indices[i];
+    float f = 0.1 * patch_loc_index.second;
+    auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+    auto image_loc = GetImageLocation(state.translation);
+    cv::rectangle(warped_vis,
+      cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
+      cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
+      cv::Scalar(0, 0, (int) (output[i].item<float>() * 2.0)),
+      cv::FILLED
+    );
+  }
+
+  cv::imwrite("warped_vis.png", warped_vis);
+  #endif
 
 
+  #if PERF_BENCHMARK
+  std::cout << "Patch Collection Time" << (duration_cast<milliseconds>(t2 - t1)).count() << "ms" << std::endl;
+  std::cout << "Network Execution Time" << (duration_cast<milliseconds>(t3 - t2)).count() << "ms" << std::endl;
+  std::cout << "Score Summation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
+  #endif
   return best;
 }
 

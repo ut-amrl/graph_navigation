@@ -63,7 +63,9 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     homography = cv::findHomography(input_points, output_points);
   }
 
-  cv::Mat GetPatchAtLocation(const cv::Mat& img, Eigen::Vector2f location);
+  cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location);
+
+  Eigen::Vector2f GetImageLocation(const Eigen::Vector2f& rel_loc);
 
   cv::Mat GetWarpedImage();
 
