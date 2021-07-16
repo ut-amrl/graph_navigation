@@ -58,6 +58,10 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
+DEFINE_double(dw, 1, "Distance weight");
+DEFINE_double(cw, -0.5, "Clearance weight");
+DEFINE_double(fw, -1, "Free path weight");
+DEFINE_double(costw, 0.1, "Image Cost weight");
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
@@ -143,6 +147,64 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     path_costs[patch_loc_index.first] += output[i];
   }
 
+  cv::Mat path_cost_mat = cv::Mat(path_costs.size(0), path_costs.size(1), CV_32F, path_costs.data_ptr());
+  cv::Mat normalized_path_costs;
+  cv::normalize(path_cost_mat, normalized_path_costs, 0, 10.0f, cv::NORM_MINMAX, CV_32F);
+  
+  // Lifted from linear evaluator
+  // Check if there is any path with an obstacle-free path from the end to the
+  // local target.
+  vector<float> clearance_to_goal(paths.size(), 0.0);
+  vector<float> dist_to_goal(paths.size(), FLT_MAX);
+  bool path_to_goal_exists = false;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const auto endpoint = paths[i]->EndPoint().translation;
+    clearance_to_goal[i] = StraightLineClearance(
+        Line2f(endpoint, local_target), point_cloud);
+    if (clearance_to_goal[i] > 0.0) {
+      dist_to_goal[i] = (endpoint - local_target).norm();
+      path_to_goal_exists = true;
+    }
+  }
+
+  // First find the shortest path.
+  int best_idx = -1;
+  float best_path_length = FLT_MAX;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i]->Length() <= 0.0f) continue;
+    const float path_length = (path_to_goal_exists ?
+        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+    if (path_length < best_path_length) {
+      best_path_length = path_length;
+      best_idx = i;
+      best = paths[i];
+    }
+  }
+
+  if (best_idx == -1) {
+    // No valid paths!
+    return nullptr;
+  }
+
+  // Now try to find better paths.
+  float best_cost = FLAGS_dw * best_path_length +
+      FLAGS_fw * paths[best_idx]->Length() +
+      FLAGS_cw * paths[best_idx]->Clearance() + 
+      FLAGS_costw * normalized_path_costs.at<float>(best_idx, 0);
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i]->Length() <= 0.0f) continue;
+    const float path_length = (path_to_goal_exists ?
+        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+    const float cost = FLAGS_dw * path_length +
+      FLAGS_fw * paths[i]->Length() +
+      FLAGS_cw * paths[i]->Clearance() + 
+      FLAGS_costw * normalized_path_costs.at<float>(i, 0);
+      // printf("COMPONENTS (%f %f %f %f)\n", FLAGS_dw * path_length,FLAGS_fw * paths[i]->Length(), FLAGS_cw * paths[i]->Clearance(), FLAGS_costw * normalized_path_costs.at<float>(i, 0) );
+    if (cost < best_cost) {
+      best = paths[i];
+      best_cost = cost;
+    }
+  }
   #if PERF_BENCHMARK
   auto t4 = high_resolution_clock::now();
   #endif
@@ -164,6 +226,12 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     );
   }
 
+  for(float f = 0; f < 1.0; f += 1.0f / ROLLOUT_DENSITY) {
+    auto state = best->GetIntermediateState(f);
+    auto image_loc = GetImageLocation(state.translation);
+    cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
+  }
+
   cv::imwrite("vis/warped_vis.png", warped_vis);
   #endif
 
@@ -171,7 +239,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   #if PERF_BENCHMARK
   std::cout << "Patch Collection Time" << (duration_cast<milliseconds>(t2 - t1)).count() << "ms" << std::endl;
   std::cout << "Network Execution Time" << (duration_cast<milliseconds>(t3 - t2)).count() << "ms" << std::endl;
-  std::cout << "Score Summation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
+  std::cout << "Linear Evaluation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
   #endif
   return best;
 }

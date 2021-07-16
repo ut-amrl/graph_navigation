@@ -61,7 +61,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/motion_primitives.cc
                         src/navigation/ackermann_motion_primitives.cc
                         src/navigation/constant_curvature_arcs.cc
-                        src/navigation/linear_evaluator.cc
+                        # src/navigation/linear_evaluator.cc
                         src/navigation/deep_irl_evaluator.cc
                         src/navigation/deep_cost_evaluator.cc
                         src/navigation/image_based_evaluator.cc

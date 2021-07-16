@@ -102,7 +102,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
         (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
     const float cost = FLAGS_dw * path_length +
       FLAGS_fw * paths[i]->Length() +
-      FLAGS_cw * paths[i]->Clearance();\
+      FLAGS_cw * paths[i]->Clearance();
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
