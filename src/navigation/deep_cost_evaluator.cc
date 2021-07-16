@@ -83,11 +83,12 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       auto state = paths[i]->GetIntermediateState(f);
 
       // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation);
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation).clone();
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
-        auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte);
-        tensor_patch = tensor_patch.permute({ 2,0,1 }).to(torch::kFloat); // BGR -> RGB
+        cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
+        auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
+        tensor_patch = tensor_patch.permute({ 2,0,1 }); 
         patch_tensors.push_back(tensor_patch);
       }
     }
@@ -99,7 +100,14 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   at::Tensor output = cost_module.forward(input).toTensor();
 
-  std::cout << "OUTPUT" << output <<std::endl;
+  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
+  for(int i = 0; i < output.size(0); i++) {
+    auto patch_loc_index = patch_location_indices[i];
+    path_costs[patch_loc_index.first] += output[i];
+  }
+
+  std::cout << path_costs << std::endl;
+
 
   return best;
 }
