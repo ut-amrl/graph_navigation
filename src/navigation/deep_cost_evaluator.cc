@@ -40,6 +40,7 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_evaluator.h"
+#include "deep_cost_model.h"
 
 using std::min;
 using std::max;
@@ -86,7 +87,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte);
-        tensor_patch = tensor_patch.permute({ 2,0,1 }); // BGR -> RGB
+        tensor_patch = tensor_patch.permute({ 2,0,1 }).to(torch::kFloat); // BGR -> RGB
         patch_tensors.push_back(tensor_patch);
       }
     }

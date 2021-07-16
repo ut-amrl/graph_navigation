@@ -2,65 +2,70 @@
 
 #include "torch/torch.h"
 
-#ifndef DEEP_IRL_MODEL_H
-#define DEEP_IRL_MODEL_H
+#ifndef DEEP_COST_MODEL_H
+#define DEEP_COST_MODEL_H
 
 namespace navigation {
 
-struct IRLModel : torch::nn::Module {
-  explicit IRLModel(int input_dim) {
+
+struct EmbeddingNet: torch::nn::Module {
+  explicit EmbeddingNet(int embedding_dim) {
+    convnet = torch::nn::Sequential(torch::nn::Conv2d(3, 32, 5),
+                                    torch::nn::PReLU(),
+                                    torch::nn::MaxPool2d(torch::nn::MaxPool2dOptions(2).stride(2)),
+                                    torch::nn::Conv2d(32, 64, 5), torch::nn::PReLU(),
+                                    torch::nn::MaxPool2d(torch::nn::MaxPool2dOptions(2).stride(2)));
+
     fc = torch::nn::Sequential(
-      torch::nn::Linear(input_dim, 24),
-      torch::nn::PReLU(),
-      torch::nn::Linear(24, 12),
-      torch::nn::PReLU(),
-      torch::nn::Linear(12, 12),
-      torch::nn::PReLU(),
-      torch::nn::Linear(12, 6),
-      torch::nn::PReLU(),
-      torch::nn::Linear(6, 1),
-      torch::nn::Sigmoid());
+          torch::nn::Linear(3136, 256),
+          torch::nn::PReLU(),
+          torch::nn::Linear(256, 256),
+          torch::nn::PReLU(),
+          torch::nn::Linear(256, embedding_dim));
   }
 
-  explicit IRLModel() : IRLModel(64) {}
 
   torch::Tensor forward(torch::Tensor x) {
-    std::vector<torch::Tensor> results;
-    for (int i = 0; i < x.size(1); ++i) {
-      // For reference on slicing, see: https://pytorch.org/cppdocs/notes/tensor_indexing.html#translating-between-python-c-index-types
-      torch::Tensor x_slice = x.index({
-          torch::indexing::Slice(),
-          i,
-          torch::indexing::Slice()
-      });
-      torch::Tensor single_result = fc->forward(x_slice);
-      results.push_back(single_result);
-    }
-    return torch::stack(results, 1);
+    torch::Tensor output = convnet->forward(x);
+    output = output.view({output.size(0), -1});
+    return fc->forward(output);
+  }
+
+  torch::nn::Sequential convnet;
+  torch::nn::Sequential fc;
+};
+
+struct CostNet : torch::nn::Module {
+  explicit CostNet(int input_dim) {
+    fc = torch::nn::Sequential(
+      torch::nn::Linear(input_dim, 32),
+      torch::nn::PReLU(),
+      torch::nn::Linear(32, 32),
+      torch::nn::PReLU(),
+      torch::nn::Linear(32, 16),
+      torch::nn::PReLU(),
+      torch::nn::Linear(16, 1)
+    );
+  }
+
+  torch::Tensor forward(torch::Tensor x) {
+    return fc->forward(x);
   }
   torch::nn::Sequential fc;
 };
 
-struct IRLBatchModel : torch::nn::Module {
-  explicit IRLBatchModel(IRLModel irl_model) : irl_model(irl_model) {}
+
+struct FullCostNet : torch::nn::Module {
+  explicit FullCostNet(EmbeddingNet embedding_net, CostNet cost_net) : embedding_net(embedding_net), cost_net(cost_net) {}
 
   torch::Tensor forward(torch::Tensor x) {
-    std::vector<torch::Tensor> results;
-    for (int i = 0; i < x.size(1); ++i) {
-      torch::Tensor x_slice = x.index({
-          torch::indexing::Slice(),
-          i,
-          torch::indexing::Slice(),
-          torch::indexing::Slice()
-      });
-      results.push_back(irl_model.forward(x_slice));
-    }
-    return torch::stack(results, 1)
+    return cost_net.forward(embedding_net.forward(x));
   }
-
-  IRLModel irl_model;
+  
+  EmbeddingNet embedding_net;
+  CostNet cost_net;
 };
 
 }  // namespace navigation
 
-#endif  // DEEP_IRL_MODEL_H
+#endif  // DEEP_COST_MODEL_H
