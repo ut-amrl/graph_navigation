@@ -27,6 +27,7 @@
 #include "eigen3/Eigen/Dense"
 #include "geometry_msgs/TwistStamped.h"
 #include "nav_msgs/Odometry.h"
+#include "opencv2/core/mat.hpp"
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -74,6 +75,7 @@ class Navigation {
   void UpdateOdometry(const nav_msgs::Odometry& msg);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
+  void ObserveImage(cv::Mat image, double time);
   void Run();
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
@@ -151,6 +153,8 @@ class Navigation {
   float odom_angle_;
   // Newest odometry message received.
   nav_msgs::Odometry latest_odom_msg_;
+  // Newest image received.
+  cv::Mat latest_image_;
 
   // Whether navigation is complete.
   bool nav_complete_;
@@ -174,6 +178,8 @@ class Navigation {
   double t_point_cloud_;
   // Time stamp of latest odometry message.
   double t_odometry_;
+  // Time stamp of observation of image.
+  double t_image_;
 
   const std::string maps_dir_;
 

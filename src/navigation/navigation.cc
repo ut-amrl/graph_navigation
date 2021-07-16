@@ -522,6 +522,11 @@ void Navigation::ObstAvTest() {
   RunObstacleAvoidance();
 }
 
+void Navigation::ObserveImage(cv::Mat image, double time) {
+  latest_image_ = image;
+  t_image_ = time;
+}
+
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
                                    double time) {
   point_cloud_ = cloud;
@@ -732,8 +737,10 @@ void Navigation::RunObstacleAvoidance() {
     }
   }
 
-  sampler_->Update(robot_vel_, robot_omega_, local_target_, fp_point_cloud_);
-  evaluator_->Update(robot_vel_, robot_omega_, local_target_, fp_point_cloud_);
+  sampler_->Update(
+      robot_vel_, robot_omega_, local_target_, fp_point_cloud_, latest_image_);
+  evaluator_->Update(
+      robot_vel_, robot_omega_, local_target_, fp_point_cloud_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     printf("%lu options\n", paths.size());

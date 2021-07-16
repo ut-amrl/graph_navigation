@@ -29,6 +29,7 @@
 
 #include "amrl_msgs/Localization2DMsg.h"
 #include "config_reader/config_reader.h"
+#include "cv_bridge/cv_bridge.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
@@ -38,7 +39,12 @@
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "image_transport/image_transport.h"
+#include "opencv2/core/mat.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/highgui/highgui.hpp"
 #include "sensor_msgs/LaserScan.h"
+#include "sensor_msgs/image_encodings.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "nav_msgs/Odometry.h"
@@ -67,10 +73,12 @@ using Eigen::Vector2f;
 using navigation::MotionLimits;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
+const string kOpenCVWindow = "Image window";
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 
+CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
@@ -80,12 +88,14 @@ CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
+DEFINE_bool(debug_images, false, "Show debug images");
 
 DECLARE_int32(v);
 
 bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
 Navigation navigation_;
+cv::Mat last_image_;
 
 void EnablerCallback(const std_msgs::Bool& msg) {
   navigation_.Enable(msg.data);
@@ -236,6 +246,23 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
 }
 
+void ImageCallback(const sensor_msgs::ImageConstPtr& msg) {
+  try {
+    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
+        msg, sensor_msgs::image_encodings::BGR8);
+    last_image_ = image->image;
+  } catch (cv_bridge::Exception& e) {
+    fprintf(stderr, "cv_bridge exception: %s\n", e.what());
+    return;
+  }
+  navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
+  // Update GUI Window
+  if (FLAGS_debug_images) {
+    cv::imshow(kOpenCVWindow, last_image_);
+    cv::waitKey(3);
+  }
+}
+
 int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
@@ -276,12 +303,17 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
       n.subscribe("halt_robot", 1, &HaltCallback);
+  image_transport::ImageTransport image_transport(n);
+  auto image_sub = image_transport.subscribe(
+      CONFIG_image_topic, 1, &ImageCallback);
 
+  if (FLAGS_debug_images) cv::namedWindow(kOpenCVWindow);
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
     ros::spinOnce();
     navigation_.Run();
     loop.Sleep();
   }
+  if (FLAGS_debug_images) cv::destroyWindow(kOpenCVWindow);
   return 0;
 }

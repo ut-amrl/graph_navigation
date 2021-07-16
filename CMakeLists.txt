@@ -23,8 +23,9 @@ SET(ROS_BUILD_STATIC_LIBS true)
 SET(ROS_BUILD_SHARED_LIBS false)
 
 
-list(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
-find_package(Torch REQUIRED)
+LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
+FIND_PACKAGE(Torch REQUIRED)
+FIND_PACKAGE( OpenCV REQUIRED )
 
 IF(NOT ROS_BUILD_TYPE)
   SET(ROS_BUILD_TYPE Release)
@@ -48,6 +49,7 @@ INCLUDE_DIRECTORIES(src/shared)
 INCLUDE_DIRECTORIES(src/config_reader/include)
 INCLUDE_DIRECTORIES(src/third_party)
 INCLUDE_DIRECTORIES(src)
+INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
@@ -60,7 +62,8 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/linear_evaluator.cc
                         src/navigation/deep_irl_evaluator.cc
                         )
-TARGET_LINK_LIBRARIES(navigation shared_library ${libs} "${TORCH_LIBRARIES}")
+TARGET_LINK_LIBRARIES(navigation 
+    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
 
 ADD_EXECUTABLE(navigation_tests

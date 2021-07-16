@@ -1,4 +1,5 @@
 NavigationParameters = {
+  image_topic = "/camera/rgb/image_raw";
   laser_topic = "scan";
   odom_topic = "odom";
   localization_topic = "localization";

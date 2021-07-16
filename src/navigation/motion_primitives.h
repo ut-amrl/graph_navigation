@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
+#include "opencv2/core/mat.hpp"
 
 #include "math/line2d.h"
 #include "math/poses_2d.h"
@@ -76,11 +77,13 @@ struct PathRolloutSamplerBase {
   virtual void Update(const Eigen::Vector2f& new_vel, 
                       const float new_ang_vel, 
                       const Eigen::Vector2f& new_local_target,
-                      const std::vector<Eigen::Vector2f>& new_point_cloud) {
+                      const std::vector<Eigen::Vector2f>& new_point_cloud,
+                      const cv::Mat& new_image) {
     vel = new_vel;
     ang_vel = new_ang_vel;
     local_target = new_local_target;
     point_cloud = new_point_cloud;
+    image = new_image;
   }
 
   void SetNavParams(const navigation::NavigationParameters& new_params) {
@@ -97,6 +100,8 @@ struct PathRolloutSamplerBase {
   std::vector<Eigen::Vector2f> point_cloud;
   // Navigation parameters.
   navigation::NavigationParameters nav_params;
+  // Latest image observation.
+  cv::Mat image;
 };
 
 // Evaluator of path rollout options.
@@ -110,11 +115,13 @@ struct PathEvaluatorBase {
   virtual void Update(const Eigen::Vector2f& new_vel, 
                       const float new_ang_vel, 
                       const Eigen::Vector2f& new_local_target,
-                      const std::vector<Eigen::Vector2f>& new_point_cloud) {
+                      const std::vector<Eigen::Vector2f>& new_point_cloud,
+                      const cv::Mat& new_image) {
     vel = new_vel;
     ang_vel = new_ang_vel;
     local_target = new_local_target;
     point_cloud = new_point_cloud;
+    image = new_image;
   }
 
   // Return the best path rollout from the provided set of paths.
@@ -129,6 +136,8 @@ struct PathEvaluatorBase {
   Eigen::Vector2f local_target;
   // Obstacle point cloud.
   std::vector<Eigen::Vector2f> point_cloud;
+  // Latest image observation.
+  cv::Mat image;
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,

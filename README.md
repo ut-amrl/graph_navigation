@@ -41,4 +41,9 @@ sudo apt install libgoogle-glog-dev libgflags-dev liblua5.1-0-dev
 
 ## Run
 
-Run `./bin/navigation`
+Run `./bin/navigation`   
+Some helpful flags:
+* `_image_transport:=compressed` to tell it to subscribe to the compressed
+  stream of the image transport (useful when playing back a bag file that only
+  included the compressed stream).
+* `--debug_images` to show debug visualization images.
