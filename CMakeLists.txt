@@ -63,6 +63,8 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
                         src/navigation/deep_irl_evaluator.cc
+                        src/navigation/deep_cost_evaluator.cc
+                        src/navigation/image_based_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
     shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})

@@ -1,7 +1,7 @@
 NavigationParameters = {
-  image_topic = "/camera/rgb/image_raw";
-  laser_topic = "scan";
-  odom_topic = "odom";
+  image_topic = "/left/image_color/compressed";
+  laser_topic = "/velodyne_2dscan";
+  odom_topic = "/jackal_velocity_controller/odom";
   localization_topic = "localization";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
@@ -26,8 +26,10 @@ NavigationParameters = {
   max_free_path_length = 6.0;
   max_clearance = 1.0;
   can_traverse_stairs = false;
+  use_kinect = false;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
+  model_path = "/home/kavan/Research/AMRL/preference_learning/comprehensive_models/cost_model.pt"
 };
 
 AckermannSampler = {

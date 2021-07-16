@@ -27,13 +27,13 @@
 #include "motion_primitives.h"
 #include "image_based_evaluator.h"
 
-#ifndef DEEP_IRL_EVALUATOR_H
-#define DEEP_IRL_EVALUATOR_H
+#ifndef DEEP_COST_EVALUATOR_H
+#define DEEP_COST_EVALUATOR_H
 
 namespace motion_primitives {
 
-struct DeepIRLEvaluator :  ImageBasedEvaluator {
-  DeepIRLEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect) : ImageBasedEvaluator(K, D, H, kinect) {};
+struct DeepCostEvaluator :  ImageBasedEvaluator {
+  DeepCostEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect) : ImageBasedEvaluator(K, D, H, kinect) {};
 
   bool LoadModel(const std::string& irl_model_path);
 
@@ -42,10 +42,10 @@ struct DeepIRLEvaluator :  ImageBasedEvaluator {
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
 
   // Torchscript definition of the network.
-  torch::jit::script::Module irl_module;
+  torch::jit::script::Module cost_module;
 };
 
 }  // namespace motion_primitives
 
 
-#endif  // DEEP_IRL_EVALUATOR_H
+#endif  // DEEP_COST_EVALUATOR_H

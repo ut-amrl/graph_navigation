@@ -55,7 +55,7 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
-#include "linear_evaluator.h"
+#include "deep_cost_evaluator.h"
 
 using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
@@ -233,7 +233,6 @@ Navigation::Navigation() :
     sampler_(nullptr),
     evaluator_(nullptr) {
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
-  evaluator_ = std::unique_ptr<PathEvaluatorBase>(new LinearEvaluator());
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
@@ -263,6 +262,10 @@ void Navigation::Initialize(const NavigationParameters& params,
   planning_domain_ = GraphDomain(map_file, &params_);
   initialized_ = true;
   sampler_->SetNavParams(params);
+  
+  auto deep_evaluator = new DeepCostEvaluator(params.K, params.D, params.H, params.use_kinect);
+  deep_evaluator->LoadModel(params.model_path);
+  evaluator_ = std::unique_ptr<PathEvaluatorBase>(deep_evaluator);
 }
 
 bool Navigation::Enabled() const {

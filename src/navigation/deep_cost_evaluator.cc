@@ -39,7 +39,7 @@
 #include "navigation_parameters.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
-#include "deep_irl_evaluator.h"
+#include "deep_cost_evaluator.h"
 
 using std::min;
 using std::max;
@@ -54,24 +54,26 @@ using namespace math_util;
 
 namespace motion_primitives {
 
-bool DeepIRLEvaluator::LoadModel(const string& irl_model_path) {
+bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
   try {
-    irl_module = torch::jit::load(irl_model_path);
+    cost_module = torch::jit::load(cost_model_path);
     return true;
   } catch(const c10::Error& e) {
-    std::cout << "Error loading IRL model:\n" << e.msg();
+    std::cout << "Error loading cost model:\n" << e.msg();
     return false;
   }
 }
 
-shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
+shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     const vector<shared_ptr<PathRolloutBase>>& paths) {
   if (paths.size() == 0) return nullptr;
   shared_ptr<PathRolloutBase> best = nullptr;
 
   cv::Mat warped = GetWarpedImage();
 
-  std::vector<std::vector<cv::Mat>> patches;
+  // std::vector<std::vector<cv::Mat>> patches;
+  std::vector<std::pair<size_t, size_t>> patch_location_indices;
+  std::vector<at::Tensor> patch_tensors;
 
   for (size_t i = 0; i < paths.size(); i++) {
     float f = 0;
@@ -81,11 +83,22 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
       // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
       cv::Mat patch = GetPatchAtLocation(warped, state.translation);
-      patches[i][j] = patch;
+      if (patch.rows > 0) {
+        patch_location_indices.emplace_back(i, j);
+        auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte);
+        tensor_patch = tensor_patch.permute({ 2,0,1 }); // BGR -> RGB
+        patch_tensors.push_back(tensor_patch);
+      }
     }
   }
+  auto input_tensor = torch::stack(patch_tensors);
 
-  
+  std::vector<torch::jit::IValue> input;
+  input.push_back(input_tensor);
+
+  at::Tensor output = cost_module.forward(input).toTensor();
+
+  std::cout << "OUTPUT" << output <<std::endl;
 
   return best;
 }

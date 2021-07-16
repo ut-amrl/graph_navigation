@@ -50,6 +50,9 @@ struct PathRolloutBase {
   // The pose of the robot at the end of the path rollout.
   virtual pose_2d::Pose2Df EndPoint() const = 0;
 
+  // Return the pose the robot would be at for fraction f into the path rollout. f \in [0, 1]
+  virtual pose_2d::Pose2Df GetIntermediateState(float f) const = 0;
+
   // The obstacle clearance along the path.
   virtual float Clearance() const = 0;
 

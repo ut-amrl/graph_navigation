@@ -44,6 +44,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "sensor_msgs/LaserScan.h"
+#include "sensor_msgs/CompressedImage.h"
 #include "sensor_msgs/image_encodings.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
@@ -221,6 +222,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(can_traverse_stairs);
   REAL_PARAM(target_dist_tolerance);
   REAL_PARAM(target_vel_tolerance);
+  BOOL_PARAM(use_kinect);
+  STRING_PARAM(model_path);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -244,9 +247,27 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->can_traverse_stairs = CONFIG_can_traverse_stairs;
   params->target_dist_tolerance = CONFIG_target_dist_tolerance;
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
+  params->use_kinect = CONFIG_use_kinect;
+  params->model_path = CONFIG_model_path;
+
+  if (params->use_kinect) {
+    params->K = { 622.90532,   0.     , 639.44796, 0.     , 620.84752, 368.20234, 0.     ,   0.     ,   1.     };
+    params->D = { 0.092890, -0.046208, 0.000622, -0.001104, 0.000000 };
+    params->H.push_back({-0.5,-1.5,397,523});
+    params->H.push_back({0.5,-1.5,832,515});
+    params->H.push_back({0.5,-2.5,752,413});
+    params->H.push_back({-0.5,-2.5,491,416});
+  } else {
+    params->K = { 867.04679,   0.     , 653.18207, 0.     , 866.39461, 537.77518, 0.     ,   0.     ,   1.};
+    params->D = { -0.059124, 0.081963, 0.000743, 0.002461, 0.000000 };
+    params->H.push_back({-0.5,-1.5,369,696});
+    params->H.push_back({0.5,-1.5,971,687});
+    params->H.push_back({0.5,-2.5,835,570});
+    params->H.push_back({-0.5,-2.5,478,573});
+  }
 }
 
-void ImageCallback(const sensor_msgs::ImageConstPtr& msg) {
+void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
   try {
     cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
         msg, sensor_msgs::image_encodings::BGR8);
@@ -303,9 +324,7 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
       n.subscribe("halt_robot", 1, &HaltCallback);
-  image_transport::ImageTransport image_transport(n);
-  auto image_sub = image_transport.subscribe(
-      CONFIG_image_topic, 1, &ImageCallback);
+  ros::Subscriber image_sub = n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
 
   if (FLAGS_debug_images) cv::namedWindow(kOpenCVWindow);
   RateLoop loop(1.0 / params.dt);

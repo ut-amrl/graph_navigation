@@ -27,19 +27,10 @@
 #include <string>
 #include <vector>
 
-#include "gflags/gflags.h"
-#include "math/line2d.h"
-#include "math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-#include "torch/torch.h"
-#include "torch/script.h"
 
-#include "motion_primitives.h"
-#include "navigation_parameters.h"
-#include "constant_curvature_arcs.h"
-#include "ackermann_motion_primitives.h"
-#include "deep_irl_evaluator.h"
+#include "image_based_evaluator.h"
 
 using std::min;
 using std::max;
@@ -48,46 +39,36 @@ using std::vector;
 using std::shared_ptr;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
-using navigation::MotionLimits;
-using namespace geometry;
-using namespace math_util;
 
 namespace motion_primitives {
 
-bool DeepIRLEvaluator::LoadModel(const string& irl_model_path) {
-  try {
-    irl_module = torch::jit::load(irl_model_path);
-    return true;
-  } catch(const c10::Error& e) {
-    std::cout << "Error loading IRL model:\n" << e.msg();
-    return false;
+  cv::Mat ImageBasedEvaluator::GetWarpedImage() {
+    cv::Mat image_undistorted = image.clone();
+    cv::undistort(image, image_undistorted, cameraMatrix, distortionMatrix);
+    cv::Mat warped;
+    cv::warpPerspective(image_undistorted, warped, homography, image_undistorted.size());
+    return warped;
   }
-}
 
-shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
-    const vector<shared_ptr<PathRolloutBase>>& paths) {
-  if (paths.size() == 0) return nullptr;
-  shared_ptr<PathRolloutBase> best = nullptr;
+  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, Eigen::Vector2f location) {
+    Eigen::Vector2f transformed = Eigen::Vector2f(-location.y(), -location.x()).cwiseProduct(SCALING) + CENTER;
 
-  cv::Mat warped = GetWarpedImage();
+    cv::Point coord = cv::Point(transformed.x(), transformed.y());
 
-  std::vector<std::vector<cv::Mat>> patches;
-
-  for (size_t i = 0; i < paths.size(); i++) {
-    float f = 0;
-    for(size_t j = 0; j <= 10; j++) {
-      f += 0.1;
-      auto state = paths[i]->GetIntermediateState(f);
-
-      // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation);
-      patches[i][j] = patch;
+    if ((coord.y - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||
+        (coord.x - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||
+        (coord.y + (ImageBasedEvaluator::PATCH_SIZE / 2)) >= img.rows ||
+        (coord.x + (ImageBasedEvaluator::PATCH_SIZE / 2)) >= img.cols) {
+      return cv::Mat();
     }
+
+    cv::Rect patchBounds(coord.x - ImageBasedEvaluator::PATCH_SIZE / 2,
+                         coord.y - ImageBasedEvaluator::PATCH_SIZE / 2,
+                         ImageBasedEvaluator::PATCH_SIZE,
+                         ImageBasedEvaluator::PATCH_SIZE);
+
+    return img(patchBounds);
   }
 
-  
-
-  return best;
-}
 
 }  // namespace motion_primitives

@@ -86,6 +86,13 @@ struct NavigationParameters {
   // Velocity tolerance to reaching target.
   float target_vel_tolerance;
 
+  bool use_kinect;
+
+  std::string model_path;
+
+  std::vector<double> K;
+  std::vector<double> D;
+  std::vector<std::vector<float>> H;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -103,9 +110,10 @@ struct NavigationParameters {
       max_clearance(1.0),
       can_traverse_stairs(false),
       target_dist_tolerance(0.1),
-      target_vel_tolerance(0.1) {}
+      target_vel_tolerance(0.1),
+      use_kinect(true) {
+      }
 };
-
 }  // namespace navigation
 
 #endif  // NAVIGATION_PARAMETERS_H
