@@ -64,7 +64,7 @@ DEFINE_double(fw, -1, "Free path weight");
 DEFINE_double(costw, 0.1, "Image Cost weight");
 
 #define PERF_BENCHMARK 0
-#define VIS_IMAGES 1
+#define VIS_IMAGES 0
 
 namespace motion_primitives {
 
@@ -221,6 +221,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       cv::FILLED
     );
   }
+  
 
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);
@@ -231,11 +232,15 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   cv::imwrite("vis/warped_vis.png", warped_vis);
   #endif
 
+  #if PERF_BENCHMARK
+  auto t5 = high_resolution_clock::now();
+  #endif
 
   #if PERF_BENCHMARK
   std::cout << "Patch Collection Time" << (duration_cast<milliseconds>(t2 - t1)).count() << "ms" << std::endl;
   std::cout << "Network Execution Time" << (duration_cast<milliseconds>(t3 - t2)).count() << "ms" << std::endl;
   std::cout << "Linear Evaluation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
+  std::cout << "Visualization Time" << (duration_cast<milliseconds>(t5 - t4)).count() << "ms" << std::endl;
   #endif
   return best;
 }
