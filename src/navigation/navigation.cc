@@ -15,7 +15,7 @@
 /*!
 \file    navigation.cc
 \brief   Implementation for reference Navigation class.
-\author  Joydeep Biswas, (C) 2019
+\author  Joydeep Biswas, Jarrett Holtz, Kavan Sikand (C) 2021
 */
 //========================================================================
 
@@ -25,54 +25,30 @@
 #include <memory>
 #include <string>
 
-#include "geometry_msgs/Twist.h"
+#include "navigation.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
-#include "amrl_msgs/Pose2Df.h"
-#include "amrl_msgs/ColoredArc2D.h"
-#include "amrl_msgs/ColoredLine2D.h"
-#include "amrl_msgs/ColoredPoint2D.h"
-#include "amrl_msgs/VisualizationMsg.h"
 #include "glog/logging.h"
-#include "nav_msgs/Odometry.h"
-#include "nav_msgs/Path.h"
-#include "ros/ros.h"
-#include "sensor_msgs/PointCloud.h"
 #include "shared/math/math_util.h"
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
-#include "shared/ros/ros_helpers.h"
 #include "shared/util/timer.h"
-#include "navigation.h"
 #include "eight_connected_domain.h"
 #include "graph_domain.h"
 #include "astar.h"
-#include "visualization/visualization.h"
 
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "linear_evaluator.h"
 
-using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
-using geometry::Line2f;
-using amrl_msgs::AckermannCurvatureDriveMsg;
-using amrl_msgs::ColoredArc2D;
-using amrl_msgs::ColoredLine2D;
-using amrl_msgs::ColoredPoint2D;
-using amrl_msgs::Pose2Df;
-using amrl_msgs::VisualizationMsg;
-using geometry_msgs::Twist;
-using geometry_msgs::TwistStamped;
-using geometry_msgs::PoseStamped;
 using navigation::MotionLimits;
-using ros_helpers::DrawEigen2DLine;
-using sensor_msgs::PointCloud;
+using navigation::Odom;
+using navigation::Twist;
 using std::atan2;
 using std::deque;
 using std::max;
@@ -83,7 +59,6 @@ using std::string;
 using std::vector;
 
 using namespace math_util;
-using namespace ros_helpers;
 using namespace motion_primitives;
 
 // Special test modes.
@@ -96,76 +71,17 @@ DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
+
 DEFINE_bool(no_local, false, "can be used to turn off local planner");
 
-// Name of topic to publish twist messages to.
-DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "ROS topic to publish twist messages to.");
-
-// Option to disregard joystick safety for running in simulation.
-DEFINE_bool(no_joystick, false, "Disregards autonomy enable mode from joystick");
-
 namespace {
-ros::Publisher ackermann_drive_pub_;
-ros::Publisher twist_drive_pub_;
-ros::Publisher viz_pub_;
-ros::Publisher status_pub_;
-ros::Publisher fp_pcl_pub_;
-ros::Publisher path_pub_;
-ros::Publisher carrot_pub_;
-VisualizationMsg local_viz_msg_;
-VisualizationMsg global_viz_msg_;
-geometry_msgs::TwistStamped drive_msg_;
-PointCloud fp_pcl_msg_;
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
 
-// geometry_msgs::TwistStamped AckermannToTwist(
-//     const AckermannCurvatureDriveMsg& msg) {
-//   geometry_msgs::TwistStamped  twist_msg;
-//   twist_msg.header = msg.header;
-//   twist_msg.twist.linear.x = msg.velocity;
-//   twist_msg.twist.linear.y = 0;
-//   twist_msg.twist.linear.z = 0;
-//   twist_msg.twist.angular.x = 0;
-//   twist_msg.twist.angular.y = 0;
-//   twist_msg.twist.angular.z = msg.velocity * msg.curvature;
-//   CHECK(isfinite(twist_msg.twist.angular.z));
-//   return twist_msg;
-// }
+DEFINE_int32(num_options, 41, "Number of options to consider");
 
-AckermannCurvatureDriveMsg TwistToAckermann(
-    const geometry_msgs::TwistStamped& twist) {
-  AckermannCurvatureDriveMsg ackermann_msg;
-  ackermann_msg.header = twist.header;
-  ackermann_msg.velocity = twist.twist.linear.x;
-  if (fabs(ackermann_msg.velocity) < kEpsilon) {
-    ackermann_msg.curvature = 0;
-  } else {
-    ackermann_msg.curvature = twist.twist.angular.z / ackermann_msg.velocity;
-  }
-  return ackermann_msg;
-}
-
-nav_msgs::Path CarrotToNavMsgsPath (
-  const Vector2f carrot) {
-  nav_msgs::Path carrotNav;
-  carrotNav.header.stamp=ros::Time::now();
-  carrotNav.header.frame_id="map";
-  geometry_msgs::PoseStamped carrotPose;
-  carrotPose.pose.position.x = carrot.x();
-  carrotPose.pose.position.y = carrot.y();
-
-  carrotPose.pose.orientation.x = 0;
-  carrotPose.pose.orientation.y = 0;
-  carrotPose.pose.orientation.z = 0;
-  carrotPose.pose.orientation.w = 1;
-
-  carrotPose.header.stamp = ros::Time::now();
-  carrotPose.header.frame_id = "map";
-  carrotNav.poses.push_back(carrotPose);
-  return carrotNav;
-}
-
+// TODO(jaholtz) figure out how to handle this visualization without
+// having astar contain ros dependencies
 struct EightGridVisualizer {
   EightGridVisualizer(bool visualize) :
              kVisualize(visualize) { }
@@ -181,8 +97,8 @@ struct EightGridVisualizer {
             s2.x(),
             s2.y());
     }
-    visualization::DrawLine(s1, s2, 0x606060, global_viz_msg_);
-    viz_pub_.publish(global_viz_msg_);
+    // visualization::DrawLine(s1, s2, 0x606060, global_viz_msg_);
+    // viz_pub_.publish(global_viz_msg_);
     if (kDebug) Sleep(0.05);
   }
 
@@ -204,8 +120,8 @@ struct GraphVisualizer {
             s2.loc.x(),
             s2.loc.y());
     }
-    visualization::DrawLine(s1.loc, s2.loc, 0xC0C0C0, global_viz_msg_);
-    viz_pub_.publish(global_viz_msg_);
+    // visualization::DrawLine(s1.loc, s2.loc, 0xC0C0C0, global_viz_msg_);
+    // viz_pub_.publish(global_viz_msg_);
     if (kDebug) Sleep(0.05);
   }
 
@@ -222,6 +138,7 @@ Navigation::Navigation() :
     robot_vel_(0, 0),
     robot_omega_(0),
     nav_complete_(true),
+    pause_(false),
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
     odom_initialized_(false),
@@ -237,28 +154,8 @@ Navigation::Navigation() :
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
-                            const string& map_file,
-                            ros::NodeHandle* n) {
-  ackermann_drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
-      "ackermann_curvature_drive", 1);
-  twist_drive_pub_ = n->advertise<geometry_msgs::Twist>(
-      FLAGS_twist_drive_topic, 1);
-  status_pub_ = n->advertise<GoalStatus>(
-      "navigation_goal_status", 1);
-  viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
-  fp_pcl_pub_ = n->advertise<PointCloud>("forward_predicted_pcl", 1);
-  path_pub_ = n->advertise<nav_msgs::Path>(
-      "trajectory", 1, true);
-  carrot_pub_ = n->advertise<nav_msgs::Path>("carrot",1,true);
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
+                            const string& map_file) {
   // Initialize status message
-  status_msg_.status = 3;
-  status_msg_.text = "Navigation Status";
-  InitRosHeader("base_link", &drive_msg_.header);
-  InitRosHeader("base_link", &fp_pcl_msg_.header);
   params_ = params;
   planning_domain_ = GraphDomain(map_file, &params_);
   initialized_ = true;
@@ -274,34 +171,23 @@ void Navigation::Enable(bool enable) {
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
+  target_override_ = false;
+  pause_ = false;
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   nav_complete_ = false;
   plan_path_.clear();
 }
 
-void Navigation::ConvertPathToNavMsgsPath() {
-  if(plan_path_.size()>0){
-    nav_msgs::Path path;
-    path.header.stamp=ros::Time::now();
-    path.header.frame_id="map";
-    for (size_t i = 0; i < plan_path_.size(); i++) {
-      geometry_msgs::PoseStamped pose_plan;
-      pose_plan.pose.position.x = plan_path_[i].loc.x();
-      pose_plan.pose.position.y = plan_path_[i].loc.y();
 
-      pose_plan.pose.orientation.x = 0;
-      pose_plan.pose.orientation.y = 0;
-      pose_plan.pose.orientation.z = 0;
-      pose_plan.pose.orientation.w = 1;
+void Navigation::SetOverride(const Vector2f& loc, float angle) {
+  override_target_ = loc;
+  target_override_ = true;
+  pause_ = false;
+}
 
-      pose_plan.header.stamp = ros::Time::now();
-      pose_plan.header.frame_id = "map";
-      path.poses.push_back(pose_plan);
-
-      path_pub_.publish(path);
-    }
-  }
+void Navigation::Resume() {
+  target_override_ = false;
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -315,44 +201,12 @@ void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
   loc_initialized_ = true;
 }
 
-void Navigation::SendCommand(Eigen::Vector2f vel, float ang_vel) {
-  drive_msg_.header.stamp = ros::Time::now();
-  if (!FLAGS_no_joystick && !enabled_) {
-    vel.setZero();
-    ang_vel = 0;
-  }
-  
-  drive_msg_.twist.angular.x = 0;
-  drive_msg_.twist.angular.y = 0;
-  drive_msg_.twist.angular.z = ang_vel;
-  drive_msg_.twist.linear.x = vel.x();
-  drive_msg_.twist.linear.y = vel.y();
-  drive_msg_.twist.linear.z = 0;
-  // printf("SendCommand: %f %f %f\n", drive_msg_.twist.linear.x, drive_msg_.twist.linear.y, drive_msg_.twist.angular.z);
-
-  twist_drive_pub_.publish(drive_msg_.twist);
-
-  auto ackermann_msg = TwistToAckermann(drive_msg_);
-  ackermann_drive_pub_.publish(ackermann_msg);
-  // This command is going to take effect system latency period after. Hence
-  // modify the timestamp to reflect the time when it will take effect.
-  auto cmd_copy = drive_msg_;
-  cmd_copy.header.stamp += ros::Duration(params_.system_latency);
-  command_history_.push_back(cmd_copy);
-  if (false) {
-    printf("Push %7.3f %7.3f %7.3f\n",
-          command_history_.back().twist.linear.x,
-          command_history_.back().twist.linear.y,
-          command_history_.back().twist.angular.z);
-  }
-}
-
 void Navigation::PruneLatencyQueue() {
   if (command_history_.empty()) return;
   const double update_time = min(t_point_cloud_, t_odometry_);
   static const bool kDebug = false;
   for (size_t i = 0; i < command_history_.size(); ++i) {
-    const double t_cmd = command_history_[i].header.stamp.toSec();
+    const double t_cmd = command_history_[i].time;
     if (kDebug) {
       printf("Command %d %f\n", int(i), t_cmd - update_time);
     }
@@ -361,33 +215,32 @@ void Navigation::PruneLatencyQueue() {
         printf("Erase %d %f %f\n",
             int(i),
             t_cmd - update_time,
-            command_history_[i].twist.linear.x);
+            command_history_[i].linear.x());
       }
-      command_history_.erase(command_history_.begin() + i);
+      command_history_.erase( command_history_.begin() + i);
       --i;
     }
   }
 }
 
-void Navigation::UpdateOdometry(const nav_msgs::Odometry& msg) {
+void Navigation::UpdateOdometry(const Odom& msg) {
   latest_odom_msg_ = msg;
-  t_odometry_ = msg.header.stamp.toSec();
+  t_odometry_ = msg.time;
   PruneLatencyQueue();
   if (!odom_initialized_) {
-    starting_loc_ = Vector2f(msg.pose.pose.position.x, msg.pose.pose.position.y);
+    starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
     odom_initialized_ = true;
   }
 }
 
-void PublishForwardPredictedPCL(const vector<Vector2f>& pcl) {
-  fp_pcl_msg_.points.resize(pcl.size());
-  for (size_t i = 0; i < pcl.size(); ++i) {
-    fp_pcl_msg_.points[i].x = pcl[i].x();
-    fp_pcl_msg_.points[i].y = pcl[i].y();
-    fp_pcl_msg_.points[i].z = 0.324;
+void Navigation::UpdateCommandHistory(Twist twist) {
+  twist.time += params_.system_latency;
+  command_history_.push_back(twist);
+  if (false) {
+    printf("Push %f %f\n",
+          twist.linear.x(),
+          command_history_.back().linear.x());
   }
-  fp_pcl_msg_.header.stamp = ros::Time::now();
-  fp_pcl_pub_.publish(fp_pcl_msg_);
 }
 
 void Navigation::ForwardPredict(double t) {
@@ -395,42 +248,43 @@ void Navigation::ForwardPredict(double t) {
     robot_vel_ = Vector2f(0, 0);
     robot_omega_ = 0;
   } else {
-    const Twist latest_twist = command_history_.back().twist;
-    robot_vel_ = Vector2f(latest_twist.linear.x, latest_twist.linear.y);
-    robot_omega_ = latest_twist.angular.z;
+    const Twist latest_twist = command_history_.back();
+    robot_vel_ = Vector2f(latest_twist.linear.x(), latest_twist.linear.y());
+    robot_omega_ = latest_twist.angular.z();
   }
   if (false) {
     for (size_t i = 0; i < command_history_.size(); ++i) {
       const auto& c = command_history_[i];
-      printf("%d %f %f\n", int(i), t - c.header.stamp.toSec(), c.twist.linear.x);
+      printf("%d %f %f\n", int(i), t - c.time, c.linear.x());
     }
     printf("Predict: %f %f\n", t - t_odometry_, t - t_point_cloud_);
   }
-  const geometry_msgs::Pose odom_pose = latest_odom_msg_.pose.pose;
-  odom_loc_ = Vector2f(odom_pose.position.x, odom_pose.position.y);
-  odom_angle_ = 2.0f * atan2f(odom_pose.orientation.z, odom_pose.orientation.w);
+  odom_loc_ = Vector2f(latest_odom_msg_.position.x(),
+                       latest_odom_msg_.position.y());
+  odom_angle_ = 2.0f * atan2f(latest_odom_msg_.orientation.z(),
+                              latest_odom_msg_.orientation.w());
   using Eigen::Affine2f;
   using Eigen::Rotation2Df;
   using Eigen::Translation2f;
   Affine2f lidar_tf = Affine2f::Identity();
-  for (const TwistStamped& c : command_history_) {
-    const double cmd_time = c.header.stamp.toSec();
+  for (const Twist& c : command_history_) {
+    const double cmd_time = c.time;
     if (cmd_time > t) continue;
     if (cmd_time >= t_odometry_ - params_.dt) {
       const float dt = (t_odometry_ > cmd_time) ?
           min<double>(t_odometry_ - cmd_time, params_.dt) :
           min<double>(t - cmd_time, params_.dt);
       odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
-          c.twist.linear.x, c.twist.linear.y));
-      odom_angle_ = AngleMod(odom_angle_ + dt * c.twist.angular.z);
+          c.linear.x(), c.linear.y()));
+      odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
     }
     if (t_point_cloud_ >= cmd_time  - params_.dt) {
       const float dt = (t_point_cloud_ > cmd_time) ?
           min<double>(t_point_cloud_ - cmd_time, params_.dt) :
           min<double>(t - cmd_time, params_.dt);
       lidar_tf =
-          Translation2f(-dt * Vector2f(c.twist.linear.x, c.twist.linear.y)) *
-          Rotation2Df(-c.twist.angular.z * dt) *
+          Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
+          Rotation2Df(-c.angular.z() * dt) *
           lidar_tf;
     }
   }
@@ -438,10 +292,9 @@ void Navigation::ForwardPredict(double t) {
   for (size_t i = 0; i < point_cloud_.size(); ++i) {
     fp_point_cloud_[i] = lidar_tf * point_cloud_[i];
   }
-  PublishForwardPredictedPCL(fp_point_cloud_);
 }
 
-void Navigation::TrapezoidTest() {
+void Navigation::TrapezoidTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   if (!odom_initialized_) return;
   const float x = (odom_loc_ - starting_loc_).norm();
   const float speed = robot_vel_.norm();
@@ -450,12 +303,36 @@ void Navigation::TrapezoidTest() {
       x,
       speed,
       FLAGS_test_dist,
-      0, 
+      0,
       params_.dt);
-  SendCommand(Vector2f(velocity_cmd, 0), 0);
+  cmd_vel = {velocity_cmd, 0};
+  cmd_angle_vel = 0;
 }
 
-void Navigation::ObstacleTest() {
+void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
+  static FILE* fid = nullptr;
+  if (!FLAGS_test_log_file.empty() && fid == nullptr) {
+    fid = fopen(FLAGS_test_log_file.c_str(), "w");
+  }
+  const float kMaxSpeed = 0.75;
+  const float kFrequency = 0.4;
+
+  static double t_start_ = GetMonotonicTime();
+  const double t = GetMonotonicTime() - t_start_;
+  // float v_current = robot_vel_.x();
+  float v_cmd = kMaxSpeed *
+      sin(2.0 * M_PI * kFrequency * t);
+  cmd_vel = {v_cmd, 0};
+  cmd_angle_vel = 0.0;
+}
+
+void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
+  const Vector2f kTarget(4, 0);
+  local_target_ = kTarget;
+  RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+}
+
+void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const float speed = robot_vel_.norm();
   float free_path_length = 30.0;
   float clearance = 10;
@@ -468,9 +345,10 @@ void Navigation::ObstacleTest() {
       0,
       speed,
       dist_left,
-      0, 
+      0,
       params_.dt);
-  SendCommand(Vector2f(velocity_cmd, 0), 0);
+  cmd_vel = {velocity_cmd, 0};
+  cmd_angle_vel = 0;
 }
 
 Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
@@ -516,12 +394,6 @@ float GetClosestDistance(const PathOption& o, const Vector2f& target) {
   return (target - closest_point).norm();
 }
 
-void Navigation::ObstAvTest() {
-  const Vector2f kTarget(4, 0);
-  local_target_ = kTarget;
-  RunObstacleAvoidance();
-}
-
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
                                    double time) {
   point_cloud_ = cloud;
@@ -529,46 +401,51 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
   PruneLatencyQueue();
 }
 
-void Navigation::Plan(Eigen::Vector2f goal_loc) {
+vector<int> Navigation::GlobalPlan(const Vector2f& initial,
+                                   const Vector2f& end) {
+  auto plan = Plan(initial, end);
+  std::vector<int> path;
+  for (auto& node : plan ) {
+    path.push_back(node.id);
+  }
+  return path;
+}
+
+vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
+                                            const Vector2f& end) {
+  vector<GraphDomain::State> path;
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   static const bool kVisualize = true;
   typedef navigation::GraphDomain Domain;
   planning_domain_.ResetDynamicStates();
-  const uint64_t start_id = planning_domain_.AddDynamicState(robot_loc_);
-  const uint64_t goal_id = planning_domain_.AddDynamicState(goal_loc);
+  const uint64_t start_id = planning_domain_.AddDynamicState(initial);
+  const uint64_t goal_id = planning_domain_.AddDynamicState(end);
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
-  visualization::ClearVisualizationMsg(global_viz_msg_);
   GraphVisualizer graph_viz(kVisualize);
-  visualization::DrawCross(goal.loc, 0.2, 0xFF0000, global_viz_msg_);
-  visualization::DrawCross(start.loc, 0.2, 0x8F, global_viz_msg_);
   const bool found_path =
-      AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
+      AStar(start, goal, planning_domain_, &graph_viz, &path);
   if (found_path) {
-    const uint32_t path_color = 0x10A000;
-    CHECK(plan_path_.size() > 0);
+    CHECK(path.size() > 0);
     Vector2f s1 = plan_path_[0].loc;
     for (size_t i = 1; i < plan_path_.size(); ++i) {
       Vector2f s2 = plan_path_[i].loc;
-      visualization::DrawLine(s1, s2, path_color, global_viz_msg_);
       s1 = s2;
     }
-    viz_pub_.publish(global_viz_msg_);
-    ConvertPathToNavMsgsPath();
   } else {
     printf("No path found!\n");
   }
+  return path;
 }
 
 void Navigation::PlannerTest() {
   if (!loc_initialized_) return;
-  Plan(nav_goal_loc_);
+  Plan(robot_loc_, nav_goal_loc_);
 }
 
 DEFINE_double(max_plan_deviation, 0.5,
    "Maximum premissible deviation from the plan");
-
 bool Navigation::PlanStillValid() {
   if (plan_path_.size() < 2) return false;
   for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
@@ -680,127 +557,63 @@ Vector2f GetFinalPoint(const PathOption& o) {
   }
 }
 
-void Navigation::DrawRobot() {
-  {
-    // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * params_.robot_length - params_.base_link_offset - params_.obstacle_margin;
-    // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
-    const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l2, w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l2, w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, -w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-  }
-
-  {
-    // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * params_.robot_length - params_.base_link_offset;
-    // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * params_.robot_length - params_.base_link_offset;
-    const float w = 0.5 * params_.robot_width;
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l2, w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l2, w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, -w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
-  }
-}
-
 DEFINE_double(tx, 0.4, "Test obstacle point - X");
 DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 
-void Navigation::RunObstacleAvoidance() {
-  const bool debug = false;
+void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  // static const bool kDebug = false;
+  static const bool debug = false;
 
-  if (false) {
-    fp_point_cloud_ = {
-      Vector2f(FLAGS_tx, FLAGS_ty)
-    };
-    for (const Vector2f& v : fp_point_cloud_) {
-      visualization::DrawCross(v, 0.05, 0xFF0000, local_viz_msg_);
-    }
+  // Handling potential carrot overrides from social nav
+  Vector2f local_target = local_target_;
+  if (target_override_) {
+    local_target = override_target_;
   }
 
-  sampler_->Update(robot_vel_, robot_omega_, local_target_, fp_point_cloud_);
-  evaluator_->Update(robot_vel_, robot_omega_, local_target_, fp_point_cloud_);
+  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+  evaluator_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     printf("%lu options\n", paths.size());
     int i = 0;
     for (auto p : paths) {
-      ConstantCurvatureArc arc = 
+      ConstantCurvatureArc arc =
           *reinterpret_cast<ConstantCurvatureArc*>(p.get());
       printf("%3d: %7.5f %7.3f %7.3f\n",
           i++, arc.curvature, arc.length, arc.curvature);
-      visualization::DrawCross(arc.obstruction, 0.1, 0xFF0000, local_viz_msg_);
     }
   }
   if (paths.size() == 0) {
     // No options, just stop.
+    Halt(vel_cmd, ang_vel_cmd);
     if (debug) printf("No paths found\n");
-    Halt();
     return;
   }
   auto best_path = evaluator_->FindBest(paths);
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");
     // No valid path found!
-    Halt();
+    Halt(vel_cmd, ang_vel_cmd);
     return;
   }
-  for (shared_ptr<PathRolloutBase>& o : paths) {
-    ConstantCurvatureArc arc = 
-        *reinterpret_cast<ConstantCurvatureArc*>(o.get());
-    visualization::DrawPathOption(arc.curvature,
-                                  arc.length,
-                                  arc.clearance,
-                                  0x0000FF,
-                                  local_viz_msg_);
-  }
-  ConstantCurvatureArc arc = 
-        *reinterpret_cast<ConstantCurvatureArc*>(best_path.get());
-  visualization::DrawPathOption(arc.curvature,
-                                arc.length,
-                                arc.clearance,
-                                0xFF0000,
-                                local_viz_msg_);
-  if (debug) printf("Best Path Chosen %f\n", arc.curvature);
-
-  const Vector2f closest_point = best_path->EndPoint().translation;
-  visualization::DrawCross(closest_point, 0.05, 0x00A000, local_viz_msg_);
-  float ang_vel_cmd = 0;
-  Vector2f vel_cmd(0, 0);
+  ang_vel_cmd = 0;
+  vel_cmd = {0, 0};
 
   float max_map_speed = params_.linear_limits.max_speed;
   planning_domain_.GetClearanceAndSpeedFromLoc(
       robot_loc_, nullptr, &max_map_speed);
   auto linear_limits = params_.linear_limits;
-  linear_limits.max_speed = max_map_speed;
-  best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
-  if (debug) printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
-  // const float dist_left =
-  //     max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
-
-  // const float speed = robot_vel_.norm();
-  // float max_speed = min<float>(params_.linear_limits.speed,
-  //     sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
-  // max_speed = min(max_map_speed, max_speed);
-  // velocity_cmd = Run1DTOC(0, dist_left, speed, max_speed, params_.linear_limits.accel, params_.linear_limits.decel, params_.dt);
-  SendCommand(vel_cmd, ang_vel_cmd);
+  linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
+  best_path->GetControls(linear_limits,
+                         params_.angular_limits,
+                         params_.dt, robot_vel_,
+                         robot_omega_,
+                         vel_cmd,
+                         ang_vel_cmd);
 }
 
-void Navigation::Halt() {
+void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
   const float kEpsSpeed = 0.01;
   const float velocity = robot_vel_.x();
   float velocity_cmd = 0;
@@ -814,18 +627,17 @@ void Navigation::Halt() {
       velocity_cmd = 0;
     }
   }
-  // TODO: Motion profiling for omega.
-  // printf("%8.3f %8.3f\n", velocity, velocity_cmd);
-  // printf("cmd: %7.3f %7.3f %7.3f\n", velocity_cmd, 0.0, 0.0);
-  SendCommand(Vector2f(velocity_cmd, 0), 0);
+  cmd_vel = {velocity_cmd, 0};
+  //TODO: motion profiling for omega
+  angular_vel_cmd = 0;
 }
 
-void Navigation::TurnInPlace() {
+void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const float kMaxLinearSpeed = 0.1;
   const float velocity = robot_vel_.x();
   float angular_cmd = 0;
   if (fabs(velocity) > kMaxLinearSpeed) {
-    Halt();
+    Halt(cmd_vel, cmd_angle_vel);
     return;
   }
   const float goal_theta = atan2(local_target_.y(), local_target_.x());
@@ -838,135 +650,190 @@ void Navigation::TurnInPlace() {
       angular_cmd = robot_omega_ - Sign(robot_omega_) * dv;
     }
   } else {
-    // printf("Running TOC\n");
     const float s = Sign(goal_theta);
     angular_cmd = Run1DTimeOptimalControl(
         params_.linear_limits,
         0,
         robot_omega_,
         s * goal_theta,
-        0, 
+        0,
         params_.dt);
   }
   // TODO: Motion profiling for omega.
-  // printf("TurnInPlace: %8.3f %8.3f %8.3f\n",
-  //        RadToDeg(goal_theta),
-  //        RadToDeg(robot_omega_),
-  //        RadToDeg(angular_cmd));
-  SendCommand(Vector2f(0, 0), angular_cmd);
+  cmd_angle_vel = angular_cmd;
+  cmd_vel = {0, 0};
 }
 
-void Navigation::LatencyTest() {
-  static FILE* fid = nullptr;
-  if (!FLAGS_test_log_file.empty() && fid == nullptr) {
-    fid = fopen(FLAGS_test_log_file.c_str(), "w");
-  }
-  const float kMaxSpeed = 0.75;
-  const float kFrequency = 0.4;
-
-  static double t_start_ = GetMonotonicTime();
-  const double t = GetMonotonicTime() - t_start_;
-  float v_current = robot_vel_.x();
-  float v_cmd = kMaxSpeed *
-      sin(2.0 * M_PI * kFrequency * t);
-  SendCommand(Vector2f(v_cmd, 0), 0);
-  printf("t:%f current:%f cmd:%f\n", t, v_current, v_cmd);
-  if (fid != nullptr) {
-    fprintf(fid, "%f %f %f\n", t, v_current, v_cmd);
-  }
+void Navigation::Pause() {
+  pause_ = true;
 }
 
-void Navigation::Abort() {
-  if (!nav_complete_) {
-    printf("Abort!\n");
-  }
-  nav_complete_ = true;
+void Navigation::SetMaxVel(const float vel) {
+  params_.linear_limits.max_speed = vel;
 }
 
-void Navigation::Run() {
+void Navigation::SetMaxAccel(const float accel) {
+  params_.linear_limits.max_acceleration = accel;
+  return;
+}
+
+void Navigation::SetMaxDecel(const float decel) {
+  params_.linear_limits.max_deceleration = decel;
+  return;
+}
+
+void Navigation::SetAngAccel(const float accel) {
+  params_.angular_limits.max_acceleration = accel;
+  return;
+}
+
+void Navigation::SetAngVel(const float vel) {
+  params_.angular_limits.max_speed = vel;
+  return;
+}
+
+void Navigation::SetObstacleMargin(const float margin) {
+  params_.obstacle_margin = margin;
+  return;
+}
+
+void Navigation::SetClearanceWeight(const float weight) {
+  LinearEvaluator* evaluator =
+      dynamic_cast<LinearEvaluator*>(evaluator_.get());
+  evaluator->SetClearanceWeight(weight);
+  return;
+}
+
+void Navigation::SetCarrotDist(const float carrot_dist) {
+  params_.carrot_dist = carrot_dist;
+  return;
+}
+
+Eigen::Vector2f Navigation::GetTarget() {
+  return local_target_;
+}
+
+Eigen::Vector2f Navigation::GetOverrideTarget() {
+  return override_target_;
+}
+
+Eigen::Vector2f Navigation::GetVelocity() {
+  return robot_vel_;
+}
+
+float Navigation::GetAngularVelocity() {
+  return robot_omega_;
+}
+
+// contents
+string Navigation::GetNavStatus() {
+  string output = "Normal";
+  if (target_override_) {
+    output = "Override";
+  }
+  if (nav_complete_) {
+    output = "Complete";
+  }
+  return output;
+}
+
+vector<Vector2f> Navigation::GetPredictedCloud() {
+  return fp_point_cloud_;
+}
+
+float Navigation::GetCarrotDist() {
+  return params_.carrot_dist;
+}
+
+float Navigation::GetObstacleMargin() {
+  return params_.obstacle_margin;
+}
+
+vector<PathOption> Navigation::GetLastPathOptions() {
+  return last_options_;
+}
+
+PathOption Navigation::GetOption() {
+  return best_option_;
+}
+
+vector<GraphDomain::State> Navigation::GetPlanPath() {
+  return plan_path_;
+}
+
+void Navigation::Run(const double& time,
+                     Vector2f& cmd_vel,
+                     float& cmd_angle_vel) {
   const bool kDebug = false;
   if (!initialized_) {
     if (kDebug) printf("Not initialized\n");
     return;
   }
-  visualization::ClearVisualizationMsg(local_viz_msg_);
-  DrawRobot();
   if (!odom_initialized_) {
     if (kDebug) printf("Odometry not initialized\n");
     return;
   }
   ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
   if (FLAGS_test_toc) {
-    TrapezoidTest();
+    TrapezoidTest(cmd_vel, cmd_angle_vel);
     return;
   } else if (FLAGS_test_obstacle) {
-    ObstacleTest();
+    ObstacleTest(cmd_vel, cmd_angle_vel);
     return;
   } else if (FLAGS_test_avoidance) {
-    ObstAvTest();
-    viz_pub_.publish(local_viz_msg_);
+    ObstAvTest(cmd_vel, cmd_angle_vel);
     return;
   } else if (FLAGS_test_planner) {
     PlannerTest();
     return;
   } else if (FLAGS_test_latency) {
-    LatencyTest();
+    LatencyTest(cmd_vel, cmd_angle_vel);
     return;
   }
 
-  // Publish Navigation Status
-  if (nav_complete_) {
-    if (kDebug) printf("Nav complete\n");
-    Halt();
-    status_msg_.status = 3;
-    status_pub_.publish(status_msg_);
-    viz_pub_.publish(local_viz_msg_);
-    return;
-  }
-  status_msg_.status = 1;
-  status_pub_.publish(status_msg_);
+  ForwardPredict(time + params_.system_latency);
+
+  // Replan as necessary (Global Plan)
   if (!PlanStillValid()) {
     if (kDebug) printf("Replanning\n");
-    Plan(nav_goal_loc_);
+    plan_path_ = Plan(robot_loc_, nav_goal_loc_);
   }
-  // Get Carrot.
+
+  // Get Carrot and check if done
   const Vector2f carrot = GetCarrot();
-  carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
-  auto msg_copy = global_viz_msg_;
-  visualization::DrawCross(carrot, 0.2, 0x10E000, msg_copy);
-  visualization::DrawArc(
-      Vector2f(0, 0), params_.carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
-  viz_pub_.publish(msg_copy);
   // Check if complete.
-  nav_complete_ = 
+  nav_complete_ =
       (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
-  // Run local planner.
-  if (nav_complete_) {
-    if (kDebug) printf("Now complete\n");
-    Halt();
+  // Halt if necessary
+  if (nav_complete_ || pause_) {
+    Halt(cmd_vel, cmd_angle_vel);
+    return;
   } else {
     // TODO check if the robot needs to turn around.
-    local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+    // TODO(jaholtz) kLocalFOV should be a parameter
     static const float kLocalFOV = DegToRad(60.0);
-    const float theta = atan2(local_target_.y(), local_target_.x());
-    if (local_target_.squaredNorm() > Sq(params_.carrot_dist)) {
-      local_target_ = params_.carrot_dist * local_target_.normalized();
+    // Local Navigation
+    local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+    // Handling social navigation override target
+    Vector2f local_target = local_target_;
+    if (target_override_) {
+      local_target = override_target_;
     }
-    visualization::DrawCross(local_target_, 0.2, 0xFF0080, local_viz_msg_);
+    const float theta = atan2(local_target.y(), local_target.x());
+    if (local_target.squaredNorm() > Sq(params_.carrot_dist)) {
+      local_target = params_.carrot_dist * local_target.normalized();
+    }
     if (!FLAGS_no_local) {
-      // printf("Local target: %8.3f, %8.3f (%6.1f\u00b0)\n",
-      //     local_target_.x(), local_target_.y(), RadToDeg(theta));
       if (fabs(theta) > kLocalFOV) {
         if (kDebug) printf("TurnInPlace\n");
-        TurnInPlace();
+        TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
         if (kDebug) printf("ObstAv\n");
-        RunObstacleAvoidance();
+        RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
       }
     }
   }
-  viz_pub_.publish(local_viz_msg_);
 }
 
 }  // namespace navigation

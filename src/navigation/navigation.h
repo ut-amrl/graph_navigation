@@ -15,7 +15,7 @@
 /*!
 \file    navigation.h
 \brief   Interface for reference Navigation class.
-\author  Joydeep Biswas, (C) 2019
+\author  Joydeep Biswas, Jarrett Holtz, Kavan Sikand (C) 2021
 */
 //========================================================================
 
@@ -23,10 +23,7 @@
 #include <memory>
 #include <vector>
 
-#include "actionlib_msgs/GoalStatus.h"
 #include "eigen3/Eigen/Dense"
-#include "geometry_msgs/TwistStamped.h"
-#include "nav_msgs/Odometry.h"
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -36,10 +33,6 @@
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
-
-namespace ros {
-  class NodeHandle;
-}  // namespace ros
 
 namespace navigation {
 
@@ -64,17 +57,31 @@ struct PathOption {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 };
 
+struct Twist {
+  double time;
+  Eigen::Vector3f linear;
+  Eigen::Vector3f angular;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+};
+
+struct Odom {
+  double time;
+  Eigen::Vector3f position;
+  Eigen::Quaternionf orientation;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+};
+
 class Navigation {
  public:
-
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
-  void UpdateOdometry(const nav_msgs::Odometry& msg);
+  void UpdateOdometry(const Odom& msg);
+  void UpdateCommandHistory(Twist twist);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
-  void Run();
+  void Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
   void GetFreePathLength(float curvature,
@@ -82,41 +89,65 @@ class Navigation {
                          float* clearance,
                          Eigen::Vector2f* obstruction);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
+  void SetOverride(const Eigen::Vector2f& loc, float angle);
+  void Resume();
   bool PlanStillValid();
   void Plan(Eigen::Vector2f goal_loc);
+  std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,
+                                       const Eigen::Vector2f& end);
+  std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
+                              const Eigen::Vector2f& end);
+  std::vector<GraphDomain::State> GetPlanPath();
   Eigen::Vector2f GetCarrot();
   // Enable or disable autonomy.
   void Enable(bool enable);
   // Indicates whether autonomy is enabled or not.
   bool Enabled() const;
   // Stop all navigation functions.
-  void Abort();
+  void Pause();
   // Set parameters for navigation.
   void Initialize(const NavigationParameters& params,
-                  const std::string& map_file,
-                  ros::NodeHandle* ros_node_handle);
+                  const std::string& map_file);
+
+  // Allow client programs to configure navigation parameters
+  void SetMaxVel(const float vel);
+  void SetMaxAccel(const float accel);
+  void SetMaxDecel(const float decel);
+  void SetAngAccel(const float accel);
+  void SetAngVel(const float vel);
+  void SetObstacleMargin(const float margin);
+  void SetCarrotDist(const float dist);
+  void SetClearanceWeight(const float weight);
+
+  // Getter
+  Eigen::Vector2f GetTarget();
+  Eigen::Vector2f GetOverrideTarget();
+  Eigen::Vector2f GetVelocity();
+  float GetAngularVelocity();
+  std::string GetNavStatus();
+  std::vector<Eigen::Vector2f> GetPredictedCloud();
+  float GetCarrotDist();
+  float GetObstacleMargin();
+  std::vector<PathOption> GetLastPathOptions();
+  PathOption GetOption();
 
  private:
 
   // Test 1D TOC motion in a straight line.
-  void TrapezoidTest();
+  void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test driving straight up to the next obstacle.
-  void ObstacleTest();
+  void ObstacleTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test obstacle avoidance.
-  void ObstAvTest();
+  void ObstAvTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test planner.
   void PlannerTest();
   // Run obstacle avoidance local planner.
-  void RunObstacleAvoidance();
+  void RunObstacleAvoidance(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Latency testing routine.
-  void LatencyTest();
-  // Send and queue command for latency compensation.
-  void SendCommand(Eigen::Vector2f vel, float ang_vel);
+  void LatencyTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Remove commands older than latest real robot updates (odometry and LIDAR),
   // accounting for latency.
-  void PruneLatencyQueue();
-  // Perform latency compensation by forward-predicting the commands within the
-  // latency interval.
+  void PruneLatencyQueue(); // Perform latency compensation by forward-predicting the commands within the latency interval.
   void ForwardPredict(double t);
   // Run 1D TOC.
   float Run1DTOC(float x_now,
@@ -127,15 +158,17 @@ class Navigation {
                  float d_max,
                  float dt) const;
   // Come to a halt.
-  void Halt();
+  void Halt(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Turn around in-place to face the next waypoint.
-  void TurnInPlace();
+  void TurnInPlace(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Rule out path options that would violate dynamic constraints.
   void ApplyDynamicConstraints(std::vector<PathOption>* options);
   // Get available path options for next time-step.
   void GetPathOptions(std::vector<PathOption>* options);
   // Draw the robot's outline for visualization.
   void DrawRobot();
+  // Publish a status message
+  void PublishNavStatus(const Eigen::Vector2f& carrot);
 
   // Current robot location.
   Eigen::Vector2f robot_loc_;
@@ -150,10 +183,11 @@ class Navigation {
   // Odometry-reported robot angle.
   float odom_angle_;
   // Newest odometry message received.
-  nav_msgs::Odometry latest_odom_msg_;
+  Odom latest_odom_msg_;
 
   // Whether navigation is complete.
   bool nav_complete_;
+  bool pause_;
   // Navigation goal location.
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.
@@ -187,15 +221,16 @@ class Navigation {
   // reference frame.
   Eigen::Vector2f local_target_;
 
-  // Message for status publishing
-  actionlib_msgs::GoalStatus status_msg_;
+  // Global frame, set by an override message
+  Eigen::Vector2f override_target_;
+
+  // // Message for status publishing
 
   // History of commands sent, to perform latency compensation.
-  std::deque<geometry_msgs::TwistStamped> command_history_;
+  std::deque<Twist> command_history_;
 
   // Whether to enable autonomous navigation or not.
   bool enabled_;
-
   // Navigation parameters.
   NavigationParameters params_;
 
@@ -207,6 +242,13 @@ class Navigation {
 
   // Path evaluator.
   std::unique_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
+
+  // Whether or not local carrot is overriden
+  bool target_override_;
+  // Last Set of path options sampled
+  std::vector<PathOption> last_options_;
+  // Last PathOption taken
+  PathOption best_option_;
 };
 
 }  // namespace navigation
