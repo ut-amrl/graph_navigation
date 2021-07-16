@@ -52,6 +52,9 @@ using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
 
+#define VIS_IMAGES 0
+#define PERF_BENCHMARK 0
+
 namespace motion_primitives {
 
 bool DeepIRLEvaluator::LoadModel(const string& irl_model_path) {
@@ -71,22 +74,112 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
   cv::Mat warped = GetWarpedImage();
 
-  std::vector<std::vector<cv::Mat>> patches;
+  # if VIS_IMAGES
+  cv::Mat warped_vis = warped.clone();
+  #endif
 
+  std::vector<std::pair<size_t, size_t>> patch_location_indices;
+  std::vector<at::Tensor> irl_input_tensors;
+
+  #if PERF_BENCHMARK
+  auto t1 = high_resolution_clock::now();
+  #endif
+
+  at::Tensor patch_rewards = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
-    float f = 0;
-    for(size_t j = 0; j <= 10; j++) {
-      f += 0.1;
+    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
 
-      // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation, false);
-      patches[i][j] = patch;
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, true).clone();
+      if (patch.rows > 0) {
+        patch_location_indices.emplace_back(i, j);
+        cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
+
+        auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
+        tensor_patch = tensor_patch.permute({ 2,0,1 }); 
+        
+        const float angle_progress = 0.0f; // TODO: Compute angle progress (how much closer is the angle at this state to facing the goal vs. the original angle)
+        auto tensor_angle = torch::full(1, angle_progress);
+        const float distance_travelled = 0.0f; // TODO: compute distance travelled (should just be the norm of `state.translation`)
+        auto tensor_distance = torch::full(1, distance_travelled);
+        const float goal_progress = 0.0f;  // TODO: Compute goal progress (how much closer is the location at this state to facing the goal vs. the original location) (should be able to extract from linear)
+        auto tensor_progress = torch::full(1, goal_progress);
+        const float validity = 0.0f; // TODO: Compute validity (maybe just leave 0 for now?)
+        auto tensor_validity = torch::full(1, validity);
+
+        irl_input_tensors.push_back(torch::cat({
+          tensor_validity,
+          tensor_progress,
+          tensor_distance,
+          tensor_angle,
+          tensor_patch
+        }));
+      } else {
+        patch_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD;
+      }
     }
   }
 
-  
+  auto input_tensor = torch::stack(irl_input_tensors);
 
+  std::vector<torch::jit::IValue> input;
+  input.push_back(input_tensor);
+
+  #if PERF_BENCHMARK
+  auto t2 = high_resolution_clock::now();
+  printf("Evaluating %ld values...\n", input_tensor.size(0));
+  #endif
+
+  at::Tensor output = irl_module.forward(input).toTensor();
+
+  #if PERF_BENCHMARK
+  auto t3 = high_resolution_clock::now();
+  #endif
+
+  for(int i = 0; i < output.size(0); i++) {
+    auto patch_loc_index = patch_location_indices[i];
+    patch_rewards[patch_loc_index.first] += output[i];
+  }
+
+  auto best_idx = torch::argmax(patch_rewards).item<int>();
+  best = paths[best_idx];
+  #if PERF_BENCHMARK
+  auto t4 = high_resolution_clock::now();
+  #endif
+
+  # if VIS_IMAGES
+  cv::Mat rewards = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
+  cv::Mat vis_rewards;
+  cv::normalize(rewards, vis_rewards, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
+  for(int i = 0; i < vis_rewards.rows; i++) {
+    auto patch_loc_index = patch_location_indices[i];
+    float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
+    auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+    auto image_loc = GetImageLocation(state.translation);
+    cv::rectangle(warped_vis,
+      cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
+      cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
+      cv::Scalar(int(vis_costs.at<float>(i, 0), 0, 0)),
+      cv::FILLED
+    );
+  }
+
+  for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
+    auto state = best->GetIntermediateState(f);
+    auto image_loc = GetImageLocation(state.translation);
+    cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
+  }
+
+  cv::imwrite("vis/warped_vis.png", warped_vis);
+  #endif
+
+
+  #if PERF_BENCHMARK
+  std::cout << "Patch Collection Time" << (duration_cast<milliseconds>(t2 - t1)).count() << "ms" << std::endl;
+  std::cout << "Network Execution Time" << (duration_cast<milliseconds>(t3 - t2)).count() << "ms" << std::endl;
+  std::cout << "Linear Evaluation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
+  #endif
   return best;
 }
 

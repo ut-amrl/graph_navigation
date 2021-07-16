@@ -66,8 +66,6 @@ DEFINE_double(costw, 0.1, "Image Cost weight");
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 
-size_t ROLLOUT_DENSITY = 20;
-
 namespace motion_primitives {
 
 bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
@@ -91,7 +89,6 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   cv::Mat warped_vis = warped.clone();
   #endif
 
-  // std::vector<std::vector<cv::Mat>> patches;
   std::vector<std::pair<size_t, size_t>> patch_location_indices;
   std::vector<at::Tensor> patch_tensors;
 
@@ -101,11 +98,10 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
-    for(size_t j = 0; j <= ROLLOUT_DENSITY; j++) {
-      float f = 1.0f / ROLLOUT_DENSITY * j;
+    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
 
-      // printf("path state %f: %f, (%f %f)\n", f, state.angle, state.translation.x(), state.translation.y());
       cv::Mat patch = GetPatchAtLocation(warped, state.translation, true).clone();
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
@@ -215,7 +211,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   cv::normalize(costs, vis_costs, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
   for(int i = 0; i < vis_costs.rows; i++) {
     auto patch_loc_index = patch_location_indices[i];
-    float f = 1.0f / ROLLOUT_DENSITY * patch_loc_index.second;
+    float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
     auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
     auto image_loc = GetImageLocation(state.translation);
     cv::rectangle(warped_vis,
@@ -226,7 +222,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     );
   }
 
-  for(float f = 0; f < 1.0; f += 1.0f / ROLLOUT_DENSITY) {
+  for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);
     auto image_loc = GetImageLocation(state.translation);
     cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);

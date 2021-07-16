@@ -78,6 +78,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static const int PATCH_SIZE = 40;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.35f;
+  static const size_t ROLLOUT_DENSITY = 20;
 };
 
 }  // namespace motion_primitives

@@ -43,6 +43,8 @@ struct DeepIRLEvaluator :  ImageBasedEvaluator {
 
   // Torchscript definition of the network.
   torch::jit::script::Module irl_module;
+
+  static constexpr float UNCERTAINTY_REWARD = 0.0f;
 };
 
 }  // namespace motion_primitives
