@@ -1,5 +1,5 @@
 PROJECT(reference_car)
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 
 MESSAGE(STATUS "Compiling Reference Car Localization + Navigation")
 MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
@@ -25,7 +25,7 @@ SET(ROS_BUILD_SHARED_LIBS false)
 
 LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
 FIND_PACKAGE(Torch REQUIRED)
-FIND_PACKAGE( OpenCV REQUIRED )
+FIND_PACKAGE(OpenCV REQUIRED)
 
 IF(NOT ROS_BUILD_TYPE)
   SET(ROS_BUILD_TYPE Release)
@@ -33,6 +33,8 @@ ENDIF()
 
 MESSAGE(STATUS "ROS-Overrride Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "CXX Flags: ${CMAKE_CXX_FLAGS}")
+MESSAGE(STATUS "LibTorch location: ${TORCH_INCLUDE_DIRS}")
+MESSAGE(STATUS "LibTorch libraries: ${TORCH_LIBRARIES}")
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
@@ -53,11 +55,6 @@ INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
-ADD_LIBRARY(deep_irl_evaluator  
-            src/navigation/deep_irl_evaluator.cc)
-TARGET_LINK_LIBRARIES(deep_irl_evaluator 
-    shared_library ${TORCH_LIBRARIES} ${OpenCV_LIBS})
-
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
                         src/navigation/navigation.cc
@@ -65,9 +62,10 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/ackermann_motion_primitives.cc
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
+                        src/navigation/deep_irl_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
-    shared_library deep_irl_evaluator ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
 
 ADD_EXECUTABLE(navigation_tests
