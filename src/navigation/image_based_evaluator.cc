@@ -54,7 +54,7 @@ namespace motion_primitives {
     return Eigen::Vector2f(-rel_loc.y(), -rel_loc.x()).cwiseProduct(SCALING) + CENTER;
   }
 
-  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, bool filter_empty) {
+  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty) {
     Eigen::Vector2f image_loc = GetImageLocation(location);
     cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
 
@@ -78,10 +78,11 @@ namespace motion_primitives {
       cv::cvtColor(patch, patch_gray, cv::COLOR_BGR2GRAY);
       int pixelCount = ImageBasedEvaluator::PATCH_PIXEL_COUNT;
       int zeroPixels = pixelCount - cv::countNonZero(patch_gray);
-
-      if (float(zeroPixels) / pixelCount > ImageBasedEvaluator::PATCH_EMPTY_THRESHOLD) {
+      float val = float(zeroPixels) / pixelCount;
+      if (val > ImageBasedEvaluator::PATCH_EMPTY_THRESHOLD) {
         return cv::Mat();
       }
+      *validity = val;
     }
 
     return patch;

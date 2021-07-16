@@ -224,6 +224,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(target_vel_tolerance);
   BOOL_PARAM(use_kinect);
   STRING_PARAM(model_path);
+  STRING_PARAM(embedding_model_path);
+  STRING_PARAM(evaluator_type);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -249,6 +251,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
   params->use_kinect = CONFIG_use_kinect;
   params->model_path = CONFIG_model_path;
+  params->embedding_model_path = CONFIG_embedding_model_path;
+  params->evaluator_type = CONFIG_evaluator_type;
 
   if (params->use_kinect) {
     params->K = { 622.90532,   0.     , 639.44796, 0.     , 620.84752, 368.20234, 0.     ,   0.     ,   1.     };

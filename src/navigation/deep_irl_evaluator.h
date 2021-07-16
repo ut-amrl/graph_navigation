@@ -35,14 +35,16 @@ namespace motion_primitives {
 struct DeepIRLEvaluator :  ImageBasedEvaluator {
   DeepIRLEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect) : ImageBasedEvaluator(K, D, H, kinect) {};
 
-  bool LoadModel(const std::string& irl_model_path);
+  bool LoadModels(const std::string& embedding_model_path, const std::string& irl_model_path);
 
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
 
-  // Torchscript definition of the network.
+  // Torchscript definition of the deep irl network.
   torch::jit::script::Module irl_module;
+    // Torchscript definition of the embedding network.
+  torch::jit::script::Module embedding_module;
 
   static constexpr float UNCERTAINTY_REWARD = 0.0f;
 };

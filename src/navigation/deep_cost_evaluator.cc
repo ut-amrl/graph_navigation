@@ -101,8 +101,8 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation, true).clone();
+      float validity;
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, true).clone();
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
         cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB

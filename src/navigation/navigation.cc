@@ -56,6 +56,7 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_evaluator.h"
+#include "deep_irl_evaluator.h"
 
 using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
@@ -263,9 +264,20 @@ void Navigation::Initialize(const NavigationParameters& params,
   initialized_ = true;
   sampler_->SetNavParams(params);
   
-  auto deep_evaluator = new DeepCostEvaluator(params.K, params.D, params.H, params.use_kinect);
-  deep_evaluator->LoadModel(params.model_path);
-  evaluator_ = std::unique_ptr<PathEvaluatorBase>(deep_evaluator);
+  PathEvaluatorBase* evaluator;
+  if (params_.evaluator_type == "cost") {
+    auto deep_evaluator = new DeepCostEvaluator(params.K, params.D, params.H, params.use_kinect);
+    deep_evaluator->LoadModel(params.model_path);
+    evaluator = (PathEvaluatorBase*) deep_evaluator;
+  } else if (params_.evaluator_type == "irl") {
+    auto deep_evaluator = new DeepIRLEvaluator(params.K, params.D, params.H, params.use_kinect);
+    deep_evaluator->LoadModels(params.embedding_model_path, params.model_path);
+    evaluator = (PathEvaluatorBase*) deep_evaluator;
+  } else {
+    printf("Uknown evaluator type %s\n", params.evaluator_type.c_str());
+    exit(1);
+  }
+  evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
 }
 
 bool Navigation::Enabled() const {

@@ -40,6 +40,7 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "deep_irl_evaluator.h"
+#include <chrono>
 
 using std::min;
 using std::max;
@@ -51,18 +52,23 @@ using Eigen::Vector2f;
 using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::duration;
+using std::chrono::milliseconds;
 
 #define VIS_IMAGES 0
-#define PERF_BENCHMARK 0
+#define PERF_BENCHMARK 1
 
 namespace motion_primitives {
 
-bool DeepIRLEvaluator::LoadModel(const string& irl_model_path) {
+bool DeepIRLEvaluator::LoadModels(const string& embedding_model_path, const string& irl_model_path) {
   try {
+    embedding_module = torch::jit::load(embedding_model_path);
     irl_module = torch::jit::load(irl_model_path);
     return true;
   } catch(const c10::Error& e) {
-    std::cout << "Error loading IRL model:\n" << e.msg();
+    std::cout << "Error loading models:\n" << e.msg();
     return false;
   }
 }
@@ -79,7 +85,8 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
   #endif
 
   std::vector<std::pair<size_t, size_t>> patch_location_indices;
-  std::vector<at::Tensor> irl_input_tensors;
+  std::vector<at::Tensor> patch_tensors;
+  std::vector<at::Tensor> irl_feature_tensors;
 
   #if PERF_BENCHMARK
   auto t1 = high_resolution_clock::now();
@@ -90,8 +97,8 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation, true).clone();
+      float validity;
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, false).clone();
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
         cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
@@ -101,36 +108,47 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
         
         const float angle_progress = 0.0f; // TODO: Compute angle progress (how much closer is the angle at this state to facing the goal vs. the original angle)
         auto tensor_angle = torch::full(1, angle_progress);
-        const float distance_travelled = 0.0f; // TODO: compute distance travelled (should just be the norm of `state.translation`)
+        const float distance_travelled = state.translation.norm();
         auto tensor_distance = torch::full(1, distance_travelled);
-        const float goal_progress = 0.0f;  // TODO: Compute goal progress (how much closer is the location at this state to facing the goal vs. the original location) (should be able to extract from linear)
+        const float goal_progress = local_target.norm() - (local_target - state.translation).norm();
         auto tensor_progress = torch::full(1, goal_progress);
-        const float validity = 0.0f; // TODO: Compute validity (maybe just leave 0 for now?)
         auto tensor_validity = torch::full(1, validity);
 
-        irl_input_tensors.push_back(torch::cat({
+        // printf("features %f %f %f %f\n", angle_progress, distance_travelled, goal_progress, validity);
+
+        irl_feature_tensors.push_back(torch::cat({
           tensor_validity,
           tensor_progress,
           tensor_distance,
-          tensor_angle,
-          tensor_patch
+          tensor_angle
         }));
+        patch_tensors.push_back(tensor_patch);
       } else {
         patch_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD;
       }
     }
   }
 
-  auto input_tensor = torch::stack(irl_input_tensors);
+  #if PERF_BENCHMARK
+  auto t2 = high_resolution_clock::now();
+  printf("Evaluating %ld values...\n", patch_tensors.size());
+  #endif
+
+  auto patch_tensor = torch::stack(patch_tensors);
+
+  std::vector<torch::jit::IValue> emb_input;
+  emb_input.push_back(patch_tensor);
+
+  at::Tensor embeddings = embedding_module.forward(emb_input).toTensor();
+
+  auto feature_tensor = torch::stack(irl_feature_tensors);
+
+  auto input_tensor = torch::cat({feature_tensor, embeddings}, 1);
 
   std::vector<torch::jit::IValue> input;
   input.push_back(input_tensor);
 
-  #if PERF_BENCHMARK
-  auto t2 = high_resolution_clock::now();
-  printf("Evaluating %ld values...\n", input_tensor.size(0));
-  #endif
-
+  // std::cout << input_tensor.size() << std::endl;
   at::Tensor output = irl_module.forward(input).toTensor();
 
   #if PERF_BENCHMARK

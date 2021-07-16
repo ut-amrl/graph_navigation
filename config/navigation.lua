@@ -29,7 +29,9 @@ NavigationParameters = {
   use_kinect = false;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
-  model_path = "/home/kavan/Research/AMRL/preference_learning/comprehensive_models/cost_model.pt"
+  model_path = "/home/kavan/Research/AMRL/preference_learning/comprehensive_models/jit_irl_model_indoor.pt";
+  embedding_model_path = "/home/kavan/Research/AMRL/preference_learning/comprehensive_models/jit_emb_model_indoor.pt";
+  evaluator_type = "irl";
 };
 
 AckermannSampler = {

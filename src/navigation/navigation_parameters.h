@@ -88,6 +88,9 @@ struct NavigationParameters {
 
   bool use_kinect;
 
+  std::string evaluator_type;
+
+  std::string embedding_model_path;
   std::string model_path;
 
   std::vector<double> K;
@@ -111,7 +114,8 @@ struct NavigationParameters {
       can_traverse_stairs(false),
       target_dist_tolerance(0.1),
       target_vel_tolerance(0.1),
-      use_kinect(true) {
+      use_kinect(true),
+      evaluator_type("cost") {
       }
 };
 }  // namespace navigation
