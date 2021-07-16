@@ -563,7 +563,7 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const bool kDebug = false;
+  static const bool debug = false;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
@@ -574,7 +574,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   evaluator_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   auto paths = sampler_->GetSamples(params_.num_options);
-  if (kDebug) {
+  if (debug) {
     printf("%lu options\n", paths.size());
     int i = 0;
     for (auto p : paths) {
@@ -587,10 +587,12 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   if (paths.size() == 0) {
     // No options, just stop.
     Halt(vel_cmd, ang_vel_cmd);
+    if (debug) printf("No paths found\n");
     return;
   }
   auto best_path = evaluator_->FindBest(paths);
   if (best_path == nullptr) {
+    if (debug) printf("No best path found\n");
     // No valid path found!
     Halt(vel_cmd, ang_vel_cmd);
     return;
@@ -767,7 +769,10 @@ void Navigation::Run(const double& time,
     if (kDebug) printf("Not initialized\n");
     return;
   }
-  if (!odom_initialized_) return;
+  if (!odom_initialized_) {
+    if (kDebug) printf("Odometry not initialized\n");
+    return;
+  }
   ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
@@ -790,6 +795,7 @@ void Navigation::Run(const double& time,
 
   // Replan as necessary (Global Plan)
   if (!PlanStillValid()) {
+    if (kDebug) printf("Replanning\n");
     plan_path_ = Plan(robot_loc_, nav_goal_loc_);
   }
 
