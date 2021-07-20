@@ -87,6 +87,7 @@ struct NavigationParameters {
   float target_vel_tolerance;
 
   bool use_kinect;
+  bool blur;
 
   std::string evaluator_type;
 
@@ -115,6 +116,7 @@ struct NavigationParameters {
       target_dist_tolerance(0.1),
       target_vel_tolerance(0.1),
       use_kinect(true),
+      blur(false),
       evaluator_type("cost") {
       }
 };

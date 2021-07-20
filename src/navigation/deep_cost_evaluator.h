@@ -27,6 +27,7 @@
 #include "motion_primitives.h"
 #include "image_based_evaluator.h"
 #include "deep_cost_model.h"
+#include <opencv2/videoio.hpp>
 
 #ifndef DEEP_COST_EVALUATOR_H
 #define DEEP_COST_EVALUATOR_H
@@ -34,8 +35,9 @@
 namespace motion_primitives {
 
 struct DeepCostEvaluator :  ImageBasedEvaluator {
-  DeepCostEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect) :
-    ImageBasedEvaluator(K, D, H, kinect) {};
+  DeepCostEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect, bool blur) :
+    ImageBasedEvaluator(K, D, H, kinect), blur_(blur) {
+    };
     //cost_module(navigation::EmbeddingNet(6), navigation::CostNet(6)) 
 
   bool LoadModel(const std::string& irl_model_path);
@@ -48,6 +50,9 @@ struct DeepCostEvaluator :  ImageBasedEvaluator {
   torch::jit::script::Module cost_module;
 
   static constexpr float UNCERTAINTY_COST = 2.0f;
+
+  cv::VideoWriter outputVideo;
+  bool blur_;
 };
 
 }  // namespace motion_primitives

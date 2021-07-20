@@ -33,7 +33,7 @@
 namespace motion_primitives {
 
 struct DeepIRLEvaluator :  ImageBasedEvaluator {
-  DeepIRLEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect) : ImageBasedEvaluator(K, D, H, kinect) {};
+  DeepIRLEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect, bool blur) : ImageBasedEvaluator(K, D, H, kinect), blur_(blur) {};
 
   bool LoadModels(const std::string& embedding_model_path, const std::string& irl_model_path);
 
@@ -47,6 +47,7 @@ struct DeepIRLEvaluator :  ImageBasedEvaluator {
   torch::jit::script::Module embedding_module;
 
   static constexpr float UNCERTAINTY_REWARD = 0.0f;
+  bool blur_;
 };
 
 }  // namespace motion_primitives

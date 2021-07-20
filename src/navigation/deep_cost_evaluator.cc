@@ -63,12 +63,22 @@ DEFINE_double(cw, -0.5, "Clearance weight");
 DEFINE_double(fw, -1, "Free path weight");
 DEFINE_double(costw, 1.0, "Image Cost weight");
 
-#define PERF_BENCHMARK 1
+#define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 
 namespace motion_primitives {
 
 bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
+  # if VIS_IMAGES
+  int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+  outputVideo.open("vis/video_vis.avi", codec, 20.0, cv::Size(1280, 1024), true);
+  if (!outputVideo.isOpened())
+  {
+      cout  << "Could not open the output video for write" << endl;
+      return -1;
+  }
+  # endif
+
   try {
     cost_module = torch::jit::load(cost_model_path);
     return true;
@@ -103,7 +113,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
       std::vector<float> validities;
-      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, true, true);
+      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
       int invalid_patches = 5 - patches.size(); // when blurring, we expect 5 patches per location
       for(auto patch : patches) {
         // # if VIS_IMAGES
@@ -230,8 +240,9 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     auto image_loc = GetImageLocation(state.translation);
     cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
   }
-
-  cv::imwrite("vis/warped_vis.png", warped_vis);
+  
+  outputVideo.write(warped_vis);
+  // cv::imwrite("vis/warped_vis.png", warped_vis);
   #endif
 
   #if PERF_BENCHMARK
