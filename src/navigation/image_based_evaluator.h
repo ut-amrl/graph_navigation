@@ -63,7 +63,8 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     homography = cv::findHomography(input_points, output_points);
   }
 
-  cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
+  cv::Mat GetPatchAtLocation(const cv::Mat& img, const cv::Point& coord, float* validity, bool filter_empty);
+  std::vector<cv::Mat> GetPatchesAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, std::vector<float>* validities, bool blur, bool filter_empty);
 
   Eigen::Vector2f GetImageLocation(const Eigen::Vector2f& rel_loc);
 
@@ -76,8 +77,10 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   Eigen::Vector2f SCALING;
   Eigen::Vector2f CENTER;
   static const int PATCH_SIZE = 40;
+  static const int HALF_PATCH_SIZE = PATCH_SIZE / 2;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.35f;
+  static constexpr float MIN_IMAGE_Y_PCT = 0.55f;
   static const size_t ROLLOUT_DENSITY = 20;
 };
 

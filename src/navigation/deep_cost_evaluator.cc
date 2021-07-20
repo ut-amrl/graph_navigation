@@ -63,8 +63,8 @@ DEFINE_double(cw, -0.5, "Clearance weight");
 DEFINE_double(fw, -1, "Free path weight");
 DEFINE_double(costw, 1.0, "Image Cost weight");
 
-#define PERF_BENCHMARK 0
-#define VIS_IMAGES 0
+#define PERF_BENCHMARK 1
+#define VIS_IMAGES 1
 
 namespace motion_primitives {
 
@@ -84,6 +84,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   shared_ptr<PathRolloutBase> best = nullptr;
 
   cv::Mat warped = GetWarpedImage();
+  cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
 
   # if VIS_IMAGES
   cv::Mat warped_vis = warped.clone();
@@ -101,12 +102,10 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-      float validity;
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, true).clone();
-      if (patch.rows > 0) {
-        patch_location_indices.emplace_back(i, j);
-        cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
-
+      std::vector<float> validities;
+      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, true, true);
+      int invalid_patches = 5 - patches.size(); // when blurring, we expect 5 patches per location
+      for(auto patch : patches) {
         // # if VIS_IMAGES
         //   char buffer [50];
         //   sprintf(buffer, "vis/patch_%ld_%ld.png", i, j);
@@ -116,9 +115,9 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
         patch_tensors.push_back(tensor_patch);
-      } else {
-        path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST;
+        patch_location_indices.emplace_back(i, j);
       }
+      path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST * invalid_patches;
     }
   }
 

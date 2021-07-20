@@ -79,6 +79,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
   shared_ptr<PathRolloutBase> best = nullptr;
 
   cv::Mat warped = GetWarpedImage();
+  cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
 
   # if VIS_IMAGES
   cv::Mat warped_vis = warped.clone();
@@ -98,10 +99,11 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
       float validity;
-      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, true).clone();
+      Eigen::Vector2f image_loc = GetImageLocation(state.translation);
+      cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
+      cv::Mat patch = GetPatchAtLocation(warped, coord, &validity, true);
       if (patch.rows > 0) {
         patch_location_indices.emplace_back(i, j);
-        cv::cvtColor(patch, patch, cv::COLOR_BGR2RGB); // BGR -> RGB
 
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
