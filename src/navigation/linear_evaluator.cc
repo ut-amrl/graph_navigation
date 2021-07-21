@@ -93,7 +93,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  float best_cost = FLAGS_dw * best_path_length +
+  float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
   for (size_t i = 0; i < paths.size(); ++i) {

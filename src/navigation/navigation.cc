@@ -640,6 +640,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     Halt(cmd_vel, cmd_angle_vel);
     return;
   }
+  // TODO(jaholtz) take into account override target here
   const float goal_theta = atan2(local_target_.y(), local_target_.x());
   const float dv = params_.dt * params_.angular_limits.max_acceleration;
   if (robot_omega_ * goal_theta < 0.0f) {
@@ -652,7 +653,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   } else {
     const float s = Sign(goal_theta);
     angular_cmd = Run1DTimeOptimalControl(
-        params_.linear_limits,
+        params_.angular_limits,
         0,
         robot_omega_,
         s * goal_theta,
@@ -660,7 +661,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
         params_.dt);
   }
   // TODO: Motion profiling for omega.
-  cmd_angle_vel = angular_cmd;
+  cmd_angle_vel = Sign(goal_theta) * angular_cmd;
   cmd_vel = {0, 0};
 }
 
