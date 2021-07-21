@@ -65,13 +65,14 @@ DEFINE_double(costw, 1.0, "Image Cost weight");
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
+#define VIS_PATCHES 0
 
 namespace motion_primitives {
 
 bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
   # if VIS_IMAGES
   int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
-  outputVideo.open("vis/video_vis.avi", codec, 20.0, cv::Size(1280, 1024), true);
+  outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
   if (!outputVideo.isOpened())
   {
       cout  << "Could not open the output video for write" << endl;
@@ -114,7 +115,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       auto state = paths[i]->GetIntermediateState(f);
       std::vector<float> validities;
       std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
-      int invalid_patches = 5 - patches.size(); // when blurring, we expect 5 patches per location
+      int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
       for(auto patch : patches) {
         // # if VIS_IMAGES
         //   char buffer [50];
@@ -217,6 +218,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
+  # if VIS_PATCHES
   if (patch_tensors.size() > 0) {
     cv::Mat costs = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
     cv::Mat vis_costs;
@@ -234,6 +236,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       );
     }
   }
+  # endif
 
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);

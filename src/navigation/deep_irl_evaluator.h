@@ -26,6 +26,7 @@
 
 #include "motion_primitives.h"
 #include "image_based_evaluator.h"
+#include <opencv2/videoio.hpp>
 
 #ifndef DEEP_IRL_EVALUATOR_H
 #define DEEP_IRL_EVALUATOR_H
@@ -47,6 +48,7 @@ struct DeepIRLEvaluator :  ImageBasedEvaluator {
   torch::jit::script::Module embedding_module;
 
   static constexpr float UNCERTAINTY_REWARD = 0.0f;
+  cv::VideoWriter outputVideo;
   bool blur_;
 };
 

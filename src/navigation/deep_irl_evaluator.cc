@@ -58,11 +58,22 @@ using std::chrono::duration;
 using std::chrono::milliseconds;
 
 #define VIS_IMAGES 1
+#define VIS_PATCHES 1
 #define PERF_BENCHMARK False
 
 namespace motion_primitives {
 
 bool DeepIRLEvaluator::LoadModels(const string& embedding_model_path, const string& irl_model_path) {
+  # if VIS_IMAGES
+  int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+  outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
+  if (!outputVideo.isOpened())
+  {
+      cout  << "Could not open the output video for write" << endl;
+      return -1;
+  }
+  # endif
+
   try {
     embedding_module = torch::jit::load(embedding_model_path);
     irl_module = torch::jit::load(irl_model_path);
@@ -98,13 +109,14 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-      float validity;
-      Eigen::Vector2f image_loc = GetImageLocation(state.translation);
-      cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
-      cv::Mat patch = GetPatchAtLocation(warped, coord, &validity, true);
-      if (patch.rows > 0) {
+      
+      std::vector<float> validities;
+      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
+      int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
+      patch_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD * invalid_patches;
+      for(size_t k = 0; k < patches.size(); k++) {
+        auto patch = patches[k];
         patch_location_indices.emplace_back(i, j);
-
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
 
@@ -117,7 +129,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
         auto tensor_distance = torch::full(1, distance_travelled);
         const float goal_progress = local_target.norm() - future_target.norm();
         auto tensor_progress = torch::full(1, goal_progress);
-        auto tensor_validity = torch::full(1, validity);
+        auto tensor_validity = torch::full(1, validities[k]);
 
         // printf("features %f %f %f %f\n", angle_progress, distance_travelled, goal_progress, validity);
 
@@ -128,8 +140,6 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
           tensor_angle
         }));
         patch_tensors.push_back(tensor_patch);
-      } else {
-        patch_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD;
       }
     }
   }
@@ -177,6 +187,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
+  # if VIS_PATCHES
   if (patch_tensors.size() > 0) {
     cv::Mat rewards = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
     cv::Mat vis_rewards;
@@ -194,6 +205,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       );
     }
   }
+  # endif
 
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);
@@ -201,7 +213,8 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
     cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
   }
 
-  cv::imwrite("vis/warped_vis.png", warped_vis);
+  outputVideo.write(warped_vis);
+  // cv::imwrite("vis/warped_vis.png", warped_vis);
   #endif
 
   #if PERF_BENCHMARK
