@@ -107,6 +107,7 @@ Human SocialNav::GetBestAngle(const Human& a,
                    const Human& c,
                    const int& id_c,
                    int& output_id) {
+  const bool kDebug = false;
   const float target_angle = geometry::Angle(navigation_.GetTarget());
   const Vector2f robot_vel = navigation_.GetVelocity();
   const Vector2f adjusted_a = a.vel + robot_vel;
@@ -115,12 +116,22 @@ Human SocialNav::GetBestAngle(const Human& a,
   const float angle_b = geometry::Angle(adjusted_b);
   const Vector2f adjusted_c = c.vel + robot_vel;
   const float angle_c = geometry::Angle(adjusted_c);
-  const float diff_a = math_util::AngleDiff(target_angle, angle_a);
-  const float diff_b = math_util::AngleDiff(target_angle, angle_b);
-  const float diff_c = math_util::AngleDiff(target_angle, angle_c);
+  const float diff_a = fabs(math_util::AngleDiff(target_angle, angle_a));
+  const float diff_b = fabs(math_util::AngleDiff(target_angle, angle_b));
+  const float diff_c = fabs(math_util::AngleDiff(target_angle, angle_c));
 
-  const float b_threshold = DegToRad(15.0);
-  const float c_threshold = DegToRad(5.0);
+  const float b_threshold = DegToRad(30.0);
+  const float c_threshold = DegToRad(30.0);
+
+  if (kDebug) {
+    cout << "Target Angle: " << target_angle << endl;
+    cout << "Angle A: " << angle_a << endl;
+    cout << "Angle B: " << angle_b << endl;
+    cout << "Angle C: " << angle_c << endl;
+    cout << "Diff A: " << diff_a << endl;
+    cout << "Diff B: " << diff_b << endl;
+    cout << "Diff C: " << diff_c << endl;
+  }
 
   if (diff_a - diff_b < b_threshold || id_b < 0) {
     if (diff_a - diff_c < c_threshold || id_c < 0) {
@@ -202,7 +213,7 @@ bool SocialNav::TargetGood() {
 }
 
 void SocialNav::Follow() {
-  const float kFollowDist = 0.5;
+  const float kFollowDist = 1.0;
   bool found = true;
   follow_target_ = FindFollowTarget(&found);
   if (!found) {

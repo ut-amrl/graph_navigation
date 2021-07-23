@@ -48,6 +48,7 @@
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "graph_navigation/graphNavSrv.h"
 #include "graph_navigation/socialNavSrv.h"
+#include "math/geometry.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
 #include "visualization_msgs/Marker.h"
@@ -230,9 +231,15 @@ AckermannCurvatureDriveMsg TwistToAckermann(
   AckermannCurvatureDriveMsg ackermann_msg;
   ackermann_msg.header = twist.header;
   ackermann_msg.velocity = twist.twist.linear.x;
-  if (fabs(ackermann_msg.velocity) < kEpsilon) {
+  if (fabs(ackermann_msg.velocity) < kEpsilon &&
+      fabs(twist.twist.angular.z) < kEpsilon) {
     ackermann_msg.curvature = 0;
+  // Turn In Place
+  } else if(fabs(ackermann_msg.velocity) < kEpsilon) {
+    ackermann_msg.curvature = math_util::Sign(twist.twist.angular.z) * 10000.0;
+    ackermann_msg.velocity = (twist.twist.angular.z / ackermann_msg.curvature) * 5.0;
   } else {
+    // Move Along an Arc
     ackermann_msg.curvature = twist.twist.angular.z / ackermann_msg.velocity;
   }
   return ackermann_msg;
@@ -537,20 +544,36 @@ void DrawRobot() {
   }
 }
 
+// vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
+  // vector<PathOption> options;
+  // for (size_t i = 0; i < paths.size(); ++i) {
+    // ConstantCurvatureArc arc =
+      // *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
+    // PathOption option;
+    // option.curvature = arc.curvature;
+    // option.free_path_length = arc.Length();
+    // option.clearance = arc.Clearance();
+    // options.push_back(option);
+  // }
+  // return options;
+// }
+
 void DrawPathOptions() {
   auto path_options = navigation_->GetGraphNav()->GetLastPathOptions();
-  for (const auto& o : path_options) {
-    visualization::DrawPathOption(o.curvature,
-        o.free_path_length,
-        o.clearance,
-        0x0000FF,
-        local_viz_msg_);
-  }
   const navigation::PathOption best_option =
       navigation_->GetGraphNav()->GetOption();
+  for (const auto& o : path_options) {
+    if (fabs(o.curvature - best_option.curvature) >= kEpsilon) {
+      visualization::DrawPathOption(o.curvature,
+          o.free_path_length,
+          o.clearance,
+          0x0000FF,
+          local_viz_msg_);
+    }
+  }
   visualization::DrawPathOption(best_option.curvature,
       best_option.free_path_length,
-      best_option.clearance,
+      0.0,
       0xFF0000,
       local_viz_msg_);
 }
@@ -785,9 +808,9 @@ void RunSocial() {
   SendCommand(cmd_vel, cmd_angle_vel);
   DrawRobot();
   DrawPathOptions();
-  DrawTarget();
+  // DrawTarget();
   viz_pub_.publish(local_viz_msg_);
-  viz_pub_.publish(global_viz_msg_);
+  // viz_pub_.publish(global_viz_msg_);
 }
 
 void RunBagfile() {
@@ -835,10 +858,10 @@ bool SocialService(socialNavSrv::Request &req,
   SendCommand(cmd_vel, cmd_angle_vel);
   DrawRobot();
   DrawPathOptions();
-  DrawTarget();
+  // DrawTarget();
   // PublishVisualizationMarkers();
   viz_pub_.publish(local_viz_msg_);
-  viz_pub_.publish(global_viz_msg_);
+  // viz_pub_.publish(global_viz_msg_);
   return true;
 }
 
@@ -927,6 +950,8 @@ int main(int argc, char** argv) {
         }
       }
       PublishVisualizationMarkers();
+      viz_pub_.publish(local_viz_msg_);
+      // viz_pub_.publish(global_viz_msg_);
       loop.Sleep();
     }
   }

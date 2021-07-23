@@ -188,6 +188,9 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
 
 void Navigation::Resume() {
   target_override_ = false;
+  pause_ = false;
+  cout << "Goal Loc: " << nav_goal_loc_.x() << nav_goal_loc_.y() << endl;
+  cout << "Robot Pose: " << robot_loc_.x() << robot_loc_.y() << endl;
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -563,7 +566,7 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const bool debug = false;
+  static const bool debug = true;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
@@ -574,7 +577,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   evaluator_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   auto paths = sampler_->GetSamples(params_.num_options);
-  if (debug) {
+  if (false) {
     printf("%lu options\n", paths.size());
     int i = 0;
     for (auto p : paths) {
@@ -808,12 +811,13 @@ void Navigation::Run(const double& time,
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
   // Halt if necessary
   if (nav_complete_ || pause_) {
+    cout << "Pause Halt" << endl;
     Halt(cmd_vel, cmd_angle_vel);
     return;
   } else {
     // TODO check if the robot needs to turn around.
     // TODO(jaholtz) kLocalFOV should be a parameter
-    static const float kLocalFOV = DegToRad(60.0);
+    static const float kLocalFOV = DegToRad(40.0);
     // Local Navigation
     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
     // Handling social navigation override target
@@ -828,6 +832,7 @@ void Navigation::Run(const double& time,
     if (!FLAGS_no_local) {
       if (fabs(theta) > kLocalFOV) {
         if (kDebug) printf("TurnInPlace\n");
+        printf("TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
         if (kDebug) printf("ObstAv\n");
