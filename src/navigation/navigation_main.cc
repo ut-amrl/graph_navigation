@@ -30,7 +30,6 @@
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
-#include "amrl_msgs/NavStatusMsg.h"
 #include "config_reader/config_reader.h"
 #include "actionlib_msgs/GoalStatus.h"
 #include "amrl_msgs/Pose2Df.h"
@@ -69,7 +68,6 @@
 using actionlib_msgs::GoalStatus;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
-using amrl_msgs::NavStatusMsg;
 using math_util::DegToRad;
 using math_util::RadToDeg;
 using navigation::Navigation;
@@ -308,26 +306,9 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
 }
 
 void PublishNavStatus() {
-  NavStatusMsg msg;
-  msg.status = navigation_.GetNavStatus();
-
   GoalStatus status;
   status.status = 1;
-  if (msg.status == "Complete") {
-    status.status = 3;
-    msg.nav_complete = true;
-  }
-  const Eigen::Vector2f robot_vel = navigation_.GetVelocity();
-  const Eigen::Vector2f target = navigation_.GetTarget();
-  const float robot_omega = navigation_.GetAngularVelocity();
 
-  msg.velocity.x = robot_vel.x();
-  msg.velocity.y = robot_vel.y();
-  msg.velocity.theta = robot_omega;
-  msg.local_target.x = target.x();
-  msg.local_target.y = target.y();
-
-  nav_status_pub_.publish(msg);
   status_pub_.publish(status);
 }
 
@@ -711,7 +692,6 @@ int main(int argc, char** argv) {
       FLAGS_twist_drive_topic, 1);
   status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
-  nav_status_pub_= n.advertise<NavStatusMsg>("nav_status", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
@@ -763,7 +743,6 @@ int main(int argc, char** argv) {
     DrawPathOptions();
     PublishVisualizationMarkers();
     PublishPath();
-    PublishNavStatus();
     carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
 
     // Publish Commands
