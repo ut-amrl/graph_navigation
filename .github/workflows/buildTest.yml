@@ -12,6 +12,12 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
+      # Run package update
+      - name: Run package update
+        run: |
+          sudo apt update
+          sudo apt dist-upgrade -y
+
       # Install dependencies
       - name: Install dependencies
         run: |
