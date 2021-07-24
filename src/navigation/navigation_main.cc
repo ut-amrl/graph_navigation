@@ -33,7 +33,6 @@
 #include "config_reader/config_reader.h"
 #include "actionlib_msgs/GoalStatus.h"
 #include "amrl_msgs/Pose2Df.h"
-#include "amrl_msgs/NavigationConfigMsg.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
