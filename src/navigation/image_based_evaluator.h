@@ -58,7 +58,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
       Eigen::Vector2f transformed = output_points_vec[i].cwiseProduct(SCALING) + CENTER;
       output_points.emplace_back(transformed.x(), transformed.y());
     }
-      
+    
 
     homography = cv::findHomography(input_points, output_points);
   }

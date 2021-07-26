@@ -26,34 +26,36 @@
 
 #include "motion_primitives.h"
 #include "image_based_evaluator.h"
+#include "deep_cost_model.h"
 #include <opencv2/videoio.hpp>
 
-#ifndef DEEP_IRL_EVALUATOR_H
-#define DEEP_IRL_EVALUATOR_H
+#ifndef DEEP_COST_MAP_EVALUATOR_H
+#define DEEP_COST_MAP_EVALUATOR_H
 
 namespace motion_primitives {
 
-struct DeepIRLEvaluator :  ImageBasedEvaluator {
-  DeepIRLEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect, bool blur) : ImageBasedEvaluator(K, D, H, kinect), blur_(blur) {};
+struct DeepCostMapEvaluator :  ImageBasedEvaluator {
+  DeepCostMapEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect, bool blur) :
+    ImageBasedEvaluator(K, D, H, kinect), blur_(blur) {
+    };
+    //cost_module(navigation::EmbeddingNet(6), navigation::CostNet(6)) 
 
-  bool LoadModels(const std::string& embedding_model_path, const std::string& irl_model_path);
+  bool LoadModel(const std::string& irl_model_path);
 
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
 
-  // Torchscript definition of the deep irl network.
-  torch::jit::script::Module irl_module;
-    // Torchscript definition of the embedding network.
-  torch::jit::script::Module embedding_module;
+  // Torch definition of the network.
+  torch::jit::script::Module cost_module;
 
-  static constexpr float UNCERTAINTY_REWARD = 0.0f;
+  static constexpr float UNCERTAINTY_COST = 2.0f;
+
   cv::VideoWriter outputVideo;
   bool blur_;
-  int plan_idx = 0;
 };
 
 }  // namespace motion_primitives
 
 
-#endif  // DEEP_IRL_EVALUATOR_H
+#endif  // DEEP_COST_MAP_EVALUATOR_H

@@ -26,6 +26,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <fstream>
 
 #include "gflags/gflags.h"
 #include "math/line2d.h"
@@ -40,13 +41,16 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "deep_irl_evaluator.h"
+#include "image_tiler.h"
 #include <chrono>
+#include "json.hpp"
 
 using std::min;
 using std::max;
 using std::string;
 using std::vector;
 using std::shared_ptr;
+using std::ofstream;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 using navigation::MotionLimits;
@@ -56,10 +60,13 @@ using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
+using nlohmann::json;
 
 #define VIS_IMAGES 1
 #define VIS_PATCHES 1
 #define PERF_BENCHMARK False
+#define VIS_FEATURES 1
+#define WRITE_FEATURES 1
 
 namespace motion_primitives {
 
@@ -87,6 +94,7 @@ bool DeepIRLEvaluator::LoadModels(const string& embedding_model_path, const stri
 shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
     const vector<shared_ptr<PathRolloutBase>>& paths) {
   if (paths.size() == 0) return nullptr;
+  plan_idx++;
   shared_ptr<PathRolloutBase> best = nullptr;
 
   cv::Mat warped = GetWarpedImage();
@@ -104,7 +112,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
   auto t1 = high_resolution_clock::now();
   #endif
 
-  at::Tensor patch_rewards = torch::zeros({(int)paths.size(), 1});
+  at::Tensor path_rewards = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
@@ -113,7 +121,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       std::vector<float> validities;
       std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
       int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
-      patch_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD * invalid_patches;
+      path_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD * invalid_patches;
       for(size_t k = 0; k < patches.size(); k++) {
         auto patch = patches[k];
         patch_location_indices.emplace_back(i, j);
@@ -151,6 +159,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
 
   at::Tensor output;
+  at::Tensor feature_tensor;
   if (patch_tensors.size() > 0) {
     auto patch_tensor = torch::stack(patch_tensors);
 
@@ -159,7 +168,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
     at::Tensor embeddings = embedding_module.forward(emb_input).toTensor();
 
-    auto feature_tensor = torch::stack(irl_feature_tensors);
+    feature_tensor = torch::stack(irl_feature_tensors);
 
     auto input_tensor = torch::cat({feature_tensor, embeddings}, 1);
 
@@ -170,7 +179,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
     for(int i = 0; i < output.size(0); i++) {
       auto patch_loc_index = patch_location_indices[i];
-      patch_rewards[patch_loc_index.first] += output[i];
+      path_rewards[patch_loc_index.first] += output[i];
     }
   }
 
@@ -178,8 +187,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
   auto t3 = high_resolution_clock::now();
   #endif
 
-  auto best_idx = torch::argmax(patch_rewards).item<int>();
-  std::cout << "Best" << best_idx << std::endl;
+  auto best_idx = torch::argmax(path_rewards).item<int>();
 
   best = paths[best_idx];
   #if PERF_BENCHMARK
@@ -213,8 +221,76 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
     cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
   }
 
+  # if VIS_FEATURES
+  if (feature_tensor.size(0) > 0) {
+    auto cell_height = (int) (warped_vis.rows * 1.0 / (feature_tensor.size(1) + 1));
+    auto tiler = ImageCells(feature_tensor.size(1) + 1, 1, warped_vis.cols, cell_height);
+    cv::Mat orig_warped_vis;
+    cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, cell_height));
+    tiler.setCell(0, 0, orig_warped_vis);
+    // std::cout << "NEW SIZE (" << feature_tensor.size(1) << " features): " << orig_warped_vis.rows << " " << orig_warped_vis.cols << std::endl;
+    for(int ftr_idx = 0; ftr_idx < feature_tensor.size(1); ftr_idx++) {
+      cv::Mat feat_vis = warped.clone();
+      auto ftr_tens = feature_tensor.index({"...", ftr_idx});
+      cv::Mat feature_mat = cv::Mat(ftr_tens.size(0), 1, CV_32F);
+      for(int j = 0; j < ftr_tens.size(0); j++) {
+        feature_mat.at<float>(j, 0) = ftr_tens[j].item<float>();
+      }
+      cv::Mat vis_feature_mat;
+      cv::normalize(feature_mat, vis_feature_mat, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
+      for(int i = 0; i < ftr_tens.size(0); i++) {
+        json patch_info;
+        auto patch_loc_index = patch_location_indices[i];
+        float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
+        auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+        auto image_loc = GetImageLocation(state.translation);
+        cv::rectangle(feat_vis,
+          cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
+          cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
+          cv::Scalar(0, int(vis_feature_mat.at<float>(i, 0)), 0),
+          cv::FILLED
+        );
+      }
+      cv::resize(feat_vis, feat_vis, cv::Size(feat_vis.cols, cell_height));
+      tiler.setCell(0, ftr_idx + 1, feat_vis);
+      // warped_vis(cv::Rect(0, warped_vis.rows * (ftr_idx + 1.0) / (irl_feature_tensors.size() + 1), feat_vis.cols, feat_vis.rows)) = feat_vis;
+    }
+    warped_vis = tiler.image.clone();
+  }
+
+  #endif
+
+  #if WRITE_FEATURES
+    ofstream json_output;
+    std::vector<json> json_info;
+    for(int i = 0; i < output.size(0); i++) {
+      auto patch_loc_index = patch_location_indices[i];
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
+      auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+      auto image_loc = GetImageLocation(state.translation);
+      json patch_info;
+      patch_info["image_loc"] = { image_loc[0], image_loc[1] };
+      patch_info["loc"] = { state.translation.x(), state.translation.y() };
+      patch_info["reward"] = output[i].item<double>();
+      patch_info["features"] = std::vector<double>();
+      for(int ftr_idx = 0; ftr_idx < feature_tensor.size(1); ftr_idx++) {
+        patch_info["features"].push_back(feature_tensor[i][ftr_idx].item<double>());
+      }
+      json_info.push_back(patch_info);
+    }
+    std::ostringstream out_json_stream;
+    out_json_stream << "vis/patch_info/patch_info_" << plan_idx << ".json";
+    std::string out_json_name = out_json_stream.str();
+    json_output.open (out_json_name, ios::out); 
+    json_output << json(json_info).dump();
+    json_output.close();
+  #endif
+
   outputVideo.write(warped_vis);
-  // cv::imwrite("vis/warped_vis.png", warped_vis);
+  std::ostringstream out_img_stream;
+  out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
+  std::string out_img_name = out_img_stream.str();
+  cv::imwrite(out_img_name, warped_vis);
   #endif
 
   #if PERF_BENCHMARK

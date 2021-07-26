@@ -53,6 +53,7 @@ struct DeepCostEvaluator :  ImageBasedEvaluator {
 
   cv::VideoWriter outputVideo;
   bool blur_;
+  int plan_idx = 0;
 };
 
 }  // namespace motion_primitives

@@ -26,7 +26,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <fstream>
 
 #include "gflags/gflags.h"
 #include "math/line2d.h"
@@ -36,7 +35,6 @@
 #include "torch/torch.h"
 #include "torch/script.h"
 #include <chrono>
-#include "json.hpp"
 
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
@@ -50,7 +48,6 @@ using std::max;
 using std::string;
 using std::vector;
 using std::shared_ptr;
-using std::ofstream;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 using navigation::MotionLimits;
@@ -60,7 +57,6 @@ using std::chrono::high_resolution_clock;
 using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
-using nlohmann::json;
 
 DEFINE_double(dw, 1, "Distance weight");
 DEFINE_double(cw, -0.5, "Clearance weight");
@@ -69,12 +65,11 @@ DEFINE_double(costw, 1.0, "Image Cost weight");
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
-#define VIS_PATCHES 1
-#define WRITE_FEATURES 1
+#define VIS_PATCHES 0
 
 namespace motion_primitives {
 
-bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
+bool DeepMapCostEvaluator::LoadModel(const string& cost_model_path) {
   # if VIS_IMAGES
   int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
   outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
@@ -94,11 +89,10 @@ bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
   }
 }
 
-shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
+shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
     const vector<shared_ptr<PathRolloutBase>>& paths) {
   if (paths.size() == 0) return nullptr;
   shared_ptr<PathRolloutBase> best = nullptr;
-  plan_idx++;
 
   cv::Mat warped = GetWarpedImage();
   cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
@@ -123,12 +117,18 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
       int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
       for(auto patch : patches) {
+        // # if VIS_IMAGES
+        //   char buffer [50];
+        //   sprintf(buffer, "vis/patch_%ld_%ld.png", i, j);
+        //   cv::imwrite(buffer, patch);
+        // #endif
+
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
         patch_tensors.push_back(tensor_patch);
         patch_location_indices.emplace_back(i, j);
       }
-      path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST * invalid_patches;
+      path_costs[i] += DeepMapCostEvaluator::UNCERTAINTY_COST * invalid_patches;
     }
   }
 
@@ -237,28 +237,6 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     }
   }
   # endif
-
-  #if WRITE_FEATURES
-    ofstream json_output;
-    std::vector<json> json_info;
-    for(int i = 0; i < output.size(0); i++) {
-      auto patch_loc_index = patch_location_indices[i];
-      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
-      auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
-      auto image_loc = GetImageLocation(state.translation);
-      json patch_info;
-      patch_info["image_loc"] = { image_loc[0], image_loc[1] };
-      patch_info["loc"] = { state.translation.x(), state.translation.y() };
-      patch_info["cost"] = output[i].item<double>();
-      json_info.push_back(patch_info);
-    }
-    std::ostringstream out_json_stream;
-    out_json_stream << "vis/patch_info/patch_info_" << plan_idx << ".json";
-    std::string out_json_name = out_json_stream.str();
-    json_output.open (out_json_name); 
-    json_output << json(json_info).dump();
-    json_output.close();
-  #endif
 
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);
