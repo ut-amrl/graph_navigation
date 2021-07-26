@@ -160,17 +160,18 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
   at::Tensor output;
   at::Tensor feature_tensor;
+  at::Tensor embeddings_tensor;
   if (patch_tensors.size() > 0) {
     auto patch_tensor = torch::stack(patch_tensors);
 
     std::vector<torch::jit::IValue> emb_input;
     emb_input.push_back(patch_tensor);
 
-    at::Tensor embeddings = embedding_module.forward(emb_input).toTensor();
+    embeddings_tensor = embedding_module.forward(emb_input).toTensor();
 
     feature_tensor = torch::stack(irl_feature_tensors);
 
-    auto input_tensor = torch::cat({feature_tensor, embeddings}, 1);
+    auto input_tensor = torch::cat({feature_tensor, embeddings_tensor}, 1);
 
     std::vector<torch::jit::IValue> input;
     input.push_back(input_tensor);
@@ -273,8 +274,12 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       patch_info["loc"] = { state.translation.x(), state.translation.y() };
       patch_info["reward"] = output[i].item<double>();
       patch_info["features"] = std::vector<double>();
+      patch_info["embeddings"] = std::vector<double>();
       for(int ftr_idx = 0; ftr_idx < feature_tensor.size(1); ftr_idx++) {
         patch_info["features"].push_back(feature_tensor[i][ftr_idx].item<double>());
+      }
+      for(int emb_idx = 0; emb_idx < embeddings_tensor.size(1); emb_idx++) {
+        patch_info["embeddings"].push_back(embeddings_tensor[i][emb_idx].item<double>());
       }
       json_info.push_back(patch_info);
     }
