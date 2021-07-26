@@ -267,7 +267,10 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   }
   
   outputVideo.write(warped_vis);
-  // cv::imwrite("vis/warped_vis.png", warped_vis);
+  std::ostringstream out_img_stream;
+  out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
+  std::string out_img_name = out_img_stream.str();
+  cv::imwrite(out_img_name, warped_vis);
   #endif
 
   #if PERF_BENCHMARK
