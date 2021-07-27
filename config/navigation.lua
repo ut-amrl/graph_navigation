@@ -29,9 +29,9 @@ NavigationParameters = {
   use_kinect = false;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
-  model_path = "../preference_learning/comprehensive_models/jit_cost_model_indoor_3dim.pt";
+  model_path = "../preference_learning/comprehensive_models/jit_irl_model_indoor_3dim.pt";
   embedding_model_path = "../preference_learning/comprehensive_models/jit_emb_model_indoor_3dim.pt";
-  evaluator_type = "cost_map";
+  evaluator_type = "irl";
   blur = false;
 };
 
