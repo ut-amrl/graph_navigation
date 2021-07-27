@@ -64,8 +64,12 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   }
 
   cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
+  cv::Mat GetPatchAtImageLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
+
 
   Eigen::Vector2f GetImageLocation(const Eigen::Vector2f& rel_loc);
+
+  std::vector<Eigen::Vector2f> GetTilingLocations(const cv::Mat& img, const int tile_size);
 
   cv::Mat GetWarpedImage();
 
@@ -79,7 +83,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static const int HALF_PATCH_SIZE = PATCH_SIZE / 2;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.35f;
-  static constexpr float MIN_IMAGE_Y_PCT = 0.55f;
+  static constexpr float TILING_START_PCT = 0.45f;
   static const size_t ROLLOUT_DENSITY = 20;
 };
 

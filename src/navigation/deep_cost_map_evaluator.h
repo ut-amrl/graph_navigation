@@ -49,10 +49,15 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   // Torch definition of the network.
   torch::jit::script::Module cost_module;
 
-  static constexpr float UNCERTAINTY_COST = 2.0f;
-
+  static constexpr float UNCERTAINTY_COST = 10.0f;
+  static constexpr double DISTANCE_WEIGHT = 1;
+  static constexpr double CLEARANCE_WEIGHT = -0.5;
+  static constexpr double FPL_WEIGHT = -1;
+  static constexpr double COST_WEIGHT = 0.2;
+  
   cv::VideoWriter outputVideo;
   bool blur_;
+  int plan_idx = 0;
 };
 
 }  // namespace motion_primitives

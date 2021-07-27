@@ -56,6 +56,7 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_evaluator.h"
+#include "deep_cost_map_evaluator.h"
 #include "deep_irl_evaluator.h"
 
 using actionlib_msgs::GoalStatus;
@@ -269,6 +270,10 @@ void Navigation::Initialize(const NavigationParameters& params,
     auto deep_evaluator = new DeepCostEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
     deep_evaluator->LoadModel(params.model_path);
     evaluator = (PathEvaluatorBase*) deep_evaluator;
+  } else if (params_.evaluator_type == "cost_map") {
+    auto cost_map_evaluator = new DeepCostMapEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
+    cost_map_evaluator->LoadModel(params.model_path);
+    evaluator = (PathEvaluatorBase*) cost_map_evaluator;
   } else if (params_.evaluator_type == "irl") {
     auto deep_evaluator = new DeepIRLEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
     deep_evaluator->LoadModels(params.embedding_model_path, params.model_path);

@@ -40,8 +40,9 @@
 #include "navigation_parameters.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
-#include "deep_cost_evaluator.h"
+#include "deep_cost_map_evaluator.h"
 #include "deep_cost_model.h"
+#include "image_tiler.h"
 
 using std::min;
 using std::max;
@@ -58,18 +59,12 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-DEFINE_double(dw, 1, "Distance weight");
-DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
-DEFINE_double(costw, 1.0, "Image Cost weight");
-
-#define PERF_BENCHMARK 0
+#define PERF_BENCHMARK 1
 #define VIS_IMAGES 1
-#define VIS_PATCHES 0
 
 namespace motion_primitives {
 
-bool DeepMapCostEvaluator::LoadModel(const string& cost_model_path) {
+bool DeepCostMapEvaluator::LoadModel(const string& cost_model_path) {
   # if VIS_IMAGES
   int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
   outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
@@ -89,10 +84,17 @@ bool DeepMapCostEvaluator::LoadModel(const string& cost_model_path) {
   }
 }
 
-shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
+cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
+  return cv::Rect(patch_loc.x(), patch_loc.y(),
+    min(ImageBasedEvaluator::PATCH_SIZE, img.cols - (int)patch_loc.x()),
+    min(ImageBasedEvaluator::PATCH_SIZE, img.rows - (int)patch_loc.y()));
+}
+
+shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     const vector<shared_ptr<PathRolloutBase>>& paths) {
   if (paths.size() == 0) return nullptr;
   shared_ptr<PathRolloutBase> best = nullptr;
+  plan_idx++;
 
   cv::Mat warped = GetWarpedImage();
   cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
@@ -101,34 +103,34 @@ shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
   cv::Mat warped_vis = warped.clone();
   #endif
 
-  std::vector<std::pair<size_t, size_t>> patch_location_indices;
+  std::vector<size_t> patch_location_indices;
   std::vector<at::Tensor> patch_tensors;
+
+  cv::Mat cost_img = Mat::zeros(warped.rows, warped.cols, CV_32F);
+
+  int blur_factor = 1.5;
+  float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
 
   #if PERF_BENCHMARK
   auto t1 = high_resolution_clock::now();
   #endif
 
-  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
-  for (size_t i = 0; i < paths.size(); i++) {
-    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
-      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
-      auto state = paths[i]->GetIntermediateState(f);
-      std::vector<float> validities;
-      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
-      int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
-      for(auto patch : patches) {
-        // # if VIS_IMAGES
-        //   char buffer [50];
-        //   sprintf(buffer, "vis/patch_%ld_%ld.png", i, j);
-        //   cv::imwrite(buffer, patch);
-        // #endif
-
-        auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
-        tensor_patch = tensor_patch.permute({ 2,0,1 }); 
-        patch_tensors.push_back(tensor_patch);
-        patch_location_indices.emplace_back(i, j);
-      }
-      path_costs[i] += DeepMapCostEvaluator::UNCERTAINTY_COST * invalid_patches;
+  std::vector<Eigen::Vector2f> tile_locations = GetTilingLocations(warped, blur_step);
+  std::vector<float> path_costs(paths.size(), 0.0);
+  for(size_t i = 0; i < tile_locations.size(); i++) {
+    auto image_loc = tile_locations[i];
+    float validity;
+    cv::Mat patch = GetPatchAtImageLocation(warped, image_loc, &validity, true).clone();
+    
+    if (patch.rows > 0) {
+      auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
+      tensor_patch = tensor_patch.permute({ 2,0,1 }); 
+      patch_tensors.push_back(tensor_patch);
+      patch_location_indices.emplace_back(i);
+    } else {
+      auto patch_loc = tile_locations[i];
+      auto patch_rect = GetPatchRect(warped, patch_loc);
+      cost_img(patch_rect) += DeepCostMapEvaluator::UNCERTAINTY_COST / blur_factor;
     }
   }
 
@@ -146,8 +148,10 @@ shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
     output = cost_module.forward(input).toTensor();
 
     for(int i = 0; i < output.size(0); i++) {
-      auto patch_loc_index = patch_location_indices[i];
-      path_costs[patch_loc_index.first] += output[i];
+      auto patch_idx = patch_location_indices[i];
+      auto patch_loc = tile_locations[patch_idx];
+      auto patch_rect = GetPatchRect(warped, patch_loc);
+      cost_img(patch_rect) += output[i].item<double>() / blur_factor;
     }
   }
 
@@ -155,10 +159,18 @@ shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
   auto t3 = high_resolution_clock::now();
   #endif
 
-  cv::Mat path_cost_mat = cv::Mat(path_costs.size(0), path_costs.size(1), CV_32F, path_costs.data_ptr());
-  cv::Mat normalized_path_costs;
-  cv::normalize(path_cost_mat, normalized_path_costs, 0, 10.0f, cv::NORM_MINMAX, CV_32F);
-  
+  for (size_t i = 0; i < paths.size(); i++) {
+    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
+      auto state = paths[i]->GetIntermediateState(f);
+
+      auto image_loc = GetImageLocation(state.translation);
+      auto cost = cost_img.at<float>((int)image_loc.x(), (int)image_loc.y());
+      
+      path_costs[i] += cost;
+    }
+  }
+
   // Lifted from linear evaluator
   // Check if there is any path with an obstacle-free path from the end to the
   // local target.
@@ -195,19 +207,19 @@ shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
   }
 
   // Now try to find better paths.
-  float best_cost = FLAGS_dw * best_path_length +
-      FLAGS_fw * paths[best_idx]->Length() +
-      FLAGS_cw * paths[best_idx]->Clearance() + 
-      FLAGS_costw * normalized_path_costs.at<float>(best_idx, 0);
+  float best_cost = DISTANCE_WEIGHT * best_path_length +
+      FPL_WEIGHT * paths[best_idx]->Length() +
+      CLEARANCE_WEIGHT * paths[best_idx]->Clearance() + 
+      COST_WEIGHT * path_costs[best_idx];
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
         (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-    const float cost = FLAGS_dw * path_length +
-      FLAGS_fw * paths[i]->Length() +
-      FLAGS_cw * paths[i]->Clearance() + 
-      FLAGS_costw * normalized_path_costs.at<float>(i, 0);
-      // printf("COMPONENTS (%f %f %f %f)\n", FLAGS_dw * path_length,FLAGS_fw * paths[i]->Length(), FLAGS_cw * paths[i]->Clearance(), FLAGS_costw * normalized_path_costs.at<float>(i, 0) );
+    const float cost = DISTANCE_WEIGHT * path_length +
+      FPL_WEIGHT * paths[i]->Length() +
+      CLEARANCE_WEIGHT * paths[i]->Clearance() + 
+      COST_WEIGHT * path_costs[i];
+    
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
@@ -218,34 +230,30 @@ shared_ptr<PathRolloutBase> DeepMapCostEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
-  # if VIS_PATCHES
-  if (patch_tensors.size() > 0) {
-    cv::Mat costs = cv::Mat(output.size(0), output.size(1), CV_32F, output.data_ptr());
-    cv::Mat vis_costs;
-    cv::normalize(costs, vis_costs, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
-    for(int i = 0; i < vis_costs.rows; i++) {
-      auto patch_loc_index = patch_location_indices[i];
-      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
-      auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
-      auto image_loc = GetImageLocation(state.translation);
-      cv::rectangle(warped_vis,
-        cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
-        cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
-        cv::Scalar(0, 0, int(vis_costs.at<float>(i, 0))),
-        cv::FILLED
-      );
-    }
-  }
-  # endif
-
   for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
     auto state = best->GetIntermediateState(f);
     auto image_loc = GetImageLocation(state.translation);
     cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
   }
+
+  auto cell_height = (int) (warped_vis.rows / 2);
+  auto tiler = ImageCells(2, 1, warped_vis.cols, cell_height);
+  cv::Mat orig_warped_vis;
+  cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, cell_height));
+  tiler.setCell(0, 0, orig_warped_vis);
+  cv::Mat resized_cost_img;
+  cv::resize(cost_img, resized_cost_img, cv::Size(warped_vis.cols, cell_height));
+  cv::normalize(resized_cost_img, resized_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
+  cv::Mat color_cost_img;
+  cvtColor(resized_cost_img, color_cost_img, cv::COLOR_GRAY2RGB);
+  tiler.setCell(0, 1, color_cost_img);
+  warped_vis = tiler.image;
   
   outputVideo.write(warped_vis);
-  // cv::imwrite("vis/warped_vis.png", warped_vis);
+  std::ostringstream out_img_stream;
+  out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
+  std::string out_img_name = out_img_stream.str();
+  cv::imwrite(out_img_name, warped_vis);
   #endif
 
   #if PERF_BENCHMARK

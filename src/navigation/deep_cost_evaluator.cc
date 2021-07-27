@@ -62,11 +62,6 @@ using std::chrono::duration;
 using std::chrono::milliseconds;
 using nlohmann::json;
 
-DEFINE_double(dw, 1, "Distance weight");
-DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
-DEFINE_double(costw, 1.0, "Image Cost weight");
-
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 #define VIS_PATCHES 1
@@ -195,19 +190,19 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   }
 
   // Now try to find better paths.
-  float best_cost = FLAGS_dw * best_path_length +
-      FLAGS_fw * paths[best_idx]->Length() +
-      FLAGS_cw * paths[best_idx]->Clearance() + 
-      FLAGS_costw * normalized_path_costs.at<float>(best_idx, 0);
+  float best_cost = DISTANCE_WEIGHT * best_path_length +
+      FPL_WEIGHT * paths[best_idx]->Length() +
+      CLEARANCE_WEIGHT * paths[best_idx]->Clearance() + 
+      COST_WEIGHT * normalized_path_costs.at<float>(best_idx, 0);
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
         (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-    const float cost = FLAGS_dw * path_length +
-      FLAGS_fw * paths[i]->Length() +
-      FLAGS_cw * paths[i]->Clearance() + 
-      FLAGS_costw * normalized_path_costs.at<float>(i, 0);
-      // printf("COMPONENTS (%f %f %f %f)\n", FLAGS_dw * path_length,FLAGS_fw * paths[i]->Length(), FLAGS_cw * paths[i]->Clearance(), FLAGS_costw * normalized_path_costs.at<float>(i, 0) );
+    const float cost = DISTANCE_WEIGHT * path_length +
+      FPL_WEIGHT * paths[i]->Length() +
+      CLEARANCE_WEIGHT * paths[i]->Clearance() + 
+      COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
+      // printf("COMPONENTS (%f %f %f %f)\n", FLAGS_dw * path_length,FLAGS_fw * paths[i]->Length(), FLAGS_cw * paths[i]->Clearance(), COST_WEIGHT * normalized_path_costs.at<float>(i, 0) );
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;

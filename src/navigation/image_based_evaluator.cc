@@ -56,6 +56,10 @@ namespace motion_primitives {
 
   cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty) {
     Eigen::Vector2f image_loc = GetImageLocation(location);
+    return GetPatchAtImageLocation(img, image_loc, validity, filter_empty);
+  }
+
+  cv::Mat ImageBasedEvaluator::GetPatchAtImageLocation(const cv::Mat& img, const Eigen::Vector2f& image_loc, float* validity, bool filter_empty) {
     cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
 
     if ((coord.y - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||
@@ -88,5 +92,15 @@ namespace motion_primitives {
     return patch;
   }
 
+  std::vector<Eigen::Vector2f> ImageBasedEvaluator::GetTilingLocations(const cv::Mat& img, const int tile_size) {
+    std::vector<Eigen::Vector2f> locations;
+    for(int i = 0; i < img.cols; i+= tile_size) {
+      for(int j = (int)(img.rows * TILING_START_PCT); j < img.rows; j += tile_size) {
+        locations.emplace_back(i, j);
+      }
+    }
+    
+    return locations;
+  }
 
 }  // namespace motion_primitives
