@@ -62,10 +62,10 @@ using std::chrono::duration;
 using std::chrono::milliseconds;
 using nlohmann::json;
 
-#define PERF_BENCHMARK 0
+#define PERF_BENCHMARK 1
 #define VIS_IMAGES 1
 #define VIS_PATCHES 1
-#define WRITE_FEATURES 1
+#define WRITE_FEATURES 0
 
 namespace motion_primitives {
 

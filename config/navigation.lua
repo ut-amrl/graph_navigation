@@ -11,11 +11,11 @@ NavigationParameters = {
   };
   dt = 0.025;
   max_linear_accel = 0.5;
-  max_linear_decel = 0.5;
+  max_linear_decel = 1.0;
   max_linear_speed = 0.5;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
-  max_angular_speed = 1.0;
+  max_angular_speed = 0.75;
   carrot_dist = 100.0;
   system_latency = 0.24;
   obstacle_margin = 0.1;
@@ -27,11 +27,11 @@ NavigationParameters = {
   max_clearance = 1.0;
   can_traverse_stairs = false;
   use_kinect = false;
-  target_dist_tolerance = 0.1;
+  target_dist_tolerance = 0.5;
   target_vel_tolerance = 0.1;
-  model_path = "../preference_learning/comprehensive_models/jit_irl_model_indoor_3dim.pt";
-  embedding_model_path = "../preference_learning/comprehensive_models/jit_emb_model_indoor_3dim.pt";
-  evaluator_type = "irl";
+  model_path = "../../preference_learning/comprehensive_models/jit_cost_model_indoor_3dim.pt";
+  embedding_model_path = "../../preference_learning/comprehensive_models/jit_emb_model_indoor_3dim.pt";
+  evaluator_type = "cost";
   blur = false;
 };
 

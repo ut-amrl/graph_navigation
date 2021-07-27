@@ -42,6 +42,8 @@ struct DeepIRLEvaluator :  ImageBasedEvaluator {
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
 
+  float ComputeAngleToGoal(Eigen::Vector2f target, pose_2d::Pose2Df state);
+
   // Torchscript definition of the deep irl network.
   torch::jit::script::Module irl_module;
     // Torchscript definition of the embedding network.

@@ -813,7 +813,7 @@ void Navigation::RunObstacleAvoidance() {
   planning_domain_.GetClearanceAndSpeedFromLoc(
       robot_loc_, nullptr, &max_map_speed);
   auto linear_limits = params_.linear_limits;
-  linear_limits.max_speed = max_map_speed;
+  linear_limits.max_speed = min(max_map_speed, linear_limits.max_speed);
   best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
   if (debug) printf("cmd: %7.3f %7.3f %7.3f\n", vel_cmd.x(), vel_cmd.y(), ang_vel_cmd);
   // const float dist_left =

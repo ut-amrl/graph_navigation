@@ -64,9 +64,9 @@ using nlohmann::json;
 
 #define VIS_IMAGES 1
 #define VIS_PATCHES 1
-#define PERF_BENCHMARK False
+#define PERF_BENCHMARK 0
 #define VIS_FEATURES 1
-#define WRITE_FEATURES 1
+#define WRITE_FEATURES 0
 
 namespace motion_primitives {
 
@@ -89,6 +89,13 @@ bool DeepIRLEvaluator::LoadModels(const string& embedding_model_path, const stri
     std::cout << "Error loading models:\n" << e.msg();
     return false;
   }
+}
+
+float DeepIRLEvaluator::ComputeAngleToGoal(Eigen::Vector2f target, pose_2d::Pose2Df state) {
+  auto future_target = target - state.translation;
+  float future_target_angle = atan2(future_target[1], future_target[0]);
+  float angle_to_goal = abs(AngleDiff(future_target_angle, state.angle));
+  return angle_to_goal;
 }
 
 shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
@@ -127,8 +134,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
         auto future_target = local_target - state.translation;
         
-        const float future_target_angle = atan2(-future_target[1], -future_target[0]);
-        const float angle_progress = abs(min(fmod(future_target_angle - state.angle, M_PI), fmod(state.angle - future_target_angle, M_PI)));
+        float angle_progress = ComputeAngleToGoal(local_target, state);
         auto tensor_angle = torch::full(1, angle_progress);
         const float distance_travelled = state.translation.norm();
         auto tensor_distance = torch::full(1, distance_travelled);
@@ -223,8 +229,9 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
 
   # if VIS_FEATURES
   if (feature_tensor.size(0) > 0) {
-    auto cell_height = (int) (warped_vis.rows * 1.0 / (feature_tensor.size(1) + 1));
-    auto tiler = ImageCells(feature_tensor.size(1) + 1, 1, warped_vis.cols, cell_height);
+    int num_cells = feature_tensor.size(1) + 1;
+    auto cell_height = (int) (warped_vis.rows * 1.0 / (num_cells));
+    auto tiler = ImageCells(num_cells, 1, warped_vis.cols, cell_height);
     cv::Mat orig_warped_vis;
     cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, cell_height));
     tiler.setCell(0, 0, orig_warped_vis);
@@ -258,6 +265,23 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
     warped_vis = tiler.image.clone();
   }
 
+  // if (embeddings_tensor.size() > 0) {
+  //   // cv::Mat embeddings_mat = cv::Mat(embeddings_tensor.size(0), embeddings_tensor.size(1), CV_32F, embeddings_tensor.data_ptr());
+  //   // cv::Mat vis_embeddings;
+  //   // cv::normalize(embeddings_mat, vis_embeddings, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
+  //   for(int i = 0; i < vis_rewards.rows; i++) {
+  //     auto patch_loc_index = patch_location_indices[i];
+  //     float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
+  //     auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
+  //     auto image_loc = GetImageLocation(state.translation);
+  //     cv::rectangle(warped_vis,
+  //       cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
+  //       cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),
+  //       cv::Scalar(int(vis_rewards.at<float>(i, 0)), 0, 0),
+  //       cv::FILLED
+  //     );
+  //   }
+  // }
   #endif
 
   #if WRITE_FEATURES
