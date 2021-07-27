@@ -51,6 +51,10 @@ float ConstantCurvatureArc::Clearance() const {
   return clearance;
 }
 
+bool ConstantCurvatureArc::ObstacleFree() const {
+  return obstacle_free;
+}
+
 void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
                                        const MotionLimits& angular_limits,
                                        const float dt,

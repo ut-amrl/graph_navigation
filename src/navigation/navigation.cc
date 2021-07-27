@@ -189,8 +189,6 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
 void Navigation::Resume() {
   target_override_ = false;
   pause_ = false;
-  cout << "Goal Loc: " << nav_goal_loc_.x() << nav_goal_loc_.y() << endl;
-  cout << "Robot Pose: " << robot_loc_.x() << robot_loc_.y() << endl;
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -566,14 +564,17 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const bool debug = true;
+  static const bool debug = false;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
   if (target_override_) {
     local_target = override_target_;
   }
-
+  if (debug) {
+    cout << "Local Target: ";
+    cout << local_target.x() << ", " << local_target.y() << endl;
+  }
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   evaluator_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
   auto paths = sampler_->GetSamples(params_.num_options);
@@ -811,7 +812,6 @@ void Navigation::Run(const double& time,
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
   // Halt if necessary
   if (nav_complete_ || pause_) {
-    cout << "Pause Halt" << endl;
     Halt(cmd_vel, cmd_angle_vel);
     return;
   } else {

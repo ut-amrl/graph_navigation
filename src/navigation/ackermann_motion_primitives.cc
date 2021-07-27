@@ -52,13 +52,12 @@ namespace motion_primitives {
 
 AckermannSampler::AckermannSampler() {
 }
-
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
     path.length = min(nav_params.max_free_path_length, local_target.x());
     return;
-  } 
+  }
   const float turn_radius = 1.0f / path.curvature;
   const Vector2f turn_center(0, turn_radius);
   const Vector2f target_radial = local_target - turn_center;
@@ -69,17 +68,16 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
   const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
   path.length = min<float>({
-      nav_params.max_free_path_length, 
+      nav_params.max_free_path_length,
       dist_closest_to_goal,
       quarter_circle_dist});
-  const float stopping_dist = 
+  const float stopping_dist =
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
   path.length = max(path.length, stopping_dist);
 }
 
 vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
-  vector<shared_ptr<PathRolloutBase>> samples;
-  if (false) {
+  vector<shared_ptr<PathRolloutBase>> samples; if (false) {
     samples = {
       shared_ptr<PathRolloutBase>(new ConstantCurvatureArc(-0.1)),
       shared_ptr<PathRolloutBase>(new ConstantCurvatureArc(0)),
@@ -87,9 +85,9 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     };
     return samples;
   }
-  const float max_domega = 
+  const float max_domega =
       nav_params.dt * nav_params.angular_limits.max_acceleration;
-  const float max_dv = 
+  const float max_dv =
       nav_params.dt * nav_params.linear_limits.max_acceleration;
   const float robot_speed = fabs(vel.x());
   float c_min = -CONFIG_max_curvature;
@@ -101,8 +99,8 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
         c_max, (ang_vel + max_domega) / (robot_speed - max_dv));
   }
   const float dc = (c_max - c_min) / static_cast<float>(n - 1);
-  // printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
   if (false) {
+    printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
     for (float c = c_min; c <= c_max; c+= dc) {
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
@@ -120,7 +118,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   }
-  
+
   return samples;
 }
 
@@ -155,10 +153,10 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   const float r3_sq = (outer_front_corner - c).squaredNorm();
   float angle_min = M_PI;
   path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
-  // printf("%7.3f %7.3f %7.3f %7.3f\n", 
-  //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
+  // printf("%7.3f %7.3f %7.3f %7.3f\n",
+      // path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
   // The x-coordinate of the rear margin.
-  const float x_min = -0.5 * nav_params.robot_length + 
+  const float x_min = -0.5 * nav_params.robot_length +
       nav_params.base_link_offset - nav_params.obstacle_margin;
   using std::isfinite;
   for (const Vector2f& p : point_cloud) {
@@ -168,6 +166,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       printf("Obstacle within robot boundary\n");
       path.length = 0;
       path.obstruction = p;
+      path.obstacle_free = false;
       angle_min = 0;
       break;
     }
@@ -205,10 +204,11 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     if (path.length > path_length) {
       path.length = path_length;
       path.obstruction = p;
+      path.obstacle_free = false;
       angle_min = theta;
     }
   }
-  const float stopping_dist = 
+  const float stopping_dist =
       vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
   if (path.length < stopping_dist) path.length = 0;
   path.length = max(0.0f, path.length);

@@ -36,18 +36,20 @@ namespace motion_primitives {
 struct ConstantCurvatureArc : PathRolloutBase {
   // Length of the path rollout.
   float Length() const override;
-  
+
   // Angular distance traversed.
   float AngularLength() const override;
 
   // Clearance along path.
   float Clearance() const override;
 
+  bool ObstacleFree() const override;
+
   // Default constructor.
   ConstantCurvatureArc() : curvature(0), length(0), angular_length(0) {}
 
   // Explicit constructor from curvature.
-  explicit ConstantCurvatureArc(float curvature) : 
+  explicit ConstantCurvatureArc(float curvature) :
       curvature(curvature), length(0), angular_length(0) {}
 
   // The pose of the robot at the end of the path rollout.
@@ -66,6 +68,7 @@ struct ConstantCurvatureArc : PathRolloutBase {
   float length;
   float angular_length;
   float clearance;
+  bool obstacle_free;
   Eigen::Vector2f obstruction;
 };
 

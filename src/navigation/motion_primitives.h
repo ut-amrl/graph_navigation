@@ -38,7 +38,7 @@ namespace motion_primitives {
 struct PathRolloutBase {
   // Length of the path rollout -- this is the cumulative distance traverdsed
   // along the path, $\int ||v(t)||dt$ where $v(t)$ is the instantaneous
-  // velocity. 
+  // velocity.
   virtual float Length() const = 0;
 
   // Angular Length of the path rollout -- this is cumulative angular distance
@@ -52,6 +52,9 @@ struct PathRolloutBase {
   // The obstacle clearance along the path.
   virtual float Clearance() const = 0;
 
+  // Whether or not their is an obstacle before the end of the path
+  virtual bool ObstacleFree() const = 0;
+
   // Get actuation commands for the robot to execute this rollout in terms of
   // the robot's linear and angular velocity commands for the specified control
   // period.
@@ -64,7 +67,7 @@ struct PathRolloutBase {
                            float& ang_vel_cmd) const = 0;
 };
 
-// Path rollout sampler. 
+// Path rollout sampler.
 struct PathRolloutSamplerBase {
   // Given the robot's current dynamic state and an obstacle point cloud, return
   // a set of n valid path rollout options that are collision-free.
@@ -73,8 +76,8 @@ struct PathRolloutSamplerBase {
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
-  virtual void Update(const Eigen::Vector2f& new_vel, 
-                      const float new_ang_vel, 
+  virtual void Update(const Eigen::Vector2f& new_vel,
+                      const float new_ang_vel,
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud) {
     vel = new_vel;
@@ -107,8 +110,8 @@ struct PathEvaluatorBase {
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
-  virtual void Update(const Eigen::Vector2f& new_vel, 
-                      const float new_ang_vel, 
+  virtual void Update(const Eigen::Vector2f& new_vel,
+                      const float new_ang_vel,
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud) {
     vel = new_vel;
@@ -132,14 +135,14 @@ struct PathEvaluatorBase {
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,
-                              const float x_init, 
-                              const float v_init, 
-                              const float x_final, 
+                              const float x_init,
+                              const float v_init,
+                              const float x_final,
                               const float v_final,
                               const float dt);
 
 // Compute the clearance along the line l with respect to the points.
-float StraightLineClearance(const geometry::Line2f& l, 
+float StraightLineClearance(const geometry::Line2f& l,
                             const std::vector<Eigen::Vector2f>& points);
 
 }  // namespace motion_primitives

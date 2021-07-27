@@ -76,8 +76,10 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
 
   // First find the shortest path.
   shared_ptr<PathRolloutBase> best = nullptr;
+  bool obstacle_free = true;
   float best_path_length = FLT_MAX;
   for (size_t i = 0; i < paths.size(); ++i) {
+    if (!paths[i]->ObstacleFree()) obstacle_free = false;
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
         (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
@@ -93,19 +95,36 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
+  // Only use clearance if all paths are obstacle free
+  if (obstacle_free) {
+    float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
-  for (size_t i = 0; i < paths.size(); ++i) {
-    if (paths[i]->Length() <= 0.0f) continue;
-    const float path_length = (path_to_goal_exists ?
-        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-    const float cost = FLAGS_dw * path_length +
-      FLAGS_fw * paths[i]->Length() +
-      FLAGS_cw * paths[i]->Clearance();\
-    if (cost < best_cost) {
-      best = paths[i];
-      best_cost = cost;
+    for (size_t i = 0; i < paths.size(); ++i) {
+      if (paths[i]->Length() <= 0.0f) continue;
+      const float path_length = (path_to_goal_exists ?
+          (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+      const float cost = FLAGS_dw * path_length +
+        FLAGS_fw * paths[i]->Length() +
+        FLAGS_cw * paths[i]->Clearance();
+      if (cost < best_cost) {
+        best = paths[i];
+        best_cost = cost;
+      }
+    }
+  } else {
+    float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
+      FLAGS_fw * best->Length();
+    for (size_t i = 0; i < paths.size(); ++i) {
+      if (paths[i]->Length() <= 0.0f) continue;
+      const float path_length = (path_to_goal_exists ?
+          (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+      const float cost = FLAGS_dw * path_length +
+        FLAGS_fw * paths[i]->Length();
+      if (cost < best_cost) {
+        best = paths[i];
+        best_cost = cost;
+      }
     }
   }
   return best;
