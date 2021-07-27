@@ -119,16 +119,16 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-      std::vector<float> validities;
-      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
-      int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
-      for(auto patch : patches) {
+      float validity;
+      cv::Mat patch = GetPatchAtLocation(warped, state.translation, &validity, true).clone();
+      if (patch.rows > 0) {
         auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
         tensor_patch = tensor_patch.permute({ 2,0,1 }); 
         patch_tensors.push_back(tensor_patch);
         patch_location_indices.emplace_back(i, j);
+      } else {
+        path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST;
       }
-      path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST * invalid_patches;
     }
   }
 

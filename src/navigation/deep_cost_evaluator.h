@@ -49,7 +49,7 @@ struct DeepCostEvaluator :  ImageBasedEvaluator {
   // Torch definition of the network.
   torch::jit::script::Module cost_module;
 
-  static constexpr float UNCERTAINTY_COST = 2.0f;
+  static constexpr float UNCERTAINTY_COST = 10.0f;
 
   cv::VideoWriter outputVideo;
   bool blur_;

@@ -118,8 +118,8 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
       
-      std::vector<float> validities;
-      std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, blur_, true);
+      float validity;
+      std::vector<cv::Mat> patches = { GetPatchAtLocation(warped, state.translation, &validity, true) };
       int invalid_patches = blur_ ? 5 - patches.size() : 1 - patches.size(); // when blurring, we expect 5 patches per location
       path_rewards[i] += DeepIRLEvaluator::UNCERTAINTY_REWARD * invalid_patches;
       for(size_t k = 0; k < patches.size(); k++) {
@@ -137,7 +137,7 @@ shared_ptr<PathRolloutBase> DeepIRLEvaluator::FindBest(
         auto tensor_distance = torch::full(1, distance_travelled);
         const float goal_progress = local_target.norm() - future_target.norm();
         auto tensor_progress = torch::full(1, goal_progress);
-        auto tensor_validity = torch::full(1, validities[k]);
+        auto tensor_validity = torch::full(1, validity);
 
         // printf("features %f %f %f %f\n", angle_progress, distance_travelled, goal_progress, validity);
 

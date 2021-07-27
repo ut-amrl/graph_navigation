@@ -54,16 +54,19 @@ namespace motion_primitives {
     return Eigen::Vector2f(-rel_loc.y(), -rel_loc.x()).cwiseProduct(SCALING) + CENTER;
   }
 
-  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, const cv::Point& coord, float* validity, bool filter_empty) {
-    if ((coord.y - (ImageBasedEvaluator::HALF_PATCH_SIZE)) < img.rows * ImageBasedEvaluator::MIN_IMAGE_Y_PCT  ||
-        (coord.x - (ImageBasedEvaluator::HALF_PATCH_SIZE)) < 0 ||
-        (coord.y + (ImageBasedEvaluator::HALF_PATCH_SIZE)) >= img.rows ||
-        (coord.x + (ImageBasedEvaluator::HALF_PATCH_SIZE)) >= img.cols) {
+  cv::Mat ImageBasedEvaluator::GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty) {
+    Eigen::Vector2f image_loc = GetImageLocation(location);
+    cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
+
+    if ((coord.y - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||
+        (coord.x - (ImageBasedEvaluator::PATCH_SIZE / 2)) < 0 ||
+        (coord.y + (ImageBasedEvaluator::PATCH_SIZE / 2)) >= img.rows ||
+        (coord.x + (ImageBasedEvaluator::PATCH_SIZE / 2)) >= img.cols) {
       return cv::Mat();
     }
 
-    cv::Rect patchBounds(coord.x - ImageBasedEvaluator::HALF_PATCH_SIZE,
-                         coord.y - ImageBasedEvaluator::HALF_PATCH_SIZE,
+    cv::Rect patchBounds(coord.x - ImageBasedEvaluator::PATCH_SIZE / 2,
+                         coord.y - ImageBasedEvaluator::PATCH_SIZE / 2,
                          ImageBasedEvaluator::PATCH_SIZE,
                          ImageBasedEvaluator::PATCH_SIZE);
 
@@ -84,33 +87,6 @@ namespace motion_primitives {
 
     return patch;
   }
-
-  std::vector<cv::Mat> ImageBasedEvaluator::GetPatchesAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, std::vector<float>* validities, bool blur, bool filter_empty) {
-    Eigen::Vector2f image_loc = GetImageLocation(location);
-    std::vector<cv::Mat> patches;
-    std::vector<cv::Point> coords = {
-      cv::Point(image_loc.x(), image_loc.y())
-    };
-
-    if (blur) {
-      coords.emplace_back(image_loc.x() - ImageBasedEvaluator::HALF_PATCH_SIZE, image_loc.y() - ImageBasedEvaluator::HALF_PATCH_SIZE);
-      coords.emplace_back(image_loc.x() - ImageBasedEvaluator::HALF_PATCH_SIZE, image_loc.y() + ImageBasedEvaluator::HALF_PATCH_SIZE);
-      coords.emplace_back(image_loc.x() + ImageBasedEvaluator::HALF_PATCH_SIZE, image_loc.y() - ImageBasedEvaluator::HALF_PATCH_SIZE);
-      coords.emplace_back(image_loc.x() + ImageBasedEvaluator::HALF_PATCH_SIZE, image_loc.y() + ImageBasedEvaluator::HALF_PATCH_SIZE);
-    }
-    
-    for (size_t i = 0; i < coords.size(); i++) {
-      float validity;
-      cv::Mat patch = GetPatchAtLocation(img, coords[i], &validity, filter_empty);
-      if (patch.rows > 0) {
-        patches.push_back(patch);
-        validities->push_back(validity);
-      }
-    }
-
-    return patches;
-  }
-
 
 
 }  // namespace motion_primitives
