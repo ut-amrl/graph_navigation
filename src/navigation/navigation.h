@@ -128,8 +128,8 @@ class Navigation {
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
   float GetObstacleMargin();
-  std::vector<PathOption> GetLastPathOptions();
-  PathOption GetOption();
+  std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
+  std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
  private:
 
@@ -246,9 +246,10 @@ class Navigation {
   // Whether or not local carrot is overriden
   bool target_override_;
   // Last Set of path options sampled
-  std::vector<PathOption> last_options_;
+  std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
+      last_options_;
   // Last PathOption taken
-  PathOption best_option_;
+  std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
 };
 
 }  // namespace navigation

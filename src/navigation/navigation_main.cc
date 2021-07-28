@@ -461,23 +461,6 @@ void DrawRobot() {
   }
 }
 
-void DrawPathOptions() {
-  auto path_options = navigation_.GetLastPathOptions();
-  for (const auto& o : path_options) {
-    visualization::DrawPathOption(o.curvature,
-        o.free_path_length,
-        o.clearance,
-        0x0000FF,
-        local_viz_msg_);
-  }
-  const navigation::PathOption best_option = navigation_.GetOption();
-  visualization::DrawPathOption(best_option.curvature,
-      best_option.free_path_length,
-      best_option.clearance,
-      0xFF0000,
-      local_viz_msg_);
-}
-
 /**
  * Helper method that initializes visualization_msgs::Marker parameters
  * @param vizMarker   pointer to the visualization_msgs::Marker object
@@ -760,7 +743,6 @@ int main(int argc, char** argv) {
     PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
     DrawRobot();
     DrawTarget();
-    DrawPathOptions();
     PublishVisualizationMarkers();
     PublishPath();
     PublishNavStatus();

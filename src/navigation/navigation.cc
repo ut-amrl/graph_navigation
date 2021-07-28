@@ -615,6 +615,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          robot_omega_,
                          vel_cmd,
                          ang_vel_cmd);
+  last_options_ = paths;
+  best_option_ = best_path;
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
@@ -754,11 +756,11 @@ float Navigation::GetObstacleMargin() {
   return params_.obstacle_margin;
 }
 
-vector<PathOption> Navigation::GetLastPathOptions() {
+vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
 
-PathOption Navigation::GetOption() {
+std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }
 
