@@ -33,6 +33,8 @@
 #include "amrl_msgs/VisualizationMsg.h"
 #include "amrl_msgs/HumanStateArrayMsg.h"
 #include "amrl_msgs/HumanStateMsg.h"
+#include "constant_curvature_arcs.h"
+#include "motion_primitives.h"
 #include "geometry_msgs/Point.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "glog/logging.h"
@@ -78,6 +80,9 @@ using navigation::Navigation;
 using navigation::SocialNav;
 using navigation::SocialAction;
 using navigation::MotionLimits;
+using navigation::PathOption;
+using motion_primitives::PathRolloutBase;
+using motion_primitives::ConstantCurvatureArc;
 using ros::Time;
 using ros_helpers::Eigen3DToRosPoint;
 using ros_helpers::Eigen2DToRosPoint;
@@ -534,8 +539,26 @@ void DrawRobot() {
   }
 }
 
+vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
+  vector<PathOption> options;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const ConstantCurvatureArc arc =
+      *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
+    PathOption option;
+    option.curvature = arc.curvature;
+    option.free_path_length = arc.Length();
+    option.clearance = arc.Clearance();
+    options.push_back(option);
+  }
+  return options;
+}
+
 void DrawPathOptions() {
-  auto path_options = navigation_->GetGraphNav()->GetLastPathOptions();
+  vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
+      navigation_->GetGraphNav()->GetLastPathOptions();
+  auto path_options = ToOptions(path_rollouts);
+  std::shared_ptr<PathRolloutBase> best_option =
+      navigation_->GetGraphNav()->GetOption();
   for (const auto& o : path_options) {
     visualization::DrawPathOption(o.curvature,
         o.free_path_length,
@@ -543,13 +566,15 @@ void DrawPathOptions() {
         0x0000FF,
         local_viz_msg_);
   }
-  const navigation::PathOption best_option =
-      navigation_->GetGraphNav()->GetOption();
-  visualization::DrawPathOption(best_option.curvature,
-      best_option.free_path_length,
-      best_option.clearance,
-      0xFF0000,
-      local_viz_msg_);
+  if (best_option != nullptr) {
+    const ConstantCurvatureArc best_arc =
+      *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
+    visualization::DrawPathOption(best_arc.curvature,
+        best_arc.length,
+        0.0,
+        0xFF0000,
+        local_viz_msg_);
+  }
 }
 
 /**
@@ -749,6 +774,7 @@ bool Synced() {
 
 void RunSocial() {
   visualization::ClearVisualizationMsg(local_viz_msg_);
+  visualization::ClearVisualizationMsg(global_viz_msg_);
   SocialAction action = SocialAction::GoAlone;
   if (FLAGS_social_mode) {
     SocialPipsSrv::Request req;
@@ -924,6 +950,8 @@ int main(int argc, char** argv) {
         }
       }
       PublishVisualizationMarkers();
+      viz_pub_.publish(local_viz_msg_);
+      viz_pub_.publish(global_viz_msg_);
       loop.Sleep();
     }
   }
