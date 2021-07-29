@@ -31,6 +31,8 @@
 #include "amrl_msgs/VisualizationMsg.h"
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 #include "config_reader/config_reader.h"
+#include "motion_primitives.h"
+#include "constant_curvature_arcs.h"
 #include "actionlib_msgs/GoalStatus.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "glog/logging.h"
@@ -69,7 +71,10 @@ using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using math_util::DegToRad;
 using math_util::RadToDeg;
+using motion_primitives::PathRolloutBase;
+using motion_primitives::ConstantCurvatureArc;
 using navigation::Navigation;
+using navigation::PathOption;
 using ros::Time;
 using ros_helpers::Eigen3DToRosPoint;
 using ros_helpers::Eigen2DToRosPoint;
@@ -163,6 +168,7 @@ navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
 void OdometryCallback(const nav_msgs::Odometry& msg) {
   received_odom_ = true;
   odom_ = OdomHandler(msg);
+  navigation_.UpdateOdometry(odom_);
 }
 
 void LaserHandler(const sensor_msgs::LaserScan& msg) {
@@ -203,25 +209,25 @@ void LaserHandler(const sensor_msgs::LaserScan& msg) {
 void LaserCallback(const sensor_msgs::LaserScan& msg) {
   received_laser_ = true;
   LaserHandler(msg);
+  navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
 }
 
-void GoToCallback(const amrl_msgs::Pose2Df& msg) {
-  const Vector2f loc(msg.x, msg.y);
-  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.theta);
-  navigation_.SetNavGoal(loc, msg.theta);
+void GoToCallback(const geometry_msgs::PoseStamped& msg) {
+  const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
+  const float angle =
+      2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
+  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
+  navigation_.SetNavGoal(loc, angle);
   navigation_.Resume();
+  goal_set_ = true;
 }
 
 void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   const Vector2f loc(msg.pose.x, msg.pose.y);
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
   navigation_.SetNavGoal(loc, msg.pose.theta);
-}
-
-void GoalCallback(const amrl_msgs::Pose2Df& msg) {
+  navigation_.Resume();
   goal_set_ = true;
-  goal_ = {msg.x, msg.y};
-  goal_angle_ = msg.theta;
 }
 
 bool PlanServiceCb(graphNavSrv::Request &req,
@@ -441,8 +447,26 @@ void DrawRobot() {
   }
 }
 
+vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
+  vector<PathOption> options;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const ConstantCurvatureArc arc =
+      *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
+    PathOption option;
+    option.curvature = arc.curvature;
+    option.free_path_length = arc.Length();
+    option.clearance = arc.Clearance();
+    options.push_back(option);
+  }
+  return options;
+}
+
 void DrawPathOptions() {
-  auto path_options = navigation_.GetLastPathOptions();
+  vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
+      navigation_.GetLastPathOptions();
+  auto path_options = ToOptions(path_rollouts);
+  std::shared_ptr<PathRolloutBase> best_option =
+      navigation_.GetOption();
   for (const auto& o : path_options) {
     visualization::DrawPathOption(o.curvature,
         o.free_path_length,
@@ -450,12 +474,15 @@ void DrawPathOptions() {
         0x0000FF,
         local_viz_msg_);
   }
-  const navigation::PathOption best_option = navigation_.GetOption();
-  visualization::DrawPathOption(best_option.curvature,
-      best_option.free_path_length,
-      best_option.clearance,
-      0xFF0000,
-      local_viz_msg_);
+  if (best_option != nullptr) {
+    const ConstantCurvatureArc best_arc =
+      *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
+    visualization::DrawPathOption(best_arc.curvature,
+        best_arc.length,
+        0.0,
+        0xFF0000,
+        local_viz_msg_);
+  }
 }
 
 /**
@@ -726,27 +753,35 @@ int main(int argc, char** argv) {
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
+    visualization::ClearVisualizationMsg(local_viz_msg_);
+    visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
-    // Run Navigation to get commands
-    Vector2f cmd_vel;
-    float cmd_angle_vel;
-    navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
-    // Publish Nav Status
-    PublishNavStatus();
+    if (goal_set_) {
+      // Run Navigation to get commands
+      Vector2f cmd_vel;
+      float cmd_angle_vel;
+      bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
-    // Publish Visualizations
-    PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
-    DrawRobot();
-    DrawTarget();
-    DrawPathOptions();
-    PublishVisualizationMarkers();
-    PublishPath();
-    carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
+      // Publish Nav Status
+      PublishNavStatus();
 
-    // Publish Commands
-    SendCommand(cmd_vel, cmd_angle_vel);
+      if(nav_succeeded) {
+        // Publish Visualizations
+        PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
+        DrawRobot();
+        DrawTarget();
+        DrawPathOptions();
+        PublishVisualizationMarkers();
+        PublishPath();
+        carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
+        viz_pub_.publish(local_viz_msg_);
+        viz_pub_.publish(global_viz_msg_);
 
+        // Publish Commands
+        SendCommand(cmd_vel, cmd_angle_vel);
+      }
+    }
     loop.Sleep();
   }
   return 0;
