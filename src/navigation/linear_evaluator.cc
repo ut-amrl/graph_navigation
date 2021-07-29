@@ -88,6 +88,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   if (best == nullptr) {
+    printf("No valid path found\n");
     // No valid paths!
     return nullptr;
   }

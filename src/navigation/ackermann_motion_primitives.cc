@@ -142,6 +142,13 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     }
     path.clearance = max(0.0f, path.clearance);
     path.length = max(0.0f, path.length);
+
+    const float stopping_dist = 
+      vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
+    if (path.length < stopping_dist) {
+      printf("STOPPING DIST %f %f\n", stopping_dist, path.length);
+      path.length = 0;
+    }
     return;
   }
   const float path_radius = 1.0 / path.curvature;

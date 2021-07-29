@@ -58,6 +58,7 @@
 #include "deep_cost_evaluator.h"
 #include "deep_cost_map_evaluator.h"
 #include "deep_irl_evaluator.h"
+#include "linear_evaluator.h"
 
 using actionlib_msgs::GoalStatus;
 using Eigen::Rotation2Df;
@@ -278,6 +279,8 @@ void Navigation::Initialize(const NavigationParameters& params,
     auto deep_evaluator = new DeepIRLEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
     deep_evaluator->LoadModels(params.embedding_model_path, params.model_path);
     evaluator = (PathEvaluatorBase*) deep_evaluator;
+  } else if (params_.evaluator_type == "linear") {
+    evaluator = (PathEvaluatorBase*) new LinearEvaluator();
   } else {
     printf("Uknown evaluator type %s\n", params.evaluator_type.c_str());
     exit(1);
@@ -841,9 +844,11 @@ void Navigation::Halt() {
       velocity_cmd = 0;
     }
   }
+  printf("HALTING\n");
+  printf("VEL %f DV %f\n", velocity, dv);
   // TODO: Motion profiling for omega.
   // printf("%8.3f %8.3f\n", velocity, velocity_cmd);
-  // printf("cmd: %7.3f %7.3f %7.3f\n", velocity_cmd, 0.0, 0.0);
+  printf("cmd: %7.3f %7.3f %7.3f\n", velocity_cmd, 0.0, 0.0);
   SendCommand(Vector2f(velocity_cmd, 0), 0);
 }
 

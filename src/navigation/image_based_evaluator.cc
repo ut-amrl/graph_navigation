@@ -64,10 +64,10 @@ namespace motion_primitives {
     std::vector<Eigen::Vector2f> image_locs;
     std::vector<cv::Mat> patches;
     image_locs.push_back(image_loc);
-    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2);
-    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2);
-    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2);
-    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2);
+    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE);
+    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE);
+    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE);
+    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE);
 
     for(auto loc : image_locs) {
       float validity;
