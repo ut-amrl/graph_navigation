@@ -64,6 +64,8 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   }
 
   cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
+  std::vector<cv::Mat> GetPatchesAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, std::vector<float>* validity, bool filter_empty);
+
   cv::Mat GetPatchAtImageLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
 
 

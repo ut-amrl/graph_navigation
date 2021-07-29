@@ -59,6 +59,26 @@ namespace motion_primitives {
     return GetPatchAtImageLocation(img, image_loc, validity, filter_empty);
   }
 
+  std::vector<cv::Mat> ImageBasedEvaluator::GetPatchesAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, std::vector<float>* validities, bool filter_empty) {
+    Eigen::Vector2f image_loc = GetImageLocation(location);
+    std::vector<Eigen::Vector2f> image_locs;
+    std::vector<cv::Mat> patches;
+    image_locs.push_back(image_loc);
+    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2);
+    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2);
+    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2);
+    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2);
+
+    for(auto loc : image_locs) {
+      float validity;
+      auto patch = GetPatchAtImageLocation(img, loc, &validity, filter_empty);
+      patches.push_back(patch.clone());
+      validities->emplace_back(validity);
+    }
+
+    return patches;
+  }
+
   cv::Mat ImageBasedEvaluator::GetPatchAtImageLocation(const cv::Mat& img, const Eigen::Vector2f& image_loc, float* validity, bool filter_empty) {
     cv::Point coord = cv::Point(image_loc.x(), image_loc.y());
 
