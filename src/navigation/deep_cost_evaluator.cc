@@ -63,8 +63,8 @@ using std::chrono::milliseconds;
 using nlohmann::json;
 
 #define PERF_BENCHMARK 1
-#define VIS_IMAGES 1
-#define VIS_PATCHES 1
+#define VIS_IMAGES 0
+#define VIS_PATCHES 0
 #define WRITE_FEATURES 0
 
 namespace motion_primitives {
@@ -165,17 +165,16 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   auto t3 = high_resolution_clock::now();
   #endif
 
-  float BLUR_FACTOR = 0.25;
   at::Tensor blurred_path_costs = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
     float remaining = 1.0;
     if (i > 0) {
-      blurred_path_costs[i] += BLUR_FACTOR * path_costs[i - 1];
-      remaining -= -BLUR_FACTOR;
+      blurred_path_costs[i] += DeepCostEvaluator::BLUR_FACTOR * path_costs[i - 1];
+      remaining -= -DeepCostEvaluator::BLUR_FACTOR;
     }
     if (i < paths.size() - 1) {
-      blurred_path_costs[i] += BLUR_FACTOR * path_costs[i + 1];
-      remaining -= -BLUR_FACTOR;
+      blurred_path_costs[i] += DeepCostEvaluator::BLUR_FACTOR * path_costs[i + 1];
+      remaining -= -DeepCostEvaluator::BLUR_FACTOR;
     }
 
     blurred_path_costs[i] += remaining * path_costs[i];
