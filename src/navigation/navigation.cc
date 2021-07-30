@@ -844,11 +844,9 @@ void Navigation::Halt() {
       velocity_cmd = 0;
     }
   }
-  printf("HALTING\n");
-  printf("VEL %f DV %f\n", velocity, dv);
+  
   // TODO: Motion profiling for omega.
   // printf("%8.3f %8.3f\n", velocity, velocity_cmd);
-  printf("cmd: %7.3f %7.3f %7.3f\n", velocity_cmd, 0.0, 0.0);
   SendCommand(Vector2f(velocity_cmd, 0), 0);
 }
 

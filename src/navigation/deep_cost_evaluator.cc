@@ -165,7 +165,23 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   auto t3 = high_resolution_clock::now();
   #endif
 
-  cv::Mat path_cost_mat = cv::Mat(path_costs.size(0), path_costs.size(1), CV_32F, path_costs.data_ptr());
+  float BLUR_FACTOR = 0.25;
+  at::Tensor blurred_path_costs = torch::zeros({(int)paths.size(), 1});
+  for (size_t i = 0; i < paths.size(); i++) {
+    float remaining = 1.0;
+    if (i > 0) {
+      blurred_path_costs[i] += BLUR_FACTOR * path_costs[i - 1];
+      remaining -= -BLUR_FACTOR;
+    }
+    if (i < paths.size() - 1) {
+      blurred_path_costs[i] += BLUR_FACTOR * path_costs[i + 1];
+      remaining -= -BLUR_FACTOR;
+    }
+
+    blurred_path_costs[i] += remaining * path_costs[i];
+  }
+
+  cv::Mat path_cost_mat = cv::Mat(blurred_path_costs.size(0), blurred_path_costs.size(1), CV_32F, blurred_path_costs.data_ptr());
   cv::Mat normalized_path_costs;
   cv::normalize(path_cost_mat, normalized_path_costs, 0, 10.0f, cv::NORM_MINMAX, CV_32F);
   

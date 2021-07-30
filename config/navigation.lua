@@ -23,18 +23,18 @@ NavigationParameters = {
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
-  max_free_path_length = 6.0;
+  max_free_path_length = 4.0;
   max_clearance = 1.0;
   can_traverse_stairs = false;
   use_kinect = true;
   target_dist_tolerance = 0.5;
   target_vel_tolerance = 0.1;
-  model_path = "../../preference_learning/comprehensive_models/jit_cost_model_indoor_3dim.pt";
-  embedding_model_path = "../../preference_learning/comprehensive_models/jit_emb_model_indoor_3dim.pt";
-  evaluator_type = "linear";
+  model_path = "../../preference_learning/comprehensive_models/jit_cost_model_outdoor_6dim.pt";
+  embedding_model_path = "../../preference_learning/comprehensive_models/jit_emb_model_outdoor_6dim.pt";
+  evaluator_type = "cost";
   blur = false;
 };
 
 AckermannSampler = {
-  max_curvature = 1.5;
+  max_curvature = 3;
 };
