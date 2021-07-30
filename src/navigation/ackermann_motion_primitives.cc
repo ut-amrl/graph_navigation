@@ -42,6 +42,7 @@ using Eigen::Vector2f;
 using namespace math_util;
 
 CONFIG_FLOAT(max_curvature, "AckermannSampler.max_curvature");
+CONFIG_FLOAT(min_curvature, "AckermannSampler.max_curvature");
 
 namespace {
 // Epsilon value for handling limited numerical precision.
@@ -111,11 +112,13 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
   } else {
     const float dc = (2.0f * CONFIG_max_curvature) / static_cast<float>(n - 1);
     for (float c = -CONFIG_max_curvature; c <= CONFIG_max_curvature; c+= dc) {
-      auto sample = new ConstantCurvatureArc(c);
-      SetMaxPathLength(sample);
-      CheckObstacles(sample);
-      sample->angular_length = fabs(sample->length * c);
-      samples.push_back(shared_ptr<PathRolloutBase>(sample));
+      if (fabs(c) < CONFIG_min_curvature) {
+        auto sample = new ConstantCurvatureArc(c);
+        SetMaxPathLength(sample);
+        CheckObstacles(sample);
+        sample->angular_length = fabs(sample->length * c);
+        samples.push_back(shared_ptr<PathRolloutBase>(sample));
+      }
     }
   }
 

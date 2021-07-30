@@ -32,4 +32,5 @@ NavigationParameters = {
 
 AckermannSampler = {
   max_curvature = 2;
+  min_curvature = 0.5;
 };
