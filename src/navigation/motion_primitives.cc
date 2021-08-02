@@ -77,7 +77,7 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
     if (speed > limits.max_speed) {
       // Over max speed, slow down.
       phase = 'O';
-      velocity_cmd = max<float>(0.0f, speed - dv_a);
+      velocity_cmd = max<float>(0.0f, speed - dv_d);
     } else if (speed < limits.max_speed && accel_stopping_dist < dist_left) {
       // Acceleration possible.
       phase = 'A';

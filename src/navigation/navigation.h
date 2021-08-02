@@ -128,6 +128,8 @@ class Navigation {
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
   float GetObstacleMargin();
+  float GetRobotWidth();
+  float GetRobotLength();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 

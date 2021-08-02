@@ -410,8 +410,8 @@ void DrawTarget() {
 }
 
 void DrawRobot() {
-  const float kRobotLength = 0.5;
-  const float kRobotWidth = 0.44;
+  const float kRobotLength = navigation_.GetRobotLength();
+  const float kRobotWidth = navigation_.GetRobotWidth();
   const float kRearAxleOffset = 0.0;
   const float kObstacleMargin = navigation_.GetObstacleMargin();
   {
