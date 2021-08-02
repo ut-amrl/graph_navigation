@@ -752,6 +752,14 @@ float Navigation::GetObstacleMargin() {
   return params_.obstacle_margin;
 }
 
+float Navigation::GetRobotWidth() {
+  return params_.robot_width;
+}
+
+float Navigation::GetRobotLength() {
+  return params_.robot_length;
+}
+
 vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
@@ -776,7 +784,7 @@ bool Navigation::Run(const double& time,
     if (kDebug) printf("Odometry not initialized\n");
     return false;
   }
-  ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
+
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
     return false;
