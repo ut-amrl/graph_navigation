@@ -112,7 +112,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
-    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
+    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j+= blur_ ? 5 : 1) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
       if (blur_) {
@@ -287,7 +287,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     json_output.close();
   #endif
 
-  for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
+  for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
     auto state = best->GetIntermediateState(f);
     auto image_loc = GetImageLocation(state.translation);
     cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
