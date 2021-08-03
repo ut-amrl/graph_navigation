@@ -59,21 +59,37 @@ namespace motion_primitives {
     return GetPatchAtImageLocation(img, image_loc, validity, filter_empty);
   }
 
-  std::vector<cv::Mat> ImageBasedEvaluator::GetPatchesAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, std::vector<float>* validities, bool filter_empty) {
-    Eigen::Vector2f image_loc = GetImageLocation(location);
+  std::vector<cv::Mat> ImageBasedEvaluator::GetPatchesAtPose(const cv::Mat& img, const pose_2d::Pose2Df& pose, std::vector<Eigen::Vector2f>* image_locations, std::vector<float>* validities, bool filter_empty, float robot_width, float robot_length) {
     std::vector<Eigen::Vector2f> image_locs;
     std::vector<cv::Mat> patches;
-    image_locs.push_back(image_loc);
-    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE);
-    image_locs.emplace_back(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE);
-    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE);
-    image_locs.emplace_back(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE);
+    // center
+    Eigen::Vector2f center_loc = GetImageLocation(pose.translation);
+    image_locs.push_back(center_loc);
+    // front left wheel
+    Eigen::Vector2f fl_vec(robot_length / 2, robot_width / 2);
+    Eigen::Vector2f fl_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * fl_vec);
+    image_locs.push_back(fl_loc);
+    // front right wheel
+    Eigen::Vector2f fr_vec(robot_length / 2, -robot_width / 2);
+    Eigen::Vector2f fr_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * fr_vec);
+    image_locs.push_back(fr_loc);
+    // back left wheel
+    Eigen::Vector2f bl_vec(-robot_length / 2, robot_width / 2);
+    Eigen::Vector2f bl_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * bl_vec);
+    image_locs.push_back(bl_loc);
+    //back right wheel
+    Eigen::Vector2f br_vec(-robot_length / 2, -robot_width / 2);
+    Eigen::Vector2f br_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * br_vec);
+    image_locs.push_back(br_loc);
+    printf("LOCATIONS c: (%0.2f %0.2f) fl: (%0.2f %0.2f) fr: (%0.2f %0.2f) bl (%0.2f, %0.2f) br (%0.2f %f)\n",
+          center_loc[0], center_loc[1], fl_loc[0], fl_loc[1], fr_loc[0], fr_loc[1], bl_loc[0], bl_loc[1], br_loc[0], br_loc[1]);
 
     for(auto loc : image_locs) {
       float validity;
       auto patch = GetPatchAtImageLocation(img, loc, &validity, filter_empty);
       patches.push_back(patch.clone());
       validities->emplace_back(validity);
+      image_locations->push_back(loc);
     }
 
     return patches;

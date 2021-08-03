@@ -268,16 +268,16 @@ void Navigation::Initialize(const NavigationParameters& params,
   
   PathEvaluatorBase* evaluator;
   if (params_.evaluator_type == "cost") {
-    auto deep_evaluator = new DeepCostEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
-    deep_evaluator->LoadModel(params.model_path);
+    auto deep_evaluator = new DeepCostEvaluator(params);
+    deep_evaluator->LoadModel();
     evaluator = (PathEvaluatorBase*) deep_evaluator;
   } else if (params_.evaluator_type == "cost_map") {
-    auto cost_map_evaluator = new DeepCostMapEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
-    cost_map_evaluator->LoadModel(params.model_path);
+    auto cost_map_evaluator = new DeepCostMapEvaluator(params);
+    cost_map_evaluator->LoadModel();
     evaluator = (PathEvaluatorBase*) cost_map_evaluator;
   } else if (params_.evaluator_type == "irl") {
-    auto deep_evaluator = new DeepIRLEvaluator(params.K, params.D, params.H, params.use_kinect, params.blur);
-    deep_evaluator->LoadModels(params.embedding_model_path, params.model_path);
+    auto deep_evaluator = new DeepIRLEvaluator(params);
+    deep_evaluator->LoadModels();
     evaluator = (PathEvaluatorBase*) deep_evaluator;
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*) new LinearEvaluator();

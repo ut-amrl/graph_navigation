@@ -34,9 +34,11 @@
 namespace motion_primitives {
 
 struct DeepIRLEvaluator :  ImageBasedEvaluator {
-  DeepIRLEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect, bool blur) : ImageBasedEvaluator(K, D, H, kinect), blur_(blur) {};
+  DeepIRLEvaluator(const navigation::NavigationParameters& params) :
+    ImageBasedEvaluator(params), blur_(params.blur) {
+    };
 
-  bool LoadModels(const std::string& embedding_model_path, const std::string& irl_model_path);
+  bool LoadModels();
 
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(

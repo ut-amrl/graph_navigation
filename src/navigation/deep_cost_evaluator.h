@@ -26,6 +26,7 @@
 
 #include "motion_primitives.h"
 #include "image_based_evaluator.h"
+#include "navigation_parameters.h"
 #include "deep_cost_model.h"
 #include <opencv2/videoio.hpp>
 
@@ -35,12 +36,12 @@
 namespace motion_primitives {
 
 struct DeepCostEvaluator :  ImageBasedEvaluator {
-  DeepCostEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect, bool blur) :
-    ImageBasedEvaluator(K, D, H, kinect), blur_(blur) {
+  DeepCostEvaluator(const navigation::NavigationParameters& params) :
+    ImageBasedEvaluator(params), blur_(params.blur) {
     };
     //cost_module(navigation::EmbeddingNet(6), navigation::CostNet(6)) 
 
-  bool LoadModel(const std::string& irl_model_path);
+  bool LoadModel();
 
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(

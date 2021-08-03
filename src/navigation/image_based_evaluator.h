@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "motion_primitives.h"
+#include "navigation_parameters.h"
 #include "opencv2/opencv.hpp"
 
 #ifndef IMAGE_BASED_EVALUATOR_H
@@ -31,16 +32,16 @@
 namespace motion_primitives {
 
 struct ImageBasedEvaluator :  PathEvaluatorBase {
-  ImageBasedEvaluator(const std::vector<double>& K, const std::vector<double>& D, const std::vector<std::vector<float>>& H, bool kinect) {
+  ImageBasedEvaluator(const navigation::NavigationParameters& params) : params_(params) {
     cameraMatrix = cv::Mat(3, 3, CV_64F);
-    memcpy(cameraMatrix.data, K.data(), K.size()*sizeof(double));
+    memcpy(cameraMatrix.data, params.K.data(), params.K.size()*sizeof(double));
 
     distortionMatrix = cv::Mat(5, 1, CV_64F);
-    memcpy(distortionMatrix.data, D.data(), D.size()*sizeof(double));
+    memcpy(distortionMatrix.data, params.D.data(), params.D.size()*sizeof(double));
 
     // Homography computation
     SCALING = Eigen::Vector2f(100, 100);
-    if (kinect) {
+    if (params.use_kinect) {
       CENTER = Eigen::Vector2f(640, 812);
     } else{
       CENTER = Eigen::Vector2f(640, 1024);
@@ -48,7 +49,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     std::vector<cv::Point2f> input_points;
     std::vector<Eigen::Vector2f> output_points_vec;
 
-    for(auto point_pair : H) {
+    for(auto point_pair : params.H) {
       input_points.emplace_back(point_pair[2], point_pair[3]);
       output_points_vec.emplace_back(point_pair[0], point_pair[1]);
     }
@@ -64,7 +65,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   }
 
   cv::Mat GetPatchAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
-  std::vector<cv::Mat> GetPatchesAtLocation(const cv::Mat& img, const Eigen::Vector2f& location, std::vector<float>* validity, bool filter_empty);
+  std::vector<cv::Mat> GetPatchesAtPose(const cv::Mat& img, const pose_2d::Pose2Df& pose, std::vector<Eigen::Vector2f>* image_locs, std::vector<float>* validity, bool filter_empty, float robot_width, float robot_length);
 
   cv::Mat GetPatchAtImageLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
 
@@ -78,6 +79,8 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   cv::Mat cameraMatrix;
   cv::Mat distortionMatrix;
   cv::Mat homography;
+
+  const navigation::NavigationParameters& params_;
 
   Eigen::Vector2f SCALING;
   Eigen::Vector2f CENTER;

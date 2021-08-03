@@ -64,7 +64,7 @@ using std::chrono::milliseconds;
 
 namespace motion_primitives {
 
-bool DeepCostMapEvaluator::LoadModel(const string& cost_model_path) {
+bool DeepCostMapEvaluator::LoadModel() {
   # if VIS_IMAGES
   int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
   outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
@@ -76,7 +76,7 @@ bool DeepCostMapEvaluator::LoadModel(const string& cost_model_path) {
   # endif
 
   try {
-    cost_module = torch::jit::load(cost_model_path);
+    cost_module = torch::jit::load(params_.model_path);
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading cost model:\n" << e.msg();

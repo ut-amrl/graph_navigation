@@ -63,13 +63,13 @@ using std::chrono::milliseconds;
 using nlohmann::json;
 
 #define PERF_BENCHMARK 1
-#define VIS_IMAGES 0
-#define VIS_PATCHES 0
+#define VIS_IMAGES 1
+#define VIS_PATCHES 1
 #define WRITE_FEATURES 0
 
 namespace motion_primitives {
 
-bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
+bool DeepCostEvaluator::LoadModel() {
   # if VIS_IMAGES
   int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
   outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
@@ -81,7 +81,7 @@ bool DeepCostEvaluator::LoadModel(const string& cost_model_path) {
   # endif
 
   try {
-    cost_module = torch::jit::load(cost_model_path);
+    cost_module = torch::jit::load(params_.model_path);
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading cost model:\n" << e.msg();
@@ -103,6 +103,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   #endif
 
   std::vector<std::pair<size_t, size_t>> patch_location_indices;
+  std::vector<Eigen::Vector2f> patch_locations;
   std::vector<at::Tensor> patch_tensors;
 
   #if PERF_BENCHMARK
@@ -116,13 +117,16 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       auto state = paths[i]->GetIntermediateState(f);
       if (blur_) {
         std::vector<float> validities;
-        std::vector<cv::Mat> patches = GetPatchesAtLocation(warped, state.translation, &validities, true);
-        for (auto patch : patches) {
+        std::vector<Eigen::Vector2f> image_locs;
+        std::vector<cv::Mat> patches = GetPatchesAtPose(warped, state, &image_locs, &validities, true, params_.robot_width, params_.robot_length);
+        for (size_t k = 0; k < patches.size(); k++) {
+          cv::Mat patch = patches[k];
           if (patch.rows > 0) {
             auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
             tensor_patch = tensor_patch.permute({ 2,0,1 }); 
             patch_tensors.push_back(tensor_patch);
             patch_location_indices.emplace_back(i, j);
+            patch_locations.push_back(image_locs[k]);
           } else {
             path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST;
           }
@@ -135,6 +139,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
           tensor_patch = tensor_patch.permute({ 2,0,1 }); 
           patch_tensors.push_back(tensor_patch);
           patch_location_indices.emplace_back(i, j);
+          patch_locations.push_back(GetImageLocation(state.translation));
         } else {
           path_costs[i] += DeepCostEvaluator::UNCERTAINTY_COST;
         }
@@ -249,10 +254,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     cv::Mat vis_costs;
     cv::normalize(costs, vis_costs, 0, 255.0f, cv::NORM_MINMAX, CV_32F);
     for(int i = 0; i < vis_costs.rows; i++) {
-      auto patch_loc_index = patch_location_indices[i];
-      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * patch_loc_index.second;
-      auto state = paths[patch_loc_index.first]->GetIntermediateState(f);
-      auto image_loc = GetImageLocation(state.translation);
+      auto image_loc = patch_locations[i];
       cv::rectangle(warped_vis,
         cv::Point(image_loc[0] - ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] - ImageBasedEvaluator::PATCH_SIZE / 2),
         cv::Point(image_loc[0] + ImageBasedEvaluator::PATCH_SIZE / 2, image_loc[1] + ImageBasedEvaluator::PATCH_SIZE / 2),

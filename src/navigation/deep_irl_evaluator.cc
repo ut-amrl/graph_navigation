@@ -70,7 +70,7 @@ using nlohmann::json;
 
 namespace motion_primitives {
 
-bool DeepIRLEvaluator::LoadModels(const string& embedding_model_path, const string& irl_model_path) {
+bool DeepIRLEvaluator::LoadModels() {
   # if VIS_IMAGES
   int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
   outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
@@ -82,8 +82,8 @@ bool DeepIRLEvaluator::LoadModels(const string& embedding_model_path, const stri
   # endif
 
   try {
-    embedding_module = torch::jit::load(embedding_model_path);
-    irl_module = torch::jit::load(irl_model_path);
+    embedding_module = torch::jit::load(params_.embedding_model_path);
+    irl_module = torch::jit::load(params_.model_path);
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading models:\n" << e.msg();
