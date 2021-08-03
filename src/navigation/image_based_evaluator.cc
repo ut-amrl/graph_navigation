@@ -81,8 +81,8 @@ namespace motion_primitives {
     Eigen::Vector2f br_vec(-robot_length / 2, -robot_width / 2);
     Eigen::Vector2f br_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * br_vec);
     image_locs.push_back(br_loc);
-    printf("LOCATIONS c: (%0.2f %0.2f) fl: (%0.2f %0.2f) fr: (%0.2f %0.2f) bl (%0.2f, %0.2f) br (%0.2f %f)\n",
-          center_loc[0], center_loc[1], fl_loc[0], fl_loc[1], fr_loc[0], fr_loc[1], bl_loc[0], bl_loc[1], br_loc[0], br_loc[1]);
+    // printf("LOCATIONS c: (%0.2f %0.2f) fl: (%0.2f %0.2f) fr: (%0.2f %0.2f) bl (%0.2f, %0.2f) br (%0.2f %f)\n",
+    //       center_loc[0], center_loc[1], fl_loc[0], fl_loc[1], fr_loc[0], fr_loc[1], bl_loc[0], bl_loc[1], br_loc[0], br_loc[1]);
 
     for(auto loc : image_locs) {
       float validity;
