@@ -37,14 +37,14 @@ struct MotionLimits {
   // NOTE: Must be positive!
   float max_speed;
 
-  MotionLimits() : 
+  MotionLimits() :
       max_acceleration(0),
       max_deceleration(0),
       max_speed(0) {}
 
   MotionLimits(float max_acceleration,
                float max_deceleration,
-               float max_speed) : 
+               float max_speed) :
       max_acceleration(max_acceleration),
       max_deceleration(max_deceleration),
       max_speed(max_speed) {}
@@ -80,6 +80,7 @@ struct NavigationParameters {
   float max_clearance;
 
   bool can_traverse_stairs;
+  bool use_map_speed;
 
   // Distance tolerance to reaching target.
   float target_dist_tolerance;
@@ -113,6 +114,7 @@ struct NavigationParameters {
       max_free_path_length(10.0),
       max_clearance(1.0),
       can_traverse_stairs(false),
+      use_map_speed(true),
       target_dist_tolerance(0.1),
       target_vel_tolerance(0.1),
       use_kinect(true),

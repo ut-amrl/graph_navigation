@@ -1,6 +1,6 @@
 # AMRL Graph Navigation
 
-![Build Status](https://travis-ci.com/ut-amrl/graph_navigation.svg?branch=master)
+[![Build Status](https://github.com/ut-amrl/graph_navigation/actions/workflows/buildTest.yml/badge.svg)](https://github.com/ut-amrl/graph_navigation/actions)
 
 ## System Dependencies
 

@@ -94,7 +94,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  float best_cost = FLAGS_dw * best_path_length +
+  float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
   for (size_t i = 0; i < paths.size(); ++i) {
@@ -110,6 +110,22 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
     }
   }
   return best;
+}
+
+void LinearEvaluator::SetClearanceWeight(const float &weight) {
+  FLAGS_cw = weight;
+}
+
+void LinearEvaluator::SetDistanceWeight(const float &weight) {
+  FLAGS_dw = weight;
+}
+
+void LinearEvaluator::SetFreePathWeight(const float &weight) {
+  FLAGS_fw = weight;
+}
+
+void LinearEvaluator::SetSubOpt(const float &threshold) {
+  FLAGS_subopt = threshold;
 }
 
 }  // namespace motion_primitives

@@ -1,5 +1,48 @@
 build
 lib
 bin
-vis
 .vscode
+build/*
+lib/*
+bin/*
+.clangd/*
+srv_gen/*
+src/graph_navigation/srv/*
+src/graph_navigation/__init__.py
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Editors
+.vscode/
+compile_commands.json

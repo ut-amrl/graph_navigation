@@ -27,6 +27,7 @@ NavigationParameters = {
   max_clearance = 1.0;
   can_traverse_stairs = false;
   use_kinect = true;
+  use_map_speed = true;
   target_dist_tolerance = 1.2;
   target_vel_tolerance = 0.1;
   model_path = "../../preference_learning/comprehensive_models/jit_cost_model_indoor_3dim.pt";

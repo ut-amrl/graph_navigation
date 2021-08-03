@@ -146,7 +146,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     const float stopping_dist = 
       vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
     if (path.length < stopping_dist) {
-      printf("STOPPING DIST %f %f\n", stopping_dist, path.length);
       path.length = 0;
     }
     return;
@@ -172,7 +171,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     if (!isfinite(p.x()) || !isfinite(p.y()) || p.x() < 0.0f) continue;
     if (p.x() > x_min && p.x() < l && fabs(p.y()) < w) {
       // This point is within the robot plus margin boundary.
-      printf("Obstacle within robot boundary\n");
+      // printf("Obstacle within robot boundary\n");
       path.length = 0;
       path.obstruction = p;
       angle_min = 0;

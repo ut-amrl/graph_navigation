@@ -249,15 +249,15 @@ struct GraphDomain {
     // This edge must exist, hence the list can't be empty.
     CHECK_GT(edges.size(), 0);
     for (int i = edges.size() - 1; i >= 0; --i) {
-      if ((edges[i].s0_id == s0 && 
-          edges[i].s1_id == s1) || (edges[i].s0_id == s1 && 
+      if ((edges[i].s0_id == s0 &&
+          edges[i].s1_id == s1) || (edges[i].s0_id == s1 &&
           edges[i].s1_id == s0)) {
         edges.erase(edges.begin() + i);
       }
     }
   }
 
-  void AddUndirectedEdge(const uint64_t s0, 
+  void AddUndirectedEdge(const uint64_t s0,
                          const uint64_t s1,
                          const float max_speed,
                          const float max_clearance,
@@ -317,7 +317,7 @@ struct GraphDomain {
     const uint64_t pmid_id = AddState(pmid);
     const uint64_t p0_id = closest_edge.s0_id;
     const uint64_t p1_id = closest_edge.s1_id;
-    
+
     // NOTE: Here, we are assuming that any dynamic edges added are free of stairs and doors.
     // Additionally, we adopt the max_speed and max_clearance of the closest edge.
     AddUndirectedEdge(p0_id, pmid_id, closest_edge.max_speed, closest_edge.max_clearance, false, false);
@@ -330,7 +330,7 @@ struct GraphDomain {
 
     // Add pmid : v
     const uint64_t v_id = AddState(v);
-    
+
     // NOTE: Here, we are assuming that any dynamic edges added are free of stairs and doors.
     // Additionally, we adopt the max_speed and max_clearance of the closest edge.
     AddUndirectedEdge(pmid_id, v_id, closest_edge.max_speed, closest_edge.max_clearance, false, false);
@@ -383,17 +383,17 @@ struct GraphDomain {
     json j;
     i >> j;
     i.close();
-    
+
     CHECK(j["nodes"].is_array());
     auto const states_json = j["nodes"];
 
     states.clear();
     states.resize(states_json.size());
     edges.clear();
-    
+
     for(const json& j : states_json) {
       State s = State::fromJSON(j);
-      states[s.id] = s;    
+      states[s.id] = s;
     }
 
     CHECK(j["edges"].is_array());
@@ -402,7 +402,7 @@ struct GraphDomain {
     for(const json& j : edges_json) {
       AddUndirectedEdge(j);
     }
-    
+
     printf("Loaded %s with %lu states, %lu edges\n",
             file.c_str(),
             states.size(),
@@ -448,14 +448,14 @@ struct GraphDomain {
             num_edges);
 
     DrawMap();
-    
+
     Save(out_file);
-    
+
     return true;
   }
 
-  void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p, 
-                                   float* clearance, 
+  void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p,
+                                   float* clearance,
                                    float* speed) const {
     if (edges.empty()) return;
     NavigationEdge closest_edge;
