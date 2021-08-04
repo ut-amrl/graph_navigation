@@ -163,7 +163,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
     for(int i = 0; i < output.size(0); i++) {
       auto patch_loc_index = patch_location_indices[i];
-      path_costs[patch_loc_index.first] += output[i];
+      path_costs[patch_loc_index.first] += pow(output[i], 3);
     }
   }
 

@@ -110,7 +110,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   cv::Mat cost_img = Mat::zeros(warped.rows, warped.cols, CV_32F);
 
-  int blur_factor = 1.5;
+  int blur_factor = 2;
   float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
 
   #if PERF_BENCHMARK
@@ -118,7 +118,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   std::vector<Eigen::Vector2f> tile_locations = GetTilingLocations(warped, blur_step);
-  std::vector<float> path_costs(paths.size(), 0.0);
+  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for(size_t i = 0; i < tile_locations.size(); i++) {
     auto image_loc = tile_locations[i];
     float validity;
@@ -162,17 +162,47 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   for (size_t i = 0; i < paths.size(); i++) {
-    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
+    for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j+= blur_ ? 5 : 1) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
 
-      std::vector<Eigen::Vector2f> locations = GetWheelLocations(state, params_.robot_width, params_.robot_length);
-      for (auto loc : locations) {
+      if (blur_) {
+        std::vector<Eigen::Vector2f> locations = GetWheelLocations(state, params_.robot_width, params_.robot_length);
+        for (auto loc : locations) {
+          auto cost = cost_img.at<float>((int)loc.x(), (int)loc.y());
+          path_costs[i] += pow(cost, 3);
+        }
+      } else {
+        auto loc = GetImageLocation(state.translation);
         auto cost = cost_img.at<float>((int)loc.x(), (int)loc.y());
-        path_costs[i] += cost;
+        path_costs[i] += pow(cost, 3);
       }
     }
   }
+
+  at::Tensor blurred_path_costs;
+  if (BLUR_FACTOR > 0) {
+    blurred_path_costs = torch::zeros({(int)paths.size(), 1});
+    for (size_t i = 0; i < paths.size(); i++) {
+      float remaining = 1.0;
+      if (i > 0) {
+        blurred_path_costs[i] += DeepCostMapEvaluator::BLUR_FACTOR * path_costs[i - 1];
+        remaining -= -DeepCostMapEvaluator::BLUR_FACTOR;
+      }
+      if (i < paths.size() - 1) {
+        blurred_path_costs[i] += DeepCostMapEvaluator::BLUR_FACTOR * path_costs[i + 1];
+        remaining -= -DeepCostMapEvaluator::BLUR_FACTOR;
+      }
+
+      blurred_path_costs[i] += remaining * path_costs[i];
+    }
+  } else {
+    blurred_path_costs = path_costs;
+  }
+
+  cv::Mat path_cost_mat = cv::Mat(blurred_path_costs.size(0), blurred_path_costs.size(1), CV_32F, blurred_path_costs.data_ptr());
+  cv::Mat normalized_path_costs;
+  cv::normalize(path_cost_mat, normalized_path_costs, 0, 10.0f, cv::NORM_MINMAX, CV_32F);
 
   // Lifted from linear evaluator
   // Check if there is any path with an obstacle-free path from the end to the
@@ -213,7 +243,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   float best_cost = DISTANCE_WEIGHT * best_path_length +
       FPL_WEIGHT * paths[best_idx]->Length() +
       CLEARANCE_WEIGHT * paths[best_idx]->Clearance() + 
-      COST_WEIGHT * path_costs[best_idx];
+      COST_WEIGHT * normalized_path_costs.at<float>(best_idx, 0);
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
@@ -221,7 +251,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     const float cost = DISTANCE_WEIGHT * path_length +
       FPL_WEIGHT * paths[i]->Length() +
       CLEARANCE_WEIGHT * paths[i]->Clearance() + 
-      COST_WEIGHT * path_costs[i];
+      COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
     
     if (cost < best_cost) {
       best = paths[i];
@@ -233,10 +263,13 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
-  for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY) {
-    auto state = best->GetIntermediateState(f);
-    auto image_loc = GetImageLocation(state.translation);
-    cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
+  for(size_t i = 0; i < paths.size(); i++) {
+    for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
+      auto state = paths[i]->GetIntermediateState(f);
+      auto image_loc = GetImageLocation(state.translation);
+      auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
+      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
+    }
   }
 
   auto cell_height = (int) (warped_vis.rows / 2);
