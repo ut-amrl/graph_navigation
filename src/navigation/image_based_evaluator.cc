@@ -59,9 +59,8 @@ namespace motion_primitives {
     return GetPatchAtImageLocation(img, image_loc, validity, filter_empty);
   }
 
-  std::vector<cv::Mat> ImageBasedEvaluator::GetPatchesAtPose(const cv::Mat& img, const pose_2d::Pose2Df& pose, std::vector<Eigen::Vector2f>* image_locations, std::vector<float>* validities, bool filter_empty, float robot_width, float robot_length) {
+  std::vector<Eigen::Vector2f> ImageBasedEvaluator::GetWheelLocations(const pose_2d::Pose2Df& pose, float robot_width, float robot_length) {
     std::vector<Eigen::Vector2f> image_locs;
-    std::vector<cv::Mat> patches;
     // center
     Eigen::Vector2f center_loc = GetImageLocation(pose.translation);
     image_locs.push_back(center_loc);
@@ -81,6 +80,13 @@ namespace motion_primitives {
     Eigen::Vector2f br_vec(-robot_length / 2, -robot_width / 2);
     Eigen::Vector2f br_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * br_vec);
     image_locs.push_back(br_loc);
+
+    return image_locs;
+  }
+
+  std::vector<cv::Mat> ImageBasedEvaluator::GetPatchesAtPose(const cv::Mat& img, const pose_2d::Pose2Df& pose, std::vector<Eigen::Vector2f>* image_locations, std::vector<float>* validities, bool filter_empty, float robot_width, float robot_length) {
+    std::vector<Eigen::Vector2f> image_locs = GetWheelLocations(pose, robot_width, robot_length);
+    std::vector<cv::Mat> patches;
     // printf("LOCATIONS c: (%0.2f %0.2f) fl: (%0.2f %0.2f) fr: (%0.2f %0.2f) bl (%0.2f, %0.2f) br (%0.2f %f)\n",
     //       center_loc[0], center_loc[1], fl_loc[0], fl_loc[1], fr_loc[0], fr_loc[1], bl_loc[0], bl_loc[1], br_loc[0], br_loc[1]);
 

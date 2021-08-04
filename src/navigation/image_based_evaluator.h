@@ -68,9 +68,9 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   std::vector<cv::Mat> GetPatchesAtPose(const cv::Mat& img, const pose_2d::Pose2Df& pose, std::vector<Eigen::Vector2f>* image_locs, std::vector<float>* validity, bool filter_empty, float robot_width, float robot_length);
 
   cv::Mat GetPatchAtImageLocation(const cv::Mat& img, const Eigen::Vector2f& location, float* validity, bool filter_empty);
-
-
   Eigen::Vector2f GetImageLocation(const Eigen::Vector2f& rel_loc);
+
+  std::vector<Eigen::Vector2f> GetWheelLocations(const pose_2d::Pose2Df& pose, float robot_width, float robot_length);
 
   std::vector<Eigen::Vector2f> GetTilingLocations(const cv::Mat& img, const int tile_size);
 
@@ -88,7 +88,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static const int HALF_PATCH_SIZE = PATCH_SIZE / 2;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.25f;
-  static constexpr float TILING_START_PCT = 0.5f;
+  static constexpr float TILING_START_PCT = 0.6f;
   static const size_t ROLLOUT_DENSITY = 50;
 };
 
