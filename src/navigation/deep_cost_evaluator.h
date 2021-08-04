@@ -55,7 +55,7 @@ struct DeepCostEvaluator :  ImageBasedEvaluator {
   static constexpr double DISTANCE_WEIGHT = 1;
   static constexpr double CLEARANCE_WEIGHT = -0.5;
   static constexpr double FPL_WEIGHT = -1;
-  static constexpr double COST_WEIGHT = 7.0;
+  static constexpr double COST_WEIGHT = 14.0;
   static constexpr double BLUR_FACTOR = 0.0;
 
 
