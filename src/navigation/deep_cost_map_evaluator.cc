@@ -76,7 +76,8 @@ bool DeepCostMapEvaluator::LoadModel() {
   # endif
 
   try {
-    cost_module = torch::jit::load(params_.model_path);
+    auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+    cost_module = torch::jit::load(params_.model_path, device);
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading cost model:\n" << e.msg();
@@ -102,6 +103,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   # if VIS_IMAGES
   cv::Mat warped_vis = warped.clone();
   #endif
+  auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
 
   std::vector<size_t> patch_location_indices;
   std::vector<at::Tensor> patch_tensors;
@@ -140,12 +142,12 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   at::Tensor output;
   if (patch_tensors.size() > 0) {
-    auto input_tensor = torch::stack(patch_tensors);
+    auto input_tensor = torch::stack(patch_tensors).to(device);
 
     std::vector<torch::jit::IValue> input;
     input.push_back(input_tensor);
 
-    output = cost_module.forward(input).toTensor();
+    output = cost_module.forward(input).toTensor().to(torch::kCPU);
 
     for(int i = 0; i < output.size(0); i++) {
       auto patch_idx = patch_location_indices[i];
