@@ -60,17 +60,17 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
-  const Vector2f turn_center(0, turn_radius);
-  const Vector2f target_radial = local_target - turn_center;
-  const Vector2f middle_radial =
-      fabs(turn_radius) * target_radial.normalized();
-  const float middle_angle =
-      atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
-  const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
+  // const Vector2f turn_center(0, turn_radius);
+  // const Vector2f target_radial = local_target - turn_center;
+  // const Vector2f middle_radial =
+  //     fabs(turn_radius) * target_radial.normalized();
+  // const float middle_angle =
+  //     atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
+  // const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
   const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
   path.length = min<float>({
       nav_params.max_free_path_length, 
-      dist_closest_to_goal,
+      // dist_closest_to_goal,
       quarter_circle_dist});
   const float stopping_dist = 
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);

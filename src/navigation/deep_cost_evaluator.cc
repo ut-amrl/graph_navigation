@@ -62,9 +62,9 @@ using std::chrono::duration;
 using std::chrono::milliseconds;
 using nlohmann::json;
 
-#define PERF_BENCHMARK 1
-#define VIS_IMAGES 1
-#define VIS_PATCHES 1
+#define PERF_BENCHMARK 0
+#define VIS_IMAGES 0
+#define VIS_PATCHES 0
 #define WRITE_FEATURES 0
 
 namespace motion_primitives {
@@ -81,7 +81,8 @@ bool DeepCostEvaluator::LoadModel() {
   # endif
 
   try {
-    cost_module = torch::jit::load(params_.model_path);
+    auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+    cost_module = torch::jit::load(params_.model_path, device);
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading cost model:\n" << e.msg();
@@ -91,6 +92,7 @@ bool DeepCostEvaluator::LoadModel() {
 
 shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     const vector<shared_ptr<PathRolloutBase>>& paths) {
+  auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
   if (paths.size() == 0) return nullptr;
   shared_ptr<PathRolloutBase> best = nullptr;
   plan_idx++;
@@ -122,8 +124,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
         for (size_t k = 0; k < patches.size(); k++) {
           cv::Mat patch = patches[k];
           if (patch.rows > 0) {
-            auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
-            tensor_patch = tensor_patch.permute({ 2,0,1 }); 
+            auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat).permute({ 2,0,1 });
             patch_tensors.push_back(tensor_patch);
             patch_location_indices.emplace_back(i, j);
             patch_locations.push_back(image_locs[k]);
@@ -153,12 +154,12 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
   at::Tensor output;
   if (patch_tensors.size() > 0) {
-    auto input_tensor = torch::stack(patch_tensors);
+    auto input_tensor = torch::stack(patch_tensors).to(device);
 
     std::vector<torch::jit::IValue> input;
     input.push_back(input_tensor);
 
-    output = cost_module.forward(input).toTensor();
+    output = cost_module.forward(input).toTensor().to(torch::kCPU);
 
     for(int i = 0; i < output.size(0); i++) {
       auto patch_loc_index = patch_location_indices[i];
@@ -170,19 +171,25 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   auto t3 = high_resolution_clock::now();
   #endif
 
-  at::Tensor blurred_path_costs = torch::zeros({(int)paths.size(), 1});
-  for (size_t i = 0; i < paths.size(); i++) {
-    float remaining = 1.0;
-    if (i > 0) {
-      blurred_path_costs[i] += DeepCostEvaluator::BLUR_FACTOR * path_costs[i - 1];
-      remaining -= -DeepCostEvaluator::BLUR_FACTOR;
-    }
-    if (i < paths.size() - 1) {
-      blurred_path_costs[i] += DeepCostEvaluator::BLUR_FACTOR * path_costs[i + 1];
-      remaining -= -DeepCostEvaluator::BLUR_FACTOR;
-    }
 
-    blurred_path_costs[i] += remaining * path_costs[i];
+  at::Tensor blurred_path_costs;
+  if (BLUR_FACTOR > 0) {
+    blurred_path_costs = torch::zeros({(int)paths.size(), 1});
+    for (size_t i = 0; i < paths.size(); i++) {
+      float remaining = 1.0;
+      if (i > 0) {
+        blurred_path_costs[i] += DeepCostEvaluator::BLUR_FACTOR * path_costs[i - 1];
+        remaining -= -DeepCostEvaluator::BLUR_FACTOR;
+      }
+      if (i < paths.size() - 1) {
+        blurred_path_costs[i] += DeepCostEvaluator::BLUR_FACTOR * path_costs[i + 1];
+        remaining -= -DeepCostEvaluator::BLUR_FACTOR;
+      }
+
+      blurred_path_costs[i] += remaining * path_costs[i];
+    }
+  } else {
+    blurred_path_costs = path_costs;
   }
 
   cv::Mat path_cost_mat = cv::Mat(blurred_path_costs.size(0), blurred_path_costs.size(1), CV_32F, blurred_path_costs.data_ptr());
@@ -287,12 +294,14 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
     json_output.close();
   #endif
 
-  for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
-    auto state = best->GetIntermediateState(f);
-    auto image_loc = GetImageLocation(state.translation);
-    cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, cv::Scalar(255, 0, 0), 2);
+  for(size_t i = 0; i < paths.size(); i++) {
+    for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
+      auto state = paths[i]->GetIntermediateState(f);
+      auto image_loc = GetImageLocation(state.translation);
+      auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
+      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
+    }
   }
-  
   outputVideo.write(warped_vis);
   std::ostringstream out_img_stream;
   out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
