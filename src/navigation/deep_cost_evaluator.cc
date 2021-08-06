@@ -65,6 +65,7 @@ using nlohmann::json;
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 #define VIS_PATCHES 1
+
 #define WRITE_FEATURES 0
 
 namespace motion_primitives {
@@ -163,7 +164,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
 
     for(int i = 0; i < output.size(0); i++) {
       auto patch_loc_index = patch_location_indices[i];
-      path_costs[patch_loc_index.first] += pow(output[i], 3);
+      path_costs[patch_loc_index.first] += output[i];
     }
   }
 
@@ -191,6 +192,8 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
   } else {
     blurred_path_costs = path_costs;
   }
+
+  // std:: cout << blurred_path_costs << std::endl;
 
   cv::Mat path_cost_mat = cv::Mat(blurred_path_costs.size(0), blurred_path_costs.size(1), CV_32F, blurred_path_costs.data_ptr());
   cv::Mat normalized_path_costs;
@@ -244,7 +247,7 @@ shared_ptr<PathRolloutBase> DeepCostEvaluator::FindBest(
       FPL_WEIGHT * paths[i]->Length() +
       CLEARANCE_WEIGHT * paths[i]->Clearance() + 
       COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
-      // printf("COMPONENTS (%f %f %f %f)\n", FLAGS_dw * path_length,FLAGS_fw * paths[i]->Length(), FLAGS_cw * paths[i]->Clearance(), COST_WEIGHT * normalized_path_costs.at<float>(i, 0) );
+      // printf("COMPONENTS c: %ld (%f %f %f %f)\n", i, DISTANCE_WEIGHT * path_length,FPL_WEIGHT * paths[i]->Length(), CLEARANCE_WEIGHT * paths[i]->Clearance(), COST_WEIGHT * normalized_path_costs.at<float>(i, 0) );
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;

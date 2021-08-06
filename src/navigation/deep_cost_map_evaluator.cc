@@ -170,12 +170,12 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
         std::vector<Eigen::Vector2f> locations = GetWheelLocations(state, params_.robot_width, params_.robot_length);
         for (auto loc : locations) {
           auto cost = cost_img.at<float>((int)loc.x(), (int)loc.y());
-          path_costs[i] += pow(cost, 3);
+          path_costs[i] += cost;
         }
       } else {
         auto loc = GetImageLocation(state.translation);
         auto cost = cost_img.at<float>((int)loc.x(), (int)loc.y());
-        path_costs[i] += pow(cost, 3);
+        path_costs[i] += cost;
       }
     }
   }

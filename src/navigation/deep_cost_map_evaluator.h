@@ -53,7 +53,7 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   static constexpr double DISTANCE_WEIGHT = 1;
   static constexpr double CLEARANCE_WEIGHT = -0.5;
   static constexpr double FPL_WEIGHT = -1;
-  static constexpr double COST_WEIGHT = 5.0;
+  static constexpr double COST_WEIGHT = 15.0;
   static constexpr double BLUR_FACTOR = 0.0;
   
   cv::VideoWriter outputVideo;
