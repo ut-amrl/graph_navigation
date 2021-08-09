@@ -115,16 +115,17 @@ void DeepCostMapEvaluator::UpdateLocalMap() {
                cv::INTER_LINEAR,
                cv::BORDER_CONSTANT,
                UNCERTAINTY_COST);
-  cv::Mat resized_cost_img;
-  cv::normalize(local_cost_map, resized_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
-  cv::Mat color_cost_img;
-  cvtColor(resized_cost_img, color_cost_img, cv::COLOR_GRAY2RGB);
-  cv::line(color_cost_img, cv::Point(0, CENTER.y()), cv::Point(CENTER.x() * 2, CENTER.y()), cv::Scalar(200, 0, 0), 3);
+  
+  // cv::Mat resized_cost_img;
+  // cv::normalize(local_cost_map, resized_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
+  // cv::Mat color_cost_img;
+  // cvtColor(resized_cost_img, color_cost_img, cv::COLOR_GRAY2RGB);
+  // cv::line(color_cost_img, cv::Point(0, CENTER.y()), cv::Point(CENTER.x() * 2, CENTER.y()), cv::Scalar(200, 0, 0), 3);
 
-  std::ostringstream out_img_stream;
-  out_img_stream << "vis/images/local_transformed_" << plan_idx << ".png";
-  std::string out_img_name = out_img_stream.str();
-  cv::imwrite(out_img_name, color_cost_img);
+  // std::ostringstream out_img_stream;
+  // out_img_stream << "vis/images/local_transformed_" << plan_idx << ".png";
+  // std::string out_img_name = out_img_stream.str();
+  // cv::imwrite(out_img_name, color_cost_img);
 
 }
 
@@ -212,13 +213,13 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
       if (blur_) {
         std::vector<Eigen::Vector2f> locations = GetWheelLocations(state, params_.robot_width, params_.robot_length);
         for (auto loc : locations) {
-          auto cost = local_cost_map.at<float>((int)loc.x(), (int)loc.y());
-          path_costs[i] += cost * discount;
+          auto cost = local_cost_map.at<float>(cv::Point((int)loc.x(), (int)loc.y()));
+          path_costs[i] += cost * discount / ImageBasedEvaluator::ROLLOUT_DENSITY;
         }
       } else {
         auto loc = GetImageLocation(state.translation);
-        auto cost = local_cost_map.at<float>((int)loc.x(), (int)loc.y());
-        path_costs[i] += cost * discount;
+        auto cost = local_cost_map.at<float>(cv::Point((int)loc.x(), (int)loc.y()));
+        path_costs[i] += cost * discount / ImageBasedEvaluator::ROLLOUT_DENSITY;
       }
     }
   }
@@ -244,34 +245,35 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   }
 
   cv::Mat path_cost_mat = cv::Mat(blurred_path_costs.size(0), blurred_path_costs.size(1), CV_32F, blurred_path_costs.data_ptr());
-  cv::Mat normalized_path_costs;
-  cv::normalize(path_cost_mat, normalized_path_costs, 0, 10.0f, cv::NORM_MINMAX, CV_32F);
+  cv::Mat normalized_path_costs = path_cost_mat;
+  // cv::normalize(path_cost_mat, normalized_path_costs, 1.0f, 10.0f, cv::NORM_MINMAX, CV_32F);
 
   // Lifted from linear evaluator
   // Check if there is any path with an obstacle-free path from the end to the
   // local target.
+  float curr_goal_dist = local_target.norm();
+
   vector<float> clearance_to_goal(paths.size(), 0.0);
   vector<float> dist_to_goal(paths.size(), FLT_MAX);
-  bool path_to_goal_exists = false;
+  // bool path_to_goal_exists = false;
   for (size_t i = 0; i < paths.size(); ++i) {
     const auto endpoint = paths[i]->EndPoint().translation;
     clearance_to_goal[i] = StraightLineClearance(
         Line2f(endpoint, local_target), point_cloud);
     if (clearance_to_goal[i] > 0.0) {
       dist_to_goal[i] = (endpoint - local_target).norm();
-      path_to_goal_exists = true;
+      // path_to_goal_exists = true;
     }
   }
 
   // First find the shortest path.
   int best_idx = -1;
-  float best_path_length = FLT_MAX;
+  float best_path_progress = -FLT_MAX;
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
-    const float path_length = (path_to_goal_exists ?
-        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-    if (path_length < best_path_length) {
-      best_path_length = path_length;
+    const float path_progress = curr_goal_dist - dist_to_goal[i];
+    if (path_progress > best_path_progress) {
+      best_path_progress = path_progress;
       best_idx = i;
       best = paths[i];
     }
@@ -283,24 +285,25 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   }
 
   // Now try to find better paths.
-  float best_cost = DISTANCE_WEIGHT * best_path_length +
+  float best_cost = DISTANCE_WEIGHT * best_path_progress +
       FPL_WEIGHT * paths[best_idx]->Length() +
       CLEARANCE_WEIGHT * paths[best_idx]->Clearance() + 
       COST_WEIGHT * normalized_path_costs.at<float>(best_idx, 0);
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
-    const float path_length = (path_to_goal_exists ?
-        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-    const float cost = DISTANCE_WEIGHT * path_length +
+    const float path_progress = curr_goal_dist - dist_to_goal[i];
+    const float cost = DISTANCE_WEIGHT * path_progress +
       FPL_WEIGHT * paths[i]->Length() +
       CLEARANCE_WEIGHT * paths[i]->Clearance() + 
       COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
-    
+    printf("COMPONENTS %d c: %ld total %f (dist: %f fpl: %f clearance: %f cost: %f)\n", plan_idx, i, cost, DISTANCE_WEIGHT * path_progress,FPL_WEIGHT * paths[i]->Length(), CLEARANCE_WEIGHT * paths[i]->Clearance(), COST_WEIGHT * normalized_path_costs.at<float>(i, 0) );
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
+      best_idx = i;
     }
   }
+  printf("CHOSEN %d\n", best_idx);
   #if PERF_BENCHMARK
   auto t4 = high_resolution_clock::now();
   #endif
