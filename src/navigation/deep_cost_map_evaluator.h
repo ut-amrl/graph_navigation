@@ -37,10 +37,12 @@ namespace motion_primitives {
 struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   DeepCostMapEvaluator(const navigation::NavigationParameters& params) :
     ImageBasedEvaluator(params), blur_(params.blur) {
+      local_cost_map = cv::Mat((int)ImageBasedEvaluator::CENTER.y() * 2, (int)ImageBasedEvaluator::CENTER.x() * 2, CV_32F, UNCERTAINTY_COST);
     };
     //cost_module(navigation::EmbeddingNet(6), navigation::CostNet(6)) 
 
   bool LoadModel();
+  void UpdateLocalMap();
 
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(
@@ -49,16 +51,22 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   // Torch definition of the network.
   torch::jit::script::Module cost_module;
 
-  static constexpr float UNCERTAINTY_COST = 10.0f;
-  static constexpr double DISTANCE_WEIGHT = 1;
+  static constexpr float UNCERTAINTY_COST = 15.0f;
+  static constexpr double DISTANCE_WEIGHT = 3.0;
   static constexpr double CLEARANCE_WEIGHT = -0.5;
-  static constexpr double FPL_WEIGHT = -1;
-  static constexpr double COST_WEIGHT = 15.0;
+  static constexpr double FPL_WEIGHT = -0.5;
+  static constexpr double COST_WEIGHT = 6.0;
   static constexpr double BLUR_FACTOR = 0.0;
+  static constexpr double DISCOUNT_FACTOR = 0.96;
   
+  Eigen::Vector2f prev_loc;
+  float prev_ang;
+
   cv::VideoWriter outputVideo;
   bool blur_;
   int plan_idx = 0;
+
+  cv::Mat local_cost_map;
 };
 
 }  // namespace motion_primitives

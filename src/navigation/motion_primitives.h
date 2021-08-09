@@ -115,11 +115,15 @@ struct PathEvaluatorBase {
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
-  virtual void Update(const Eigen::Vector2f& new_vel, 
+  virtual void Update(const Eigen::Vector2f& new_loc, 
+                      const float new_ang,
+                      const Eigen::Vector2f& new_vel, 
                       const float new_ang_vel, 
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud,
                       const cv::Mat& new_image) {
+    curr_loc = new_loc;
+    curr_ang = new_ang;
     vel = new_vel;
     ang_vel = new_ang_vel;
     local_target = new_local_target;
@@ -131,6 +135,10 @@ struct PathEvaluatorBase {
   virtual std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) = 0;
 
+  // Current location
+  Eigen::Vector2f curr_loc;
+  // Current angle
+  float curr_ang;
   // Current linear velocity.
   Eigen::Vector2f vel;
   // Current angular velocity.

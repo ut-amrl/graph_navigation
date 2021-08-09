@@ -43,6 +43,7 @@
 #include "deep_cost_map_evaluator.h"
 #include "deep_cost_model.h"
 #include "image_tiler.h"
+#include <opencv2/core/eigen.hpp>
 
 using std::min;
 using std::max;
@@ -86,9 +87,45 @@ bool DeepCostMapEvaluator::LoadModel() {
 }
 
 cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
-  return cv::Rect(patch_loc.x(), patch_loc.y(),
+  return cv::Rect(patch_loc.x() - ImageBasedEvaluator::PATCH_SIZE / 2, patch_loc.y() - ImageBasedEvaluator::PATCH_SIZE / 2,
     min(ImageBasedEvaluator::PATCH_SIZE, img.cols - (int)patch_loc.x()),
     min(ImageBasedEvaluator::PATCH_SIZE, img.rows - (int)patch_loc.y()));
+}
+
+void DeepCostMapEvaluator::UpdateLocalMap() {
+  Eigen::Affine2f curr_trans = Eigen::Translation2f(curr_loc) * Eigen::Rotation2Df(curr_ang);
+  Eigen::Affine2f prev_trans = Eigen::Translation2f(prev_loc) * Eigen::Rotation2Df(prev_ang);
+
+  Eigen::Affine2f delta_trans = prev_trans.inverse() * curr_trans;
+  // auto reverseTrans = delta_trans.inverse();
+  cv::Mat transformMatrix;
+  cv::Mat rotationMat;
+  cv::Mat translationMat;
+  Eigen::Matrix2f eigenRotation = delta_trans.rotation().matrix().inverse();
+  Eigen::Vector2f eigenTranslation = Eigen::Rotation2Df(M_PI_2) * delta_trans.translation().matrix();
+  eigenTranslation = eigenTranslation.cwiseProduct(ImageBasedEvaluator::SCALING);
+  cv::eigen2cv(eigenRotation, rotationMat);
+  cv::eigen2cv(eigenTranslation, translationMat);
+
+  cv::hconcat(rotationMat, translationMat, transformMatrix);
+
+  auto prev_cost_map = local_cost_map.clone();
+  local_cost_map.setTo(0);
+  cv::warpAffine(prev_cost_map, local_cost_map, transformMatrix, local_cost_map.size(),
+               cv::INTER_LINEAR,
+               cv::BORDER_CONSTANT,
+               UNCERTAINTY_COST);
+  cv::Mat resized_cost_img;
+  cv::normalize(local_cost_map, resized_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
+  cv::Mat color_cost_img;
+  cvtColor(resized_cost_img, color_cost_img, cv::COLOR_GRAY2RGB);
+  cv::line(color_cost_img, cv::Point(0, CENTER.y()), cv::Point(CENTER.x() * 2, CENTER.y()), cv::Scalar(200, 0, 0), 3);
+
+  std::ostringstream out_img_stream;
+  out_img_stream << "vis/images/local_transformed_" << plan_idx << ".png";
+  std::string out_img_name = out_img_stream.str();
+  cv::imwrite(out_img_name, color_cost_img);
+
 }
 
 shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
@@ -108,14 +145,16 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   std::vector<size_t> patch_location_indices;
   std::vector<at::Tensor> patch_tensors;
 
-  cv::Mat cost_img = Mat::zeros(warped.rows, warped.cols, CV_32F);
-
-  int blur_factor = 2;
+  int blur_factor = 1;
   float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
 
   #if PERF_BENCHMARK
   auto t1 = high_resolution_clock::now();
   #endif
+
+  if (plan_idx > 1) {
+    UpdateLocalMap();
+  }
 
   std::vector<Eigen::Vector2f> tile_locations = GetTilingLocations(warped, blur_step);
   at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
@@ -123,16 +162,20 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     auto image_loc = tile_locations[i];
     float validity;
     cv::Mat patch = GetPatchAtImageLocation(warped, image_loc, &validity, true).clone();
-    
+
     if (patch.rows > 0) {
       auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
-      tensor_patch = tensor_patch.permute({ 2,0,1 }); 
+      tensor_patch = tensor_patch.permute({ 2,0,1 });
+
       patch_tensors.push_back(tensor_patch);
       patch_location_indices.emplace_back(i);
+
+      // auto patch_rect = GetPatchRect(warped, image_loc);
+      // local_cost_map(patch_rect).setTo(0);
     } else {
-      auto patch_loc = tile_locations[i];
-      auto patch_rect = GetPatchRect(warped, patch_loc);
-      cost_img(patch_rect) += DeepCostMapEvaluator::UNCERTAINTY_COST / blur_factor;
+      // auto patch_loc = tile_locations[i];
+      // auto patch_rect = GetPatchRect(warped, patch_loc);
+      // local_cost_map(patch_rect) += DeepCostMapEvaluator::UNCERTAINTY_COST / blur_factor;
     }
   }
 
@@ -153,7 +196,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
       auto patch_idx = patch_location_indices[i];
       auto patch_loc = tile_locations[patch_idx];
       auto patch_rect = GetPatchRect(warped, patch_loc);
-      cost_img(patch_rect) += output[i].item<double>() / blur_factor;
+      local_cost_map(patch_rect) = output[i].item<double>();
     }
   }
 
@@ -165,17 +208,17 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j+= blur_ ? 5 : 1) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-
+      auto discount = pow(DISCOUNT_FACTOR, j);
       if (blur_) {
         std::vector<Eigen::Vector2f> locations = GetWheelLocations(state, params_.robot_width, params_.robot_length);
         for (auto loc : locations) {
-          auto cost = cost_img.at<float>((int)loc.x(), (int)loc.y());
-          path_costs[i] += cost;
+          auto cost = local_cost_map.at<float>((int)loc.x(), (int)loc.y());
+          path_costs[i] += cost * discount;
         }
       } else {
         auto loc = GetImageLocation(state.translation);
-        auto cost = cost_img.at<float>((int)loc.x(), (int)loc.y());
-        path_costs[i] += cost;
+        auto cost = local_cost_map.at<float>((int)loc.x(), (int)loc.y());
+        path_costs[i] += cost * discount;
       }
     }
   }
@@ -263,27 +306,33 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
-  for(size_t i = 0; i < paths.size(); i++) {
-    for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
-      auto state = paths[i]->GetIntermediateState(f);
-      auto image_loc = GetImageLocation(state.translation);
-      auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
-      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
-    }
-  }
 
   auto cell_height = (int) (warped_vis.rows / 2);
   auto tiler = ImageCells(2, 1, warped_vis.cols, cell_height);
   cv::Mat orig_warped_vis;
   cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, cell_height));
   tiler.setCell(0, 0, orig_warped_vis);
-  cv::Mat resized_cost_img;
-  cv::resize(cost_img, resized_cost_img, cv::Size(warped_vis.cols, cell_height));
-  cv::normalize(resized_cost_img, resized_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
   cv::Mat color_cost_img;
-  cvtColor(resized_cost_img, color_cost_img, cv::COLOR_GRAY2RGB);
-  tiler.setCell(0, 1, color_cost_img);
+  cvtColor(local_cost_map, color_cost_img, cv::COLOR_GRAY2RGB);
+  cv::normalize(color_cost_img, color_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
+
+  for(size_t i = 0; i < paths.size(); i++) {
+    for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
+      auto state = paths[i]->GetIntermediateState(f);
+      auto image_loc = GetImageLocation(state.translation);
+      auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
+      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
+      cv::circle(color_cost_img, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
+    }
+  }
+
+  cv::Mat resized_cost_img;
+  cv::resize(color_cost_img, resized_cost_img, cv::Size(warped_vis.cols, cell_height));
+
+  tiler.setCell(0, 1, resized_cost_img);
   warped_vis = tiler.image;
+
+  // std::cout << local_cost_map << std::endl;
   
   outputVideo.write(warped_vis);
   std::ostringstream out_img_stream;
@@ -302,6 +351,10 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   std::cout << "Linear Evaluation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
   std::cout << "Visualization Time" << (duration_cast<milliseconds>(t5 - t4)).count() << "ms" << std::endl;
   #endif
+
+  prev_loc = curr_loc;
+  prev_ang = curr_ang;
+
   return best;
 }
 
