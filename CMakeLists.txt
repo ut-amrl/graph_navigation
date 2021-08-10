@@ -74,7 +74,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/image_based_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
-    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS} X11)
 
 
 ADD_EXECUTABLE(navigation_tests

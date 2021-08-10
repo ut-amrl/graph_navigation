@@ -74,6 +74,7 @@
 #include "motion_primitives.h"
 #include "navigation.h"
 #include "CImg.h"
+#undef Bool
 
 using actionlib_msgs::GoalStatus;
 using amrl_msgs::VisualizationMsg;
@@ -162,9 +163,9 @@ visualization_msgs::Marker target_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 
-// void EnablerCallback(const std_msgs::Bool& msg) {
-//   enabled_ = msg.data;
-// }
+void EnablerCallback(const std_msgs::Bool& msg) {
+  enabled_ = msg.data;
+}
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 0) {
