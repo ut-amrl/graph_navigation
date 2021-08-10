@@ -95,38 +95,36 @@ cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
 void DeepCostMapEvaluator::UpdateLocalMap() {
   Eigen::Affine2f curr_trans = Eigen::Translation2f(curr_loc) * Eigen::Rotation2Df(curr_ang);
   Eigen::Affine2f prev_trans = Eigen::Translation2f(prev_loc) * Eigen::Rotation2Df(prev_ang);
+  cv::Mat flipped_cost_map;
+  cv::flip(local_cost_map, flipped_cost_map, 0);
 
   Eigen::Affine2f delta_trans = prev_trans.inverse() * curr_trans;
-  // auto reverseTrans = delta_trans.inverse();
-  cv::Mat transformMatrix;
-  cv::Mat rotationMat;
+  
   cv::Mat translationMat;
-  Eigen::Matrix2f eigenRotation = delta_trans.rotation().matrix().inverse();
-  Eigen::Vector2f eigenTranslation = Eigen::Rotation2Df(M_PI_2) * delta_trans.translation().matrix();
+  Eigen::Matrix2f eigenRotation = Eigen::Rotation2Df(-M_PI_2) * delta_trans.rotation().matrix().inverse() * Eigen::Rotation2Df(M_PI_2);
+  Eigen::Vector2f eigenTranslation = -eigenRotation * Eigen::Rotation2Df(-M_PI_2) * delta_trans.translation().matrix();
   eigenTranslation = eigenTranslation.cwiseProduct(ImageBasedEvaluator::SCALING);
-  cv::eigen2cv(eigenRotation, rotationMat);
-  cv::eigen2cv(eigenTranslation, translationMat);
+  cv::eigen2cv(eigenTranslation, translationMat);;
 
-  cv::hconcat(rotationMat, translationMat, transformMatrix);
+  Eigen::Rotation2Df rot;
+  rot.fromRotationMatrix(eigenRotation);
 
-  auto prev_cost_map = local_cost_map.clone();
-  local_cost_map.setTo(0);
-  cv::warpAffine(prev_cost_map, local_cost_map, transformMatrix, local_cost_map.size(),
+  auto transformMatrix = cv::getRotationMatrix2D(Point2f(CENTER.x(), CENTER.y()), -rot.angle() * (180. / M_PI), 1.0);
+
+  transformMatrix(cv::Rect(2, 0, 1, 2)) -= translationMat;
+
+  auto prev_cost_map = flipped_cost_map.clone();
+  flipped_cost_map.setTo(0);
+  cv::warpAffine(prev_cost_map, flipped_cost_map, transformMatrix, flipped_cost_map.size(),
                cv::INTER_LINEAR,
                cv::BORDER_CONSTANT,
                UNCERTAINTY_COST);
-  
-  // cv::Mat resized_cost_img;
-  // cv::normalize(local_cost_map, resized_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
-  // cv::Mat color_cost_img;
-  // cvtColor(resized_cost_img, color_cost_img, cv::COLOR_GRAY2RGB);
-  // cv::line(color_cost_img, cv::Point(0, CENTER.y()), cv::Point(CENTER.x() * 2, CENTER.y()), cv::Scalar(200, 0, 0), 3);
 
-  // std::ostringstream out_img_stream;
-  // out_img_stream << "vis/images/local_transformed_" << plan_idx << ".png";
-  // std::string out_img_name = out_img_stream.str();
-  // cv::imwrite(out_img_name, color_cost_img);
+  local_cost_map.setTo(0);
+  cv::flip(flipped_cost_map, local_cost_map, 0);
 
+  prev_loc = curr_loc;
+  prev_ang = curr_ang;
 }
 
 shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
@@ -354,9 +352,6 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   std::cout << "Linear Evaluation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
   std::cout << "Visualization Time" << (duration_cast<milliseconds>(t5 - t4)).count() << "ms" << std::endl;
   #endif
-
-  prev_loc = curr_loc;
-  prev_ang = curr_ang;
 
   return best;
 }

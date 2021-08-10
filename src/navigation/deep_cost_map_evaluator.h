@@ -21,6 +21,7 @@
 
 #include <string>
 #include <vector>
+#include <mutex>
 
 #include "torch/torch.h"
 
