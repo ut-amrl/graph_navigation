@@ -43,6 +43,9 @@ using Eigen::Vector2f;
 namespace motion_primitives {
 
   cv::Mat ImageBasedEvaluator::GetWarpedImage() {
+    // if (local_img) {
+      return local_img;
+    // }
     cv::Mat image_undistorted = image.clone();
     cv::undistort(image.clone(), image_undistorted, cameraMatrix, distortionMatrix);
     cv::Mat warped;

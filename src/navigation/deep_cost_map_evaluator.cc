@@ -109,7 +109,7 @@ void DeepCostMapEvaluator::UpdateLocalMap() {
   Eigen::Rotation2Df rot;
   rot.fromRotationMatrix(eigenRotation);
 
-  auto transformMatrix = cv::getRotationMatrix2D(Point2f(CENTER.x(), CENTER.y()), -rot.angle() * (180. / M_PI), 1.0);
+  auto transformMatrix = cv::getRotationMatrix2D(cv::Point2f(CENTER.x(), CENTER.y()), -rot.angle() * (180. / M_PI), 1.0);
 
   transformMatrix(cv::Rect(2, 0, 1, 2)) -= translationMat;
 
@@ -135,7 +135,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   cv::Mat warped = GetWarpedImage();
   cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
-
+  
   # if VIS_IMAGES
   cv::Mat warped_vis = warped.clone();
   #endif
@@ -278,6 +278,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   }
 
   if (best_idx == -1) {
+    std::cout << "No Valid Paths" << std::endl;
     // No valid paths!
     return nullptr;
   }
@@ -307,6 +308,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
+  std::cout << "VISUALIZING" << warped_vis.rows << std::endl;
 
   auto cell_height = (int) (warped_vis.rows / 2);
   auto tiler = ImageCells(2, 1, warped_vis.cols, cell_height);

@@ -82,6 +82,8 @@ class Navigation {
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
+  void UpdateLocalImage(cv::Mat image);
+
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
   void ObserveImage(cv::Mat image, double time);
@@ -191,6 +193,9 @@ class Navigation {
   float odom_angle_;
   // Newest image received.
   cv::Mat latest_image_;
+  // GT local image.
+  cv::Mat local_image_;
+  
   Odom latest_odom_msg_;
 
   // Whether navigation is complete.

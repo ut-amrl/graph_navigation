@@ -73,12 +73,12 @@
 
 #include "motion_primitives.h"
 #include "navigation.h"
-#include "CImg.h"
+// #include "CImg.h"
 
 using actionlib_msgs::GoalStatus;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
-using cimg_library::CImg;
+// using cimg_library::CImg;
 using math_util::DegToRad;
 using math_util::RadToDeg;
 using motion_primitives::PathRolloutBase;
@@ -103,7 +103,7 @@ using ros_helpers::InitRosHeader;
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 const string kOpenCVWindow = "Image window";
 
-CImg<float> global_image_map_;
+cv::Mat global_image_map_;
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
@@ -162,9 +162,9 @@ visualization_msgs::Marker target_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 
-// void EnablerCallback(const std_msgs::Bool& msg) {
-//   enabled_ = msg.data;
-// }
+void EnablerCallback(const std_msgs::Bool& msg) {
+  enabled_ = msg.data;
+}
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 0) {
@@ -290,16 +290,16 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
     const Vector2f image_coord = 
         Vector2f(msg.pose.x, msg.pose.y) * kImageScale + kImageOffset;
     static const float kImageHalfWidth = 50;
-    CImg<float> local_image = global_image_map_.get_crop(
+    cv::Mat local_image = global_image_map_(cv::Rect(
         image_coord.x() - kImageHalfWidth,
         image_coord.y() - kImageHalfWidth, 
-        0,
-        0,
-        image_coord.x() + kImageHalfWidth,
-        image_coord.y() + kImageHalfWidth, 
-        0,
-        0);
-    local_image = local_image.rotate(-msg.pose.theta);
+        kImageHalfWidth * 2,
+        kImageHalfWidth * 2)).clone();
+  
+    auto transformMatrix = cv::getRotationMatrix2D(cv::Point2f(kImageHalfWidth, kImageHalfWidth), -msg.pose.theta * (180. / M_PI), 1.0);
+    cv::Mat rotated_image;
+    cv::warpAffine(local_image, rotated_image, transformMatrix, local_image.size(), cv::INTER_LINEAR);
+    navigation_.UpdateLocalImage(rotated_image);
   }
 }
 
@@ -772,7 +772,7 @@ int main(int argc, char** argv) {
   std::string deprecated_path = navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
   if (!FLAGS_global_image.empty()) {
     printf("Using global image %s\n", FLAGS_global_image.c_str());
-    global_image_map_.load(FLAGS_global_image.c_str());
+    global_image_map_ = cv::imread(FLAGS_global_image.c_str());
   }
   if (!FileExists(map_path) && FileExists(deprecated_path)) {
     printf("Could not find navigation map file at %s. An V1 nav-map was found\

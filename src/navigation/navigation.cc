@@ -224,6 +224,10 @@ void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
   loc_initialized_ = true;
 }
 
+void Navigation::UpdateLocalImage(cv::Mat image) {
+  local_image_ = image;
+}
+
 void Navigation::PruneLatencyQueue() {
   if (command_history_.empty()) return;
   const double update_time = min(t_point_cloud_, t_odometry_);
@@ -600,7 +604,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   }
 
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
-  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
+  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_, local_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     printf("%lu options\n", paths.size());
