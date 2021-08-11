@@ -329,6 +329,11 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     }
   }
 
+  auto target_img_loc = GetImageLocation(local_target);
+  auto curr_img_loc = GetImageLocation(Vector2f(0, 0));
+  auto color = cv::Scalar(0, 255, 0);
+  cv::line(color_cost_img, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
+
   cv::Mat resized_cost_img;
   cv::resize(color_cost_img, resized_cost_img, cv::Size(warped_vis.cols, cell_height));
 

@@ -285,11 +285,11 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   }
 
   {
-    static const float kImageScale = 3.0; // pixels per meter.
-    static const Vector2f kImageOffset(100, 100);
+    static const float kImageScale = 100.0; // pixels per meter.
+    static const Vector2f kImageOffset(1000, 1000);
     const Vector2f image_coord = 
         Vector2f(msg.pose.x, msg.pose.y) * kImageScale + kImageOffset;
-    static const float kImageHalfWidth = 50;
+    static const float kImageHalfWidth = 400;
     cv::Mat local_image = global_image_map_(cv::Rect(
         image_coord.x() - kImageHalfWidth,
         image_coord.y() - kImageHalfWidth, 

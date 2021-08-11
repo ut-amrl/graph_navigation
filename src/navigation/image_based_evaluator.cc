@@ -44,6 +44,7 @@ namespace motion_primitives {
 
   cv::Mat ImageBasedEvaluator::GetWarpedImage() {
     // if (local_img) {
+      std::cout << "HERE" << local_img.rows;
       return local_img;
     // }
     cv::Mat image_undistorted = image.clone();
