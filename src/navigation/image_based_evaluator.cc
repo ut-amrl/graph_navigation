@@ -44,7 +44,6 @@ namespace motion_primitives {
 
   cv::Mat ImageBasedEvaluator::GetWarpedImage() {
     // if (local_img) {
-      std::cout << "HERE" << local_img.rows;
       return local_img;
     // }
     cv::Mat image_undistorted = image.clone();
@@ -141,7 +140,7 @@ namespace motion_primitives {
   std::vector<Eigen::Vector2f> ImageBasedEvaluator::GetTilingLocations(const cv::Mat& img, const int tile_size) {
     std::vector<Eigen::Vector2f> locations;
     for(int i = 0; i < img.cols; i+= tile_size) {
-      for(int j = (int)(img.rows * TILING_START_PCT); j < img.rows; j += tile_size) {
+      for(int j = (int)(img.rows * TILING_START_PCT); j < (int)(img.rows * TILING_END_PCT); j += tile_size) {
         locations.emplace_back(i, j);
       }
     }

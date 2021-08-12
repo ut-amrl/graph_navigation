@@ -67,13 +67,13 @@ namespace motion_primitives {
 
 bool DeepCostMapEvaluator::LoadModel() {
   # if VIS_IMAGES
-  int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
-  outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(1280, 1024), true);
-  if (!outputVideo.isOpened())
-  {
-      cout  << "Could not open the output video for write" << endl;
-      return -1;
-  }
+  // int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+  // outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(800, 800), true);
+  // if (!outputVideo.isOpened())
+  // {
+  //     cout  << "Could not open the output video for write" << endl;
+  //     return -1;
+  // }
   # endif
 
   try {
@@ -295,20 +295,19 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
       FPL_WEIGHT * paths[i]->Length() +
       CLEARANCE_WEIGHT * paths[i]->Clearance() + 
       COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
-    printf("COMPONENTS %d c: %ld total %f (dist: %f fpl: %f clearance: %f cost: %f)\n", plan_idx, i, cost, DISTANCE_WEIGHT * path_progress,FPL_WEIGHT * paths[i]->Length(), CLEARANCE_WEIGHT * paths[i]->Clearance(), COST_WEIGHT * normalized_path_costs.at<float>(i, 0) );
+    // printf("COMPONENTS %d c: %ld total %f (dist: %f fpl: %f clearance: %f cost: %f)\n", plan_idx, i, cost, DISTANCE_WEIGHT * path_progress,FPL_WEIGHT * paths[i]->Length(), CLEARANCE_WEIGHT * paths[i]->Clearance(), COST_WEIGHT * normalized_path_costs.at<float>(i, 0) );
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
       best_idx = i;
     }
   }
-  printf("CHOSEN %d\n", best_idx);
+  // printf("CHOSEN %d\n", best_idx);
   #if PERF_BENCHMARK
   auto t4 = high_resolution_clock::now();
   #endif
 
   # if VIS_IMAGES
-  std::cout << "VISUALIZING" << warped_vis.rows << std::endl;
 
   auto cell_height = (int) (warped_vis.rows / 2);
   auto tiler = ImageCells(2, 1, warped_vis.cols, cell_height);
@@ -340,13 +339,15 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   tiler.setCell(0, 1, resized_cost_img);
   warped_vis = tiler.image;
 
+  latest_vis_image_ = warped_vis.clone();
+
   // std::cout << local_cost_map << std::endl;
   
-  outputVideo.write(warped_vis);
-  std::ostringstream out_img_stream;
-  out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
-  std::string out_img_name = out_img_stream.str();
-  cv::imwrite(out_img_name, warped_vis);
+  // outputVideo.write(warped_vis);
+  // std::ostringstream out_img_stream;
+  // out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
+  // std::string out_img_name = out_img_stream.str();
+  // cv::imwrite(out_img_name, warped_vis);
   #endif
 
   #if PERF_BENCHMARK

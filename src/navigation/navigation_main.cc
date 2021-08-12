@@ -70,6 +70,7 @@
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
+#include <cv_bridge/cv_bridge.h>
 
 #include "motion_primitives.h"
 #include "navigation.h"
@@ -154,6 +155,8 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+ros::Publisher local_image_pub_;
+ros::Publisher viz_image_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -286,20 +289,42 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
 
   {
     static const float kImageScale = 100.0; // pixels per meter.
-    static const Vector2f kImageOffset(1000, 1000);
+    static const Vector2f kImageOffset(1500, 1500);
     const Vector2f image_coord = 
-        Vector2f(msg.pose.x, msg.pose.y) * kImageScale + kImageOffset;
+        Vector2f(msg.pose.x, -msg.pose.y) * kImageScale + kImageOffset;
     static const float kImageHalfWidth = 400;
-    cv::Mat local_image = global_image_map_(cv::Rect(
-        image_coord.x() - kImageHalfWidth,
-        image_coord.y() - kImageHalfWidth, 
-        kImageHalfWidth * 2,
-        kImageHalfWidth * 2)).clone();
-  
-    auto transformMatrix = cv::getRotationMatrix2D(cv::Point2f(kImageHalfWidth, kImageHalfWidth), -msg.pose.theta * (180. / M_PI), 1.0);
-    cv::Mat rotated_image;
-    cv::warpAffine(local_image, rotated_image, transformMatrix, local_image.size(), cv::INTER_LINEAR);
-    navigation_.UpdateLocalImage(rotated_image);
+
+
+    // to prevent clipping, grab a bigget segment
+    auto roi = cv::Rect(
+        cv::Point(
+          image_coord.x() - kImageHalfWidth,
+          image_coord.y() - kImageHalfWidth),
+        cv::Point(
+          image_coord.x() + kImageHalfWidth,
+          image_coord.y() + kImageHalfWidth
+        )
+    );
+
+    // Create rect representing the image
+    auto image_rect = cv::Rect({}, global_image_map_.size());
+    // Find intersection, i.e. valid crop region
+    auto intersection = image_rect & roi;
+
+    cv::Mat local_image = global_image_map_(intersection).clone();
+    cv::rotate(local_image, local_image, cv::ROTATE_90_COUNTERCLOCKWISE);
+    auto transformMatrix = cv::getRotationMatrix2D(
+      cv::Point2f(intersection.width / 2, intersection.height / 2),
+      // cv::Point2f(image_coord.x() - intersection.tl().x, image_coord.y() - intersection.tl().y),
+      -(msg.pose.theta) * (180. / M_PI), 1.0
+    );
+    cv::warpAffine(local_image, local_image, transformMatrix, local_image.size(), cv::INTER_LINEAR);
+
+    cv_bridge::CvImage out_msg;
+    out_msg.encoding = sensor_msgs::image_encodings::BGR8;
+    out_msg.image = local_image;
+    local_image_pub_.publish(out_msg);
+    navigation_.UpdateLocalImage(local_image);
   }
 }
 
@@ -759,6 +784,13 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
   }
 }
 
+cv_bridge::CvImage cv2msg(const cv::Mat& img_mat) {
+  cv_bridge::CvImage out_msg;
+  out_msg.encoding = sensor_msgs::image_encodings::BGR8;
+  out_msg.image = img_mat;
+  return out_msg;
+}
+
 int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
@@ -803,6 +835,8 @@ int main(int argc, char** argv) {
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
+  local_image_pub_ = n.advertise<sensor_msgs::Image>("local_image", 1);
+  viz_image_pub_ = n.advertise<sensor_msgs::Image>("vis_image", 1);
 
   // Messages
   local_viz_msg_ = visualization::NewVisualizationMessage(
@@ -861,7 +895,7 @@ int main(int argc, char** argv) {
         carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
         viz_pub_.publish(local_viz_msg_);
         viz_pub_.publish(global_viz_msg_);
-
+        viz_image_pub_.publish(cv2msg(navigation_.GetLatestEvaluationImage()));
         // Publish Commands
         SendCommand(cmd_vel, cmd_angle_vel);
       }

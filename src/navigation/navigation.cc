@@ -760,6 +760,10 @@ float Navigation::GetAngularVelocity() {
   return robot_omega_;
 }
 
+cv::Mat Navigation::GetLatestEvaluationImage() {
+  return dynamic_cast<ImageBasedEvaluator*>(evaluator_.get())->latest_vis_image_;
+}
+
 // contents
 string Navigation::GetNavStatus() {
   string output = "Normal";

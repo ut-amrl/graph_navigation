@@ -82,6 +82,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   cv::Mat cameraMatrix;
   cv::Mat distortionMatrix;
   cv::Mat homography;
+  cv::Mat latest_vis_image_;
 
   const navigation::NavigationParameters& params_;
 
@@ -92,6 +93,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.25f;
   static constexpr float TILING_START_PCT = 0.0f;
+  static constexpr float TILING_END_PCT = 0.5f;
   static const size_t ROLLOUT_DENSITY = 50;
 };
 
