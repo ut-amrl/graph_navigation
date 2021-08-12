@@ -170,25 +170,19 @@ void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
 }
 
-std::string rgb2hex(int r, int g, int b, bool with_head)
-{
-  std::stringstream ss;
-  if (with_head)
-    ss << "#";
-  ss << std::hex << (r << 16 | g << 8 | b );
-  return ss.str();
-}
-
 void DrawGlobalMap() {
   for(int i = 0; i < global_image_map_.size().width; i+= 10) {
     for(int j = 0; j < global_image_map_.size().height; j+= 10) {
-      auto map_coord = Eigen::Vector2f(i / 100.0f, j / 100.0f);
+      auto map_coord = Eigen::Vector2f((i - 1500) / 100.0f, (j - 1500) / 100.0f);
       auto color = global_image_map_.at<cv::Vec3b>(j, i);
-      std::cout << color <<std::endl;
-      uint32_t color_code;   
-      std::string hex = "0x" + rgb2hex(color[0], color[1], color[2], false);
-
-      visualization::DrawPoint(map_coord, color_code, global_viz_msg_);
+      const uint32_t r = color[0];
+      const uint32_t g = color[1];
+      const uint32_t b = color[2];
+      const uint32_t rgb = 0xFF000000 | (r << 16) | (g << 8) | b; 
+      // uint32_t color_code;   
+      // std::string hex = "0x" + rgb2hex(color[0], color[1], color[2], false);
+      // std::cout << "map_coord: " << map_coord << std::endl;
+      visualization::DrawPoint(map_coord, rgb, global_viz_msg_);
     }
   }
 }
@@ -898,6 +892,7 @@ int main(int argc, char** argv) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
+    DrawGlobalMap();
 
     if (goal_set_) {
       // Run Navigation to get commands
@@ -907,7 +902,6 @@ int main(int argc, char** argv) {
 
       // Publish Nav Status
       PublishNavStatus();
-      // DrawGlobalMap();
 
       if(nav_succeeded) {
         // Publish Visualizations
@@ -919,12 +913,12 @@ int main(int argc, char** argv) {
         PublishPath();
         carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
         viz_pub_.publish(local_viz_msg_);
-        viz_pub_.publish(global_viz_msg_);
         viz_image_pub_.publish(cv2msg(navigation_.GetLatestEvaluationImage()));
         // Publish Commands
         SendCommand(cmd_vel, cmd_angle_vel);
       }
     }
+    viz_pub_.publish(global_viz_msg_);
     loop.Sleep();
   }
   if (FLAGS_debug_images) cv::destroyWindow(kOpenCVWindow);
