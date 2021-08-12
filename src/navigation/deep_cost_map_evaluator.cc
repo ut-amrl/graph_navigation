@@ -207,7 +207,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j+= blur_ ? 5 : 1) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
       auto state = paths[i]->GetIntermediateState(f);
-      auto discount = pow(DISCOUNT_FACTOR, j);
+      auto discount = (1 - state.translation.norm() * DISCOUNT_FACTOR);
       if (blur_) {
         std::vector<Eigen::Vector2f> locations = GetWheelLocations(state, params_.robot_width, params_.robot_length);
         for (auto loc : locations) {

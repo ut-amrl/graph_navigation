@@ -72,6 +72,8 @@
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
 #include <cv_bridge/cv_bridge.h>
+#include <opencv2/viz/types.hpp>
+
 
 #include "motion_primitives.h"
 #include "navigation.h"
@@ -151,6 +153,7 @@ ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher map_lines_publisher_;
 ros::Publisher pose_marker_publisher_;
+ros::Publisher global_map_publisher_;
 ros::Publisher nav_status_pub_;
 ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
@@ -163,26 +166,41 @@ ros::Publisher viz_image_pub_;
 visualization_msgs::Marker line_list_marker_;
 visualization_msgs::Marker pose_marker_;
 visualization_msgs::Marker target_marker_;
+visualization_msgs::Marker global_map_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
+
 
 void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
 }
 
 void DrawGlobalMap() {
+  global_map_marker_.points.clear();
+  global_map_marker_.colors.clear();
   for(int i = 0; i < global_image_map_.size().width; i+= 10) {
     for(int j = 0; j < global_image_map_.size().height; j+= 10) {
-      auto map_coord = Eigen::Vector2f((i - 1500) / 100.0f, (j - 1500) / 100.0f);
+      auto map_coord = Eigen::Vector2f((i - 1500) / 100.0f, -(j - 1500) / 100.0f);
       auto color = global_image_map_.at<cv::Vec3b>(j, i);
-      const uint32_t r = color[0];
+      const uint32_t r = color[2];
       const uint32_t g = color[1];
-      const uint32_t b = color[2];
+      const uint32_t b = color[0];
       const uint32_t rgb = 0xFF000000 | (r << 16) | (g << 8) | b; 
       // uint32_t color_code;   
       // std::string hex = "0x" + rgb2hex(color[0], color[1], color[2], false);
       // std::cout << "map_coord: " << map_coord << std::endl;
       visualization::DrawPoint(map_coord, rgb, global_viz_msg_);
+      geometry_msgs::Point point;
+      point.x = map_coord.x();
+      point.y = map_coord.y();
+      point.z = 0;
+      global_map_marker_.points.push_back(point);
+      std_msgs::ColorRGBA vis_color;
+      vis_color.r = r;
+      vis_color.g = g;
+      vis_color.b = b;
+      vis_color.a = 1;
+      global_map_marker_.colors.push_back(vis_color);
     }
   }
 }
@@ -668,7 +686,17 @@ void InitSimulatorVizMarkers() {
   scale.z = 0.05;
 
   InitVizMarker(target_marker_,
-      "targets",
+      "targ`ets",
+      1,
+      "points",
+      p,
+      scale,
+      0.0,
+      color);
+
+
+  InitVizMarker(global_map_marker_,
+      "global_map",
       1,
       "points",
       p,
@@ -718,6 +746,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_linear_speed);
   REAL_PARAM(max_angular_accel);
   REAL_PARAM(max_angular_decel);
+
   REAL_PARAM(max_angular_speed);
   REAL_PARAM(carrot_dist);
   REAL_PARAM(system_latency);
@@ -856,6 +885,9 @@ int main(int argc, char** argv) {
   local_image_pub_ = n.advertise<sensor_msgs::Image>("local_image", 1);
   viz_image_pub_ = n.advertise<sensor_msgs::Image>("vis_image", 1);
 
+  global_map_publisher_ =
+      n.advertise<visualization_msgs::Marker>("/nav_marker_visualization", 6);
+
   // Messages
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
@@ -919,6 +951,7 @@ int main(int argc, char** argv) {
       }
     }
     viz_pub_.publish(global_viz_msg_);
+    global_map_publisher_.publish(global_map_marker_);
     loop.Sleep();
   }
   if (FLAGS_debug_images) cv::destroyWindow(kOpenCVWindow);

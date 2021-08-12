@@ -55,10 +55,10 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   static constexpr float UNCERTAINTY_COST = 10.0f;
   static constexpr double DISTANCE_WEIGHT = -1.0;
   static constexpr double CLEARANCE_WEIGHT = -0.5;
-  static constexpr double FPL_WEIGHT = -0.5;
+  static constexpr double FPL_WEIGHT = -0.75;
   static constexpr double COST_WEIGHT = 2.0;
   static constexpr double BLUR_FACTOR = 0.0;
-  static constexpr double DISCOUNT_FACTOR = 0.995;
+  static constexpr double DISCOUNT_FACTOR = 0.15; // discount per meter from the robot
   
   Eigen::Vector2f prev_loc;
   float prev_ang;

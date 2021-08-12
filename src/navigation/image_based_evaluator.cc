@@ -40,12 +40,14 @@ using std::shared_ptr;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 
+#define SIMULATION_MODE 1
+
 namespace motion_primitives {
 
   cv::Mat ImageBasedEvaluator::GetWarpedImage() {
-    // if (local_img) {
+    #if SIMULATION_MODE
       return local_img;
-    // }
+    #endif
     cv::Mat image_undistorted = image.clone();
     cv::undistort(image.clone(), image_undistorted, cameraMatrix, distortionMatrix);
     cv::Mat warped;
