@@ -859,7 +859,7 @@ bool Navigation::Run(const double& time,
   } else {
     // TODO check if the robot needs to turn around.
     // TODO(jaholtz) kLocalFOV should be a parameter
-    static const float kLocalFOV = DegToRad(90.0);
+    static const float kLocalFOV = DegToRad(180.0);
     // Local Navigation
     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
     // Handling social navigation override target

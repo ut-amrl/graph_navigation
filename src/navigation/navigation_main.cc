@@ -67,6 +67,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "nav_msgs/OccupancyGrid.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -167,6 +168,29 @@ VisualizationMsg global_viz_msg_;
 
 void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
+}
+
+std::string rgb2hex(int r, int g, int b, bool with_head)
+{
+  std::stringstream ss;
+  if (with_head)
+    ss << "#";
+  ss << std::hex << (r << 16 | g << 8 | b );
+  return ss.str();
+}
+
+void DrawGlobalMap() {
+  for(int i = 0; i < global_image_map_.size().width; i+= 10) {
+    for(int j = 0; j < global_image_map_.size().height; j+= 10) {
+      auto map_coord = Eigen::Vector2f(i / 100.0f, j / 100.0f);
+      auto color = global_image_map_.at<cv::Vec3b>(j, i);
+      std::cout << color <<std::endl;
+      uint32_t color_code;   
+      std::string hex = "0x" + rgb2hex(color[0], color[1], color[2], false);
+
+      visualization::DrawPoint(map_coord, color_code, global_viz_msg_);
+    }
+  }
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
@@ -883,6 +907,7 @@ int main(int argc, char** argv) {
 
       // Publish Nav Status
       PublishNavStatus();
+      // DrawGlobalMap();
 
       if(nav_succeeded) {
         // Publish Visualizations
