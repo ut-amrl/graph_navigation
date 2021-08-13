@@ -304,6 +304,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->Length());
     latest_cost_components_.push_back(CLEARANCE_WEIGHT * paths[i]->Clearance());
     latest_cost_components_.push_back(COST_WEIGHT * normalized_path_costs.at<float>(i, 0));
+    latest_cost_components_.push_back(cost);
     
     if (cost < best_cost) {
       best = paths[i];
