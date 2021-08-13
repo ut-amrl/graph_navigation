@@ -307,6 +307,7 @@ void Navigation::TrapezoidTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
       params_.dt);
   cmd_vel = {velocity_cmd, 0};
   cmd_angle_vel = 0;
+  printf("x: %.3f d:%.3f v: %.3f cmd:%.3f\n", x, FLAGS_test_dist, speed, velocity_cmd);
 }
 
 void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
@@ -777,7 +778,7 @@ bool Navigation::Run(const double& time,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
-    if (kDebug) printf("Not initialized\n");
+    if (kDebug) printf("Parameters and maps not initialized\n");
     return false;
   }
   if (!odom_initialized_) {
@@ -785,24 +786,23 @@ bool Navigation::Run(const double& time,
     return false;
   }
 
+  ForwardPredict(time + params_.system_latency);
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
-    return false;
+    return true;
   } else if (FLAGS_test_obstacle) {
     ObstacleTest(cmd_vel, cmd_angle_vel);
-    return false;
+    return true;
   } else if (FLAGS_test_avoidance) {
     ObstAvTest(cmd_vel, cmd_angle_vel);
-    return false;
+    return true;
   } else if (FLAGS_test_planner) {
     PlannerTest();
-    return false;
+    return true;
   } else if (FLAGS_test_latency) {
     LatencyTest(cmd_vel, cmd_angle_vel);
-    return false;
+    return true;
   }
-
-  ForwardPredict(time + params_.system_latency);
 
   if (nav_complete_) {
     if (kDebug) printf("Nav complete\n");
