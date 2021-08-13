@@ -563,7 +563,7 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const bool debug = false;
+  const bool debug = FLAGS_v > 0;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
@@ -765,7 +765,7 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
 void Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
-  const bool kDebug = false;
+  const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
     if (kDebug) printf("Not initialized\n");
     return;

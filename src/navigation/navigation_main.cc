@@ -145,7 +145,7 @@ void EnablerCallback(const std_msgs::Bool& msg) {
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
-  if (FLAGS_v > 0) {
+  if (FLAGS_v > 1) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
   navigation::Odom odom;
@@ -166,7 +166,7 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
 }
 
 void LaserHandler(const sensor_msgs::LaserScan& msg) {
-  if (FLAGS_v > 0) {
+  if (FLAGS_v > 1) {
     printf("Laser t=%f, dt=%f\n",
            msg.header.stamp.toSec(),
            GetWallTime() - msg.header.stamp.toSec());
@@ -252,7 +252,7 @@ void SignalHandler(int) {
 
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   static string map  = "";
-  if (FLAGS_v > 0) {
+  if (FLAGS_v > 1) {
     printf("Localization t=%f\n", GetWallTime());
   }
   navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
@@ -348,9 +348,28 @@ void PublishForwardPredictedPCL(const vector<Vector2f>& pcl) {
   fp_pcl_pub_.publish(fp_pcl_msg);
 }
 
+nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
+  nav_msgs::Path carrotNav;
+  carrotNav.header.stamp=ros::Time::now();
+  carrotNav.header.frame_id="map";
+  geometry_msgs::PoseStamped carrotPose;
+  carrotPose.pose.position.x = carrot.x();
+  carrotPose.pose.position.y = carrot.y();
+
+  carrotPose.pose.orientation.x = 0;
+  carrotPose.pose.orientation.y = 0;
+  carrotPose.pose.orientation.z = 0;
+  carrotPose.pose.orientation.w = 1;
+
+  carrotPose.header.stamp = ros::Time::now();
+  carrotPose.header.frame_id = "map";
+  carrotNav.poses.push_back(carrotPose);
+  return carrotNav;
+}
+
 void PublishPath() {
   const auto path = navigation_.GetPlanPath();
-  if(path.size()>0){
+  if (path.size() >= 2) {
     nav_msgs::Path path_msg;
     path_msg.header.stamp=ros::Time::now();
     path_msg.header.frame_id="map";
@@ -370,26 +389,8 @@ void PublishPath() {
 
       path_pub_.publish(path_msg);
     }
+    carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
   }
-}
-
-nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
-  nav_msgs::Path carrotNav;
-  carrotNav.header.stamp=ros::Time::now();
-  carrotNav.header.frame_id="map";
-  geometry_msgs::PoseStamped carrotPose;
-  carrotPose.pose.position.x = carrot.x();
-  carrotPose.pose.position.y = carrot.y();
-
-  carrotPose.pose.orientation.x = 0;
-  carrotPose.pose.orientation.y = 0;
-  carrotPose.pose.orientation.z = 0;
-  carrotPose.pose.orientation.w = 1;
-
-  carrotPose.header.stamp = ros::Time::now();
-  carrotPose.header.frame_id = "map";
-  carrotNav.poses.push_back(carrotPose);
-  return carrotNav;
 }
 
 void DrawTarget() {
@@ -728,8 +729,8 @@ int main(int argc, char** argv) {
   while (run_ && ros::ok()) {
     ros::spinOnce();
     // Run Navigation to get commands
-    Vector2f cmd_vel;
-    float cmd_angle_vel;
+    Vector2f cmd_vel(0, 0);
+    float cmd_angle_vel(0);
     navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status
@@ -742,11 +743,9 @@ int main(int argc, char** argv) {
     DrawPathOptions();
     PublishVisualizationMarkers();
     PublishPath();
-    carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
 
     // Publish Commands
     SendCommand(cmd_vel, cmd_angle_vel);
-
     loop.Sleep();
   }
   return 0;
