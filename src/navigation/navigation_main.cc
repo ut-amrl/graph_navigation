@@ -810,9 +810,9 @@ void LoadConfig(navigation::NavigationParameters* params) {
     params->D = { 0.092890, -0.046208, 0.000622, -0.001104, 0.000000 };
     
     params->H.push_back({-0.5,-1.5, 405, 387});
-    params->H.push_back({0.5,-1.5,840, 384});
-    params->H.push_back({0.5,-2.5,764, 281});
-    params->H.push_back({-0.5,-2.5,499, 283});
+    params->H.push_back({0.5,-1.5, 840, 384});
+    params->H.push_back({0.5,-2.5, 764, 281});
+    params->H.push_back({-0.5,-2.5, 499, 283});
   } else {
     params->K = { 867.04679,   0.     , 653.18207, 0.     , 866.39461, 537.77518, 0.     ,   0.     ,   1.};
     params->D = { -0.059124, 0.081963, 0.000743, 0.002461, 0.000000 };
@@ -842,7 +842,7 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
 
 cv_bridge::CvImage cv2msg(const cv::Mat& img_mat) {
   cv_bridge::CvImage out_msg;
-  out_msg.encoding = sensor_msgs::image_encodings::BGR8;
+  out_msg.encoding = sensor_msgs::image_encodings::RGB8;
   out_msg.image = img_mat;
   return out_msg;
 }

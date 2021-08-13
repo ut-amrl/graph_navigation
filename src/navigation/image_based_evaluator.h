@@ -28,6 +28,7 @@
 
 #ifndef IMAGE_BASED_EVALUATOR_H
 #define IMAGE_BASED_EVALUATOR_H
+#define SIMULATION_MODE 0
 
 namespace motion_primitives {
 
@@ -42,13 +43,16 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     // Homography computation
     SCALING = Eigen::Vector2f(100, 100);
     if (params.use_kinect) {
-      CENTER = Eigen::Vector2f(640, 812);
+      CENTER = Eigen::Vector2f(640, 780);
     } else  {
       CENTER = Eigen::Vector2f(640, 1024);
     }
 
     // For sim
-    CENTER = Eigen::Vector2f(400, 400);
+    // #if SIMULATION_MODE
+    // CENTER = Eigen::Vector2f(400, 400);
+    // #endif
+
     std::vector<cv::Point2f> input_points;
     std::vector<Eigen::Vector2f> output_points_vec;
 
@@ -92,10 +96,10 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static const int HALF_PATCH_SIZE = PATCH_SIZE / 2;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.25f;
-  static constexpr float TILING_START_PCT = 0.0f;
-  static constexpr float TILING_END_PCT = 0.5f;
-  static constexpr float ROBOT_SIZE_SAMPLE_SCALING = 1.35f;
-  static const size_t ROLLOUT_DENSITY = 50;
+  static constexpr float TILING_START_PCT = 0.5f;
+  static constexpr float TILING_END_PCT = 1.0f;
+  static constexpr float ROBOT_SIZE_SAMPLE_SCALING = 1.0f;
+  static const size_t ROLLOUT_DENSITY = 80;
 };
 
 }  // namespace motion_primitives

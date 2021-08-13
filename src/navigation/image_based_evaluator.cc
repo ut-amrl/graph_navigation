@@ -40,7 +40,6 @@ using std::shared_ptr;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 
-#define SIMULATION_MODE 1
 
 namespace motion_primitives {
 

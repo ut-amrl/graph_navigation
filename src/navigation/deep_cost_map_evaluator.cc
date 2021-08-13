@@ -60,7 +60,7 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-#define PERF_BENCHMARK 1
+#define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 
 namespace motion_primitives {
@@ -318,10 +318,9 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   # if VIS_IMAGES
 
-  auto cell_height = (int) (warped_vis.rows / 2);
-  auto tiler = ImageCells(2, 1, warped_vis.cols, cell_height);
+  auto tiler = ImageCells(2, 1, warped_vis.cols, warped_vis.rows);
   cv::Mat orig_warped_vis;
-  cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, cell_height));
+  cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, warped_vis.rows));
   tiler.setCell(0, 0, orig_warped_vis);
   cv::Mat color_cost_img;
   cvtColor(local_cost_map, color_cost_img, cv::COLOR_GRAY2RGB);
@@ -343,7 +342,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   cv::line(color_cost_img, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
 
   cv::Mat resized_cost_img;
-  cv::resize(color_cost_img, resized_cost_img, cv::Size(warped_vis.cols, cell_height));
+  cv::resize(color_cost_img, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
 
   tiler.setCell(0, 1, resized_cost_img);
   warped_vis = tiler.image;
