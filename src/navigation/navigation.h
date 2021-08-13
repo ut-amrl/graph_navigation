@@ -81,7 +81,7 @@ class Navigation {
   void UpdateCommandHistory(Twist twist);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
-  void Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
   void GetFreePathLength(float curvature,
@@ -128,8 +128,10 @@ class Navigation {
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
   float GetObstacleMargin();
-  std::vector<PathOption> GetLastPathOptions();
-  PathOption GetOption();
+  float GetRobotWidth();
+  float GetRobotLength();
+  std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
+  std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
  private:
 
@@ -246,9 +248,10 @@ class Navigation {
   // Whether or not local carrot is overriden
   bool target_override_;
   // Last Set of path options sampled
-  std::vector<PathOption> last_options_;
+  std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
+      last_options_;
   // Last PathOption taken
-  PathOption best_option_;
+  std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
 };
 
 }  // namespace navigation

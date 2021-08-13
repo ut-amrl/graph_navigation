@@ -563,7 +563,7 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  const bool debug = FLAGS_v > 0;
+  const bool debug = FLAGS_v > 1;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
@@ -611,6 +611,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          robot_omega_,
                          vel_cmd,
                          ang_vel_cmd);
+  last_options_ = paths;
+  best_option_ = best_path;
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
@@ -750,11 +752,19 @@ float Navigation::GetObstacleMargin() {
   return params_.obstacle_margin;
 }
 
-vector<PathOption> Navigation::GetLastPathOptions() {
+float Navigation::GetRobotWidth() {
+  return params_.robot_width;
+}
+
+float Navigation::GetRobotLength() {
+  return params_.robot_length;
+}
+
+vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
 
-PathOption Navigation::GetOption() {
+std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }
 
@@ -762,37 +772,44 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
-void Navigation::Run(const double& time,
+bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
     if (kDebug) printf("Not initialized\n");
-    return;
+    return false;
   }
   if (!odom_initialized_) {
     if (kDebug) printf("Odometry not initialized\n");
-    return;
+    return false;
   }
-  ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
+
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
-    return;
+    return false;
   } else if (FLAGS_test_obstacle) {
     ObstacleTest(cmd_vel, cmd_angle_vel);
-    return;
+    return false;
   } else if (FLAGS_test_avoidance) {
     ObstAvTest(cmd_vel, cmd_angle_vel);
-    return;
+    return false;
   } else if (FLAGS_test_planner) {
     PlannerTest();
-    return;
+    return false;
   } else if (FLAGS_test_latency) {
     LatencyTest(cmd_vel, cmd_angle_vel);
-    return;
+    return false;
   }
 
   ForwardPredict(time + params_.system_latency);
+
+  if (nav_complete_) {
+    if (kDebug) printf("Nav complete\n");
+    return true;
+  } else {
+    if (kDebug) printf("Nav running\n");
+  }
 
   // Replan as necessary (Global Plan)
   if (!PlanStillValid()) {
@@ -809,7 +826,7 @@ void Navigation::Run(const double& time,
   // Halt if necessary
   if (nav_complete_ || pause_) {
     Halt(cmd_vel, cmd_angle_vel);
-    return;
+    return true;
   } else {
     // TODO check if the robot needs to turn around.
     // TODO(jaholtz) kLocalFOV should be a parameter
@@ -835,6 +852,8 @@ void Navigation::Run(const double& time,
       }
     }
   }
+
+  return true;
 }
 
 }  // namespace navigation
