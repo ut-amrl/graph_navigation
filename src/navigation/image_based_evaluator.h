@@ -94,6 +94,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.25f;
   static constexpr float TILING_START_PCT = 0.0f;
   static constexpr float TILING_END_PCT = 0.5f;
+  static constexpr float ROBOT_SIZE_SAMPLE_SCALING = 1.35f;
   static const size_t ROLLOUT_DENSITY = 50;
 };
 

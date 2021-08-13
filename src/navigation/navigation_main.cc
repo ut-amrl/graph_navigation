@@ -67,6 +67,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Float32MultiArray.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
@@ -161,6 +162,7 @@ ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 ros::Publisher local_image_pub_;
 ros::Publisher viz_image_pub_;
+ros::Publisher cost_components_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -321,6 +323,13 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   if (map != msg.map) {
     map = msg.map;
     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
+  }
+
+  current_loc_ = {msg.pose.x, msg.pose.y};
+  current_angle_ = msg.pose.theta;
+
+  if (FLAGS_global_image.empty()) {
+    return;
   }
 
   {
@@ -642,7 +651,7 @@ void InitVizMarker(visualization_msgs::Marker& vizMarker, string ns,
   vizMarker.action = visualization_msgs::Marker::ADD;
 }
 
-void InitSimulatorVizMarkers() {
+void InitSimulatorVizMarkers(const navigation::NavigationParameters& params) {
   geometry_msgs::PoseStamped p;
   geometry_msgs::Point32 scale;
   vector<float> color;
@@ -664,8 +673,8 @@ void InitSimulatorVizMarkers() {
   p.pose.position.z = 0.0;
   p.pose.position.x = 0.0;
   p.pose.position.y = 0.0;
-  scale.x = 0.5;
-  scale.y = 0.44;
+  scale.x = params.robot_length;
+  scale.y = params.robot_width;
   scale.z = 0.5;
   color[0] = 94.0 / 255.0;
   color[1] = 156.0 / 255.0;
@@ -884,8 +893,11 @@ int main(int argc, char** argv) {
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
   local_image_pub_ = n.advertise<sensor_msgs::Image>("local_image", 1);
   viz_image_pub_ = n.advertise<sensor_msgs::Image>("vis_image", 1);
+  cost_components_pub_ = n.advertise<std_msgs::Float32MultiArray>("nav_cost_components", 1);
 
   global_map_publisher_ =
+      n.advertise<visualization_msgs::Marker>("/nav_marker_visualization", 6);
+  pose_marker_publisher_ =
       n.advertise<visualization_msgs::Marker>("/nav_marker_visualization", 6);
 
   // Messages
@@ -893,7 +905,7 @@ int main(int argc, char** argv) {
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
-  InitSimulatorVizMarkers();
+  InitSimulatorVizMarkers(params);
 
   // Services
   ros::ServiceServer nav_srv =
@@ -924,7 +936,10 @@ int main(int argc, char** argv) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
-    DrawGlobalMap();
+    if (!FLAGS_global_image.empty()) {
+      DrawGlobalMap();
+      PublishVisualizationMarkers();
+    }
 
     if (goal_set_) {
       // Run Navigation to get commands
@@ -941,11 +956,16 @@ int main(int argc, char** argv) {
         DrawRobot();
         DrawTarget();
         DrawPathOptions();
-        PublishVisualizationMarkers();
         PublishPath();
         carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
         viz_pub_.publish(local_viz_msg_);
         viz_image_pub_.publish(cv2msg(navigation_.GetLatestEvaluationImage()));
+        std_msgs::Float32MultiArray cost_msg;
+        for (auto comp : navigation_.GetLatestCostComponents()) {
+          cost_msg.data.push_back(comp);
+        }
+        // cost_msg.data = navigation_.GetLatestCostComponents();
+        cost_components_pub_.publish(cost_msg);
         // Publish Commands
         SendCommand(cmd_vel, cmd_angle_vel);
       }

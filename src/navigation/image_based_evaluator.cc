@@ -71,19 +71,19 @@ namespace motion_primitives {
     image_locs.push_back(center_loc);
     // front left wheel
     Eigen::Vector2f fl_vec(robot_length / 2, robot_width / 2);
-    Eigen::Vector2f fl_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * fl_vec);
+    Eigen::Vector2f fl_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * fl_vec * ROBOT_SIZE_SAMPLE_SCALING);
     image_locs.push_back(fl_loc);
     // front right wheel
     Eigen::Vector2f fr_vec(robot_length / 2, -robot_width / 2);
-    Eigen::Vector2f fr_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * fr_vec);
+    Eigen::Vector2f fr_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * fr_vec * ROBOT_SIZE_SAMPLE_SCALING);
     image_locs.push_back(fr_loc);
     // back left wheel
     Eigen::Vector2f bl_vec(-robot_length / 2, robot_width / 2);
-    Eigen::Vector2f bl_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * bl_vec);
+    Eigen::Vector2f bl_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * bl_vec * ROBOT_SIZE_SAMPLE_SCALING);
     image_locs.push_back(bl_loc);
     //back right wheel
     Eigen::Vector2f br_vec(-robot_length / 2, -robot_width / 2);
-    Eigen::Vector2f br_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * br_vec);
+    Eigen::Vector2f br_loc = GetImageLocation(pose.translation + Eigen::Rotation2Df(pose.angle) * br_vec * ROBOT_SIZE_SAMPLE_SCALING);
     image_locs.push_back(br_loc);
 
     return image_locs;

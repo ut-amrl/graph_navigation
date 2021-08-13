@@ -764,6 +764,11 @@ cv::Mat Navigation::GetLatestEvaluationImage() {
   return dynamic_cast<ImageBasedEvaluator*>(evaluator_.get())->latest_vis_image_;
 }
 
+std::vector<float> Navigation::GetLatestCostComponents() {
+  return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_cost_components_;
+}
+
+
 // contents
 string Navigation::GetNavStatus() {
   string output = "Normal";

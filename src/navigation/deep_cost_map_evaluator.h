@@ -53,12 +53,12 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   torch::jit::script::Module cost_module;
 
   static constexpr float UNCERTAINTY_COST = 10.0f;
-  static constexpr double DISTANCE_WEIGHT = -1.0;
+  static constexpr double DISTANCE_WEIGHT = -2.0;
   static constexpr double CLEARANCE_WEIGHT = -0.5;
   static constexpr double FPL_WEIGHT = -0.75;
   static constexpr double COST_WEIGHT = 2.0;
-  static constexpr double BLUR_FACTOR = 0.0;
-  static constexpr double DISCOUNT_FACTOR = 0.15; // discount per meter from the robot
+  static constexpr double BLUR_FACTOR = 0.1;
+  static constexpr double DISCOUNT_FACTOR = 0.2; // discount per meter from the robot
   
   Eigen::Vector2f prev_loc;
   float prev_ang;
@@ -66,6 +66,8 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   cv::VideoWriter outputVideo;
   bool blur_;
   int plan_idx = 0;
+
+  std::vector<float> latest_cost_components_;
 
   cv::Mat local_cost_map;
 };
