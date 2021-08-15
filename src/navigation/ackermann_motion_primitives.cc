@@ -125,6 +125,22 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
   return samples;
 }
 
+void AckermannSampler::AugmentSamples(std::vector<std::shared_ptr<PathRolloutBase>>& samples) {
+  std::vector<shared_ptr<PathRolloutBase>> augmentedSamples;
+  for (shared_ptr<PathRolloutBase> sample : samples) {
+    auto arc = (ConstantCurvatureArc*) sample.get();
+    auto augmented = new ConstantCurvatureArc(arc->curvature);
+    augmented->length = arc->Length() / 2;
+    augmented->angular_length = arc->angular_length;
+    augmented->clearance = arc->clearance;
+    augmented->obstruction = arc->obstruction;
+    augmentedSamples.push_back(shared_ptr<PathRolloutBase>(augmented));
+  }
+  
+
+  samples.insert(samples.end(), augmentedSamples.begin(), augmentedSamples.end());
+}
+
 void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   // How much the robot's body extends in front of its base link frame.

@@ -332,8 +332,8 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
       auto state = paths[i]->GetIntermediateState(f);
       auto image_loc = GetImageLocation(state.translation);
       auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
-      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
-      cv::circle(color_cost_img, cv::Point(image_loc.x(), image_loc.y()), 3, color, 2);
+      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
+      cv::circle(color_cost_img, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
     }
   }
 

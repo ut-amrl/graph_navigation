@@ -28,7 +28,7 @@
 
 #ifndef IMAGE_BASED_EVALUATOR_H
 #define IMAGE_BASED_EVALUATOR_H
-#define SIMULATION_MODE 0
+#define SIMULATION_MODE 1
 
 namespace motion_primitives {
 
@@ -49,9 +49,9 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     }
 
     // For sim
-    // #if SIMULATION_MODE
-    // CENTER = Eigen::Vector2f(400, 400);
-    // #endif
+    #if SIMULATION_MODE
+    CENTER = Eigen::Vector2f(400, 400);
+    #endif
 
     std::vector<cv::Point2f> input_points;
     std::vector<Eigen::Vector2f> output_points_vec;
@@ -96,10 +96,18 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   static const int HALF_PATCH_SIZE = PATCH_SIZE / 2;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.15f;
-  static constexpr float TILING_START_PCT = 0.6f;
-  static constexpr float TILING_END_PCT = 1.0f;
   static constexpr float ROBOT_SIZE_SAMPLE_SCALING = 1.0f;
   static const size_t ROLLOUT_DENSITY = 80;
+
+
+  #if SIMULATION_MODE
+    static constexpr float TILING_START_PCT = 0.0f;
+    static constexpr float TILING_END_PCT = 0.4f;
+  #else
+    static constexpr float TILING_START_PCT = 0.6f;
+    static constexpr float TILING_END_PCT = 1.0f;
+  #endif
+
 };
 
 }  // namespace motion_primitives

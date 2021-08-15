@@ -622,6 +622,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     if (debug) printf("No paths found\n");
     return;
   }
+
+  sampler_->AugmentSamples(paths);
+
   auto best_path = evaluator_->FindBest(paths);
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");

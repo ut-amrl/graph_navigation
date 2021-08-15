@@ -74,6 +74,9 @@ struct PathRolloutSamplerBase {
   // a set of n valid path rollout options that are collision-free.
   virtual std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) = 0;
 
+  // Augment some already generated path rollout options
+  virtual void AugmentSamples(std::vector<std::shared_ptr<PathRolloutBase>>& samples) = 0;
+
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.

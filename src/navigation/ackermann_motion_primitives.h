@@ -39,6 +39,8 @@ struct AckermannSampler : PathRolloutSamplerBase {
   // a set of valid path rollout options that are collision-free.
   std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) override;
 
+  void AugmentSamples(std::vector<std::shared_ptr<PathRolloutBase>>& samples) override;
+  
   // Default constructor, init parameters.
   AckermannSampler();
 
