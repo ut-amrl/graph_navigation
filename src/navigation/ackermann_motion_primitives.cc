@@ -132,7 +132,7 @@ void AckermannSampler::AugmentSamples(std::vector<std::shared_ptr<PathRolloutBas
     auto augmented = new ConstantCurvatureArc(arc->curvature);
     augmented->length = arc->Length() / 2.0f;
     CheckObstacles(augmented);
-    sample->angular_length = fabs(augmented->length * augmented->curvature);
+    augmented->angular_length = fabs(augmented->length * augmented->curvature);
     augmentedSamples.push_back(shared_ptr<PathRolloutBase>(augmented));
   }
   
