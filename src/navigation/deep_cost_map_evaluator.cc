@@ -300,6 +300,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
       COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
 
     latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->curvature);
+    latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->length);
     latest_cost_components_.push_back(DISTANCE_WEIGHT * path_progress);
     latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->Length());
     latest_cost_components_.push_back(CLEARANCE_WEIGHT * paths[i]->Clearance());
@@ -326,24 +327,27 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   cv::Mat color_cost_img;
   cvtColor(local_cost_map, color_cost_img, cv::COLOR_GRAY2RGB);
   cv::normalize(color_cost_img, color_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
+  cv::Mat overlay = color_cost_img.clone();
 
   for(size_t i = 0; i < paths.size(); i++) {
     for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
       auto state = paths[i]->GetIntermediateState(f);
       auto image_loc = GetImageLocation(state.translation);
       auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
-      cv::circle(warped_vis, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
-      cv::circle(color_cost_img, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
+      cv::circle(overlay, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
     }
   }
+  auto alpha = 0.5f;
+  cv::Mat color_cost_img_vis;
+  cv::addWeighted(overlay, alpha, color_cost_img, 1 - alpha, 0, color_cost_img_vis);
 
   auto target_img_loc = GetImageLocation(local_target);
   auto curr_img_loc = GetImageLocation(Vector2f(0, 0));
   auto color = cv::Scalar(0, 255, 0);
-  cv::line(color_cost_img, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
+  cv::line(color_cost_img_vis, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
 
   cv::Mat resized_cost_img;
-  cv::resize(color_cost_img, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
+  cv::resize(color_cost_img_vis, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
 
   tiler.setCell(0, 1, resized_cost_img);
   warped_vis = tiler.image;
