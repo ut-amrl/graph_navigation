@@ -28,7 +28,7 @@
 
 #ifndef IMAGE_BASED_EVALUATOR_H
 #define IMAGE_BASED_EVALUATOR_H
-#define SIMULATION_MODE 1
+#define SIMULATION_MODE 0
 
 namespace motion_primitives {
 

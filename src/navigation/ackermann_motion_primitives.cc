@@ -108,6 +108,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
+      sample->fpl = sample->length;
       sample->angular_length = fabs(sample->length * c);
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
@@ -118,6 +119,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       SetMaxPathLength(sample);
       CheckObstacles(sample);
       sample->angular_length = fabs(sample->length * c);
+      sample->fpl = sample->length;
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   }
@@ -131,6 +133,7 @@ void AckermannSampler::AugmentSamples(std::vector<std::shared_ptr<PathRolloutBas
     auto arc = (ConstantCurvatureArc*) sample.get();
     auto augmented = new ConstantCurvatureArc(arc->curvature);
     augmented->length = arc->Length() / 2.0f;
+    augmented->fpl = arc->fpl;
     CheckObstacles(augmented);
     augmented->angular_length = fabs(augmented->length * augmented->curvature);
     augmentedSamples.push_back(shared_ptr<PathRolloutBase>(augmented));

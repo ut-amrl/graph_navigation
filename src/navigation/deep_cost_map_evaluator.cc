@@ -285,7 +285,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   // Now try to find better paths.
   float best_cost = DISTANCE_WEIGHT * best_path_progress +
-      FPL_WEIGHT * paths[best_idx]->Length() +
+      FPL_WEIGHT * paths[best_idx]->FPL() +
       CLEARANCE_WEIGHT * paths[best_idx]->Clearance() + 
       COST_WEIGHT * normalized_path_costs.at<float>(best_idx, 0);
 
@@ -295,14 +295,14 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_progress = curr_goal_dist - dist_to_goal[i];
     const float cost = DISTANCE_WEIGHT * path_progress +
-      FPL_WEIGHT * paths[i]->Length() +
+      FPL_WEIGHT * paths[i]->FPL() +
       CLEARANCE_WEIGHT * paths[i]->Clearance() + 
       COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
 
     latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->curvature);
     latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->length);
     latest_cost_components_.push_back(DISTANCE_WEIGHT * path_progress);
-    latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->Length());
+    latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->FPL());
     latest_cost_components_.push_back(CLEARANCE_WEIGHT * paths[i]->Clearance());
     latest_cost_components_.push_back(COST_WEIGHT * normalized_path_costs.at<float>(i, 0));
     latest_cost_components_.push_back(cost);

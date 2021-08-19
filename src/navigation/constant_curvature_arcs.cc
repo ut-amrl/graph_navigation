@@ -43,6 +43,10 @@ float ConstantCurvatureArc::Length() const {
   return length;
 }
 
+float ConstantCurvatureArc::FPL() const {
+  return fpl;
+}
+
 float ConstantCurvatureArc::AngularLength() const {
   return angular_length;
 }

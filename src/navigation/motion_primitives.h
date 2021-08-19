@@ -42,6 +42,11 @@ struct PathRolloutBase {
   // velocity. 
   virtual float Length() const = 0;
 
+  // Free path length of the rollout -- this is the cumulative free space distance along the direction of the rollout
+  // along the path, $\int ||v(t)||dt$ where $v(t)$ is the instantaneous
+  // velocity. 
+  virtual float FPL() const = 0;
+
   // Angular Length of the path rollout -- this is cumulative angular distance
   // (not displacement) traversed: $\int ||\dot{\theta}(t)||dt$ where
   // $\dot{\theta}(t)$ is the instantaneous angular velocity.
