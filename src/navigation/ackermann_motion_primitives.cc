@@ -163,7 +163,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     if (!isfinite(p.x()) || !isfinite(p.y()) || p.x() < 0.0f) continue;
     if (p.x() > x_min && p.x() < l && fabs(p.y()) < w) {
       // This point is within the robot plus margin boundary.
-      printf("Obstacle within robot boundary\n");
+      // printf("Obstacle within robot boundary\n");
       path.length = 0;
       path.obstruction = p;
       path.obstacle_free = false;
