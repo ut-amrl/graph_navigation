@@ -775,6 +775,8 @@ int main(int argc, char** argv) {
       DrawPathOptions();
       PublishVisualizationMarkers();
       PublishPath();
+      local_viz_msg_.header.stamp = ros::Time::now();
+      global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
 
