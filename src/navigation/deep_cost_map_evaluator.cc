@@ -144,8 +144,8 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   std::vector<size_t> patch_location_indices;
   std::vector<at::Tensor> patch_tensors;
 
-  int blur_factor = 1;
-  float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
+  float cost_blur_factor = 2;
+  float blur_step = ImageBasedEvaluator::PATCH_SIZE / cost_blur_factor;
 
   #if PERF_BENCHMARK
   auto t1 = high_resolution_clock::now();
@@ -195,7 +195,14 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
       auto patch_idx = patch_location_indices[i];
       auto patch_loc = tile_locations[patch_idx];
       auto patch_rect = GetPatchRect(warped, patch_loc);
-      local_cost_map(patch_rect) = output[i].item<double>();
+      local_cost_map(patch_rect) = 0.0;
+    }
+
+    for(int i = 0; i < output.size(0); i++) {
+      auto patch_idx = patch_location_indices[i];
+      auto patch_loc = tile_locations[patch_idx];
+      auto patch_rect = GetPatchRect(warped, patch_loc);
+      local_cost_map(patch_rect) = output[i].item<double>() / cost_blur_factor;
     }
   }
 

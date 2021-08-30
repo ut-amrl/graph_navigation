@@ -4,7 +4,7 @@ import rospy
 from std_msgs.msg import Float32MultiArray
 
 def callback(data):
-  nav_components = data
+  nav_components = data.data
   print('--------------------------------------------------------------------------------------------------')
   for idx in range(0, int(len(nav_components)), 7):
     print("Curvature: {}, Length: {}, Progress: {}, FPL: {}, Clearance: {}, COST: {} total {}\n".format(nav_components[idx], nav_components[idx+1], nav_components[idx+2], nav_components[idx+3], nav_components[idx+4], nav_components[idx+5], nav_components[idx+6]))
@@ -23,3 +23,6 @@ def listener():
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
+
+
+listener()
