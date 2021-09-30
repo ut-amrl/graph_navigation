@@ -646,7 +646,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     return;
   }
   // TODO(jaholtz) take into account override target here
-  const float goal_theta = atan2(local_target_.y(), local_target_.x());
+  const float goal_theta = nav_loc_complete_ ? nav_goal_angle_ : atan2(local_target_.y(), local_target_.x());
   const float dv = params_.dt * params_.angular_limits.max_acceleration;
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
@@ -859,6 +859,7 @@ bool Navigation::Run(const double& time,
       }
     }
   } else {
+    if (kDebug) printf("Reached Goal: TurnInPlace\n");
     TurnInPlace(cmd_vel, cmd_angle_vel);
   }
 
