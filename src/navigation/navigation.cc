@@ -138,6 +138,7 @@ Navigation::Navigation() :
     robot_vel_(0, 0),
     robot_omega_(0),
     nav_complete_(true),
+    nav_loc_complete_(true),
     pause_(false),
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
@@ -176,6 +177,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   nav_complete_ = false;
+  nav_loc_complete_ = false;
   plan_path_.clear();
 }
 
@@ -735,6 +737,9 @@ string Navigation::GetNavStatus() {
   if (target_override_) {
     output = "Override";
   }
+  if (nav_loc_complete_) {
+    output = "Translation Complete";
+  }
   if (nav_complete_) {
     output = "Complete";
   }
@@ -823,7 +828,9 @@ bool Navigation::Run(const double& time,
   nav_loc_complete_ =
       (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
-
+  if (nav_loc_complete_) {
+    printf("checking completion %f %f %f\n", robot_angle_, nav_goal_angle_, params_.target_angle_tolerance);
+  }
   nav_complete_ = nav_loc_complete_ && abs(robot_angle_ - nav_goal_angle_) < params_.target_angle_tolerance;
   // Halt if necessary
   if (nav_complete_ || pause_) {
