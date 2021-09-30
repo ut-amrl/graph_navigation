@@ -493,10 +493,7 @@ Vector2f Navigation::GetCarrot() {
     // The carrot will be the projection of the robot loc on to the edge.
     const Vector2f v0 = plan_path_[i0].loc;
     const Vector2f v1 = plan_path_[i1].loc;
-    Vector2f carrot;
-    float sqdist;
-    geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1, &carrot, &sqdist);
-    return carrot;
+    return geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
   }
 
   // Iterate from current line segment to goal until the segment intersects
@@ -512,7 +509,7 @@ Vector2f Navigation::GetCarrot() {
       break;
     }
   }
-  i1 = i0 -1;
+  i1 = i0 - 1;
   // printf("i0:%d i1:%d\n", i0, i1);
   const Vector2f v0 = plan_path_[i0].loc;
   const Vector2f v1 = plan_path_[i1].loc;
@@ -823,7 +820,14 @@ bool Navigation::Run(const double& time,
   }
 
   // Get Carrot and check if done
-  const Vector2f carrot = GetCarrot();
+  try {
+    const Vector2f carrot = GetCarrot();
+  } catch {
+    printf("Could not find valid carrot\n");
+    Halt(cmd_vel, cmd_angle_vel);
+    return false;
+  }
+
   // Check if complete.
   if (!nav_loc_complete_) {
     nav_loc_complete_ =  (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
