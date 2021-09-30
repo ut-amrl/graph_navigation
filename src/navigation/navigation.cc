@@ -820,15 +820,16 @@ bool Navigation::Run(const double& time,
   // Get Carrot and check if done
   const Vector2f carrot = GetCarrot();
   // Check if complete.
-  nav_complete_ =
+  nav_loc_complete_ =
       (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
+
+  nav_complete_ = nav_loc_complete_ && abs(robot_angle_ - nav_goal_angle_) < params_.target_angle_tolerance;
   // Halt if necessary
   if (nav_complete_ || pause_) {
     Halt(cmd_vel, cmd_angle_vel);
     return true;
-  } else {
-    // TODO check if the robot needs to turn around.
+  } else if(!nav_loc_complete_) {
     // TODO(jaholtz) kLocalFOV should be a parameter
     static const float kLocalFOV = DegToRad(60.0);
     // Local Navigation
@@ -851,6 +852,8 @@ bool Navigation::Run(const double& time,
         RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
       }
     }
+  } else {
+    TurnInPlace(cmd_vel, cmd_angle_vel);
   }
 
   return true;

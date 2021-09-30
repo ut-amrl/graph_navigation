@@ -656,6 +656,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(use_map_speed);
   REAL_PARAM(target_dist_tolerance);
   REAL_PARAM(target_vel_tolerance);
+  REAL_PARAM(target_angle_tolerance);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -680,6 +681,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->use_map_speed = CONFIG_use_map_speed;
   params->target_dist_tolerance = CONFIG_target_dist_tolerance;
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
+  params->target_angle_tolerance = CONFIG_target_angle_tolerance;
 }
 
 int main(int argc, char** argv) {

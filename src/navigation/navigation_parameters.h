@@ -86,6 +86,8 @@ struct NavigationParameters {
   float target_dist_tolerance;
   // Velocity tolerance to reaching target.
   float target_vel_tolerance;
+  // angle tolerance to reaching target
+  float target_angle_tolerance;
 
 
   // Default constructor, just set defaults.
@@ -105,7 +107,8 @@ struct NavigationParameters {
       can_traverse_stairs(false),
       use_map_speed(true),
       target_dist_tolerance(0.1),
-      target_vel_tolerance(0.1) {}
+      target_vel_tolerance(0.1),
+      target_angle_tolerance(M_PI / 12.0) {}
 };
 
 }  // namespace navigation

@@ -188,6 +188,7 @@ class Navigation {
   Odom latest_odom_msg_;
 
   // Whether navigation is complete.
+  bool nav_loc_complete_;
   bool nav_complete_;
   bool pause_;
   // Navigation goal location.
