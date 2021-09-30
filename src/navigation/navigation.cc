@@ -825,10 +825,11 @@ bool Navigation::Run(const double& time,
   // Get Carrot and check if done
   const Vector2f carrot = GetCarrot();
   // Check if complete.
-  nav_loc_complete_ =
-      (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
+  if (!nav_loc_complete_) {
+    nav_loc_complete_ =  (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
-      
+  }
+  
   nav_complete_ = nav_loc_complete_ && abs(robot_angle_ - nav_goal_angle_) < params_.target_angle_tolerance;
   // Halt if necessary
   if (nav_complete_ || pause_) {
