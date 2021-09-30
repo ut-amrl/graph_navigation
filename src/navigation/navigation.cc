@@ -463,13 +463,14 @@ bool Navigation::PlanStillValid() {
   return false;
 }
 
-Vector2f Navigation::GetCarrot() {
+bool Navigation::GetCarrot(Vector2f& carrot) {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
 
   if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
     // Goal is within the carrot dist.
-    return plan_path_[0].loc;
+    carrot = plan_path_[0].loc;
+    return true;
   }
 
   // Find closest line segment in plan to current location
@@ -493,7 +494,8 @@ Vector2f Navigation::GetCarrot() {
     // The carrot will be the projection of the robot loc on to the edge.
     const Vector2f v0 = plan_path_[i0].loc;
     const Vector2f v1 = plan_path_[i1].loc;
-    return geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
+    carrot = geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
+    return true;
   }
 
   // Iterate from current line segment to goal until the segment intersects
@@ -519,13 +521,18 @@ Vector2f Navigation::GetCarrot() {
   //     V2COMP(robot_loc_), V2COMP(v0), V2COMP(v1), (v0 - v1).norm());
   const int num_intersections = geometry::CircleLineIntersection<float>(
       robot_loc_, params_.carrot_dist, v0, v1, &r0, &r1);
-  CHECK_GT(num_intersections, 0);
-  if (num_intersections == 1) return r0;
-  if ((r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
-    return r0;
-  } else {
-    return r1;
+  if (num_intersections == 0) {
+    fprintf(stderr, "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) dist: (%f)",
+      v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), params_.carrot_dist);
+    return false;
   }
+
+  if (num_intersections == 1 || (r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
+    carrot = r0;
+  } else {
+    carrot = r1;
+  }
+  return true;
 }
 
 void Navigation::GetStraightFreePathLength(float* free_path_length,
@@ -820,9 +827,9 @@ bool Navigation::Run(const double& time,
   }
 
   // Get Carrot and check if done
-  try {
-    const Vector2f carrot = GetCarrot();
-  } catch {
+  Vector2f carrot;
+  bool foundCarrot = GetCarrot(carrot);
+  if (!foundCarrot) {
     printf("Could not find valid carrot\n");
     Halt(cmd_vel, cmd_angle_vel);
     return false;

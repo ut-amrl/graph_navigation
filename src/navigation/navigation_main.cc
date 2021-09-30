@@ -396,7 +396,11 @@ void PublishPath() {
       visualization::DrawLine(path[i - 1].loc, path[i].loc, 0xFF007F00, 
           global_viz_msg_);
     }
-    carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
+    Vector2f carrot;
+    bool foundCarrot = navigation_.GetCarrot(carrot);
+    if (foundCarrot) {
+      carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
+    }
   }
 }
 
