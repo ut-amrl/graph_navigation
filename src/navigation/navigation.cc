@@ -828,9 +828,7 @@ bool Navigation::Run(const double& time,
   nav_loc_complete_ =
       (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
-  if (nav_loc_complete_) {
-    printf("checking completion %f %f %f\n", robot_angle_, nav_goal_angle_, params_.target_angle_tolerance);
-  }
+      
   nav_complete_ = nav_loc_complete_ && abs(robot_angle_ - nav_goal_angle_) < params_.target_angle_tolerance;
   // Halt if necessary
   if (nav_complete_ || pause_) {
