@@ -522,8 +522,8 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   const int num_intersections = geometry::CircleLineIntersection<float>(
       robot_loc_, params_.carrot_dist, v0, v1, &r0, &r1);
   if (num_intersections == 0) {
-    fprintf(stderr, "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) dist: (%f)\n",
-      v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), params_.carrot_dist);
+    fprintf(stderr, "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) sq_carrot_dist: (%f) closest_dist: (%f)\n",
+      v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), kSqCarrotDist, closest_dist);
     return false;
   }
 
