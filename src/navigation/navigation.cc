@@ -773,6 +773,12 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
+void Navigation::GetNavEdge(const Vector2f &point,
+                            GraphDomain::NavigationEdge* closest_edge,
+                            float* closest_distance) {
+  planning_domain_.GetClosestEdge(point, closest_edge, closest_distance);
+}
+
 bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {

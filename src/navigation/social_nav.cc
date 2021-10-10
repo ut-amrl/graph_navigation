@@ -19,16 +19,21 @@
 */
 //========================================================================
 #include <string>
-#include "math/geometry.h"
 #include "social_nav.h"
+#include "graph_domain.h"
+#include "math/geometry.h"
+#include "math/line2d.h"
 
 using Eigen::Vector2f;
+using Eigen::Rotation2Df;
 using std::string;
 using std::vector;
 using navigation::Odom;
 using navigation::Twist;
 using navigation::SocialAction;
 using navigation::SocialNav;
+using navigation::GraphDomain;
+using geometry::Line2f;
 using math_util::DegToRad;
 
 namespace navigation {
@@ -57,19 +62,6 @@ Navigation* SocialNav::GetGraphNav() {
 
 Eigen::Vector2f SocialNav::GetLocalTarget() {
   return navigation_.GetTarget();
-}
-
-void SocialNav::GoAlone() {
-  target_locked_ = false;
-  navigation_.SetMaxVel(kMaxVel);
-  navigation_.SetObstacleMargin(0.1);
-  navigation_.SetClearanceWeight(-0.5);
-  navigation_.Resume();
-}
-
-void SocialNav::Halt() {
-  target_locked_ = false;
-  navigation_.Pause();
 }
 
 Human SocialNav::GetClosest(const vector<Human> humans,
@@ -201,6 +193,141 @@ bool SocialNav::TargetGood() {
   return !too_far && !lost_target;
 }
 
+void SocialNav::GoAlone() {
+  target_locked_ = false;
+  navigation_.SetMaxVel(kMaxVel);
+  navigation_.SetObstacleMargin(0.1);
+  navigation_.SetClearanceWeight(-0.5);
+  navigation_.Resume();
+}
+
+// Helper function for left and right, identifies the robot's travel
+// direction along an edge, and returns the angle of edge travel.
+float SocialNav::GetTravelAngle(const Line2f& edge,
+                                const Vector2f& current_carrot) {
+  // Determine which direction the robot is moving along the edge.
+  const Vector2f dir_1(edge.p1 - edge.p0);
+  const Vector2f dir_2(edge.p0 - edge.p1);
+  const Vector2f robot_dir(current_carrot - pose_);
+  const float angle_1 = geometry::Angle(dir_1);
+  const float angle_2 = geometry::Angle(dir_2);
+  const float robot_angle = geometry::Angle(robot_dir);
+  const float diff_1 = math_util::AngleDiff(angle_1, robot_angle);
+  const float diff_2 = math_util::AngleDiff(angle_2, robot_angle);
+  if (diff_1 < diff_2) {
+    return angle_1;
+  }
+  return angle_2;
+}
+
+// Drives in the left 'lane' with respect to the nav edge.
+void SocialNav::Left() {
+
+  // Find the navigation edge (line).
+  GraphDomain::NavigationEdge closest_edge;
+  float closest_dist;
+  // TODO(jaholtz) document GetTarget, GetCarrot, GetOverrideTarget, etc.
+  const Vector2f current_carrot = navigation_.GetCarrot();
+  navigation_.GetNavEdge(current_carrot,
+                         &closest_edge,
+                         &closest_dist);
+
+  // Project the point onto the edge
+  const Line2f edge = closest_edge.edge;
+  const Vector2f proj = edge.Projection(current_carrot);
+
+  // Get the angle of travel along the edge.
+  const float angle = GetTravelAngle(edge, current_carrot);
+
+  // Project the carrot to the 'left' side of the edge.
+  // Use this as the override carrot.
+  const Vector2f left(0.0, closest_edge.width / 2);
+  Rotation2Df rotate(angle);
+  const Vector2f override = proj + rotate * left;
+  const Vector2f local_target = Rotation2Df(-theta_) * (override - pose_);
+  navigation_.SetOverride(local_target, 0.0);
+  target_locked_ = false;
+  navigation_.SetMaxVel(kMaxVel);
+  navigation_.SetObstacleMargin(0.1);
+  navigation_.SetClearanceWeight(-0.5);
+}
+
+// Drives in the right 'lane' with respect to the nav edge.
+void SocialNav::Right() {
+  // Find the navigation edge (line).
+  GraphDomain::NavigationEdge closest_edge;
+  float closest_dist;
+  // TODO(jaholtz) document GetTarget, GetCarrot, GetOverrideTarget, etc.
+  const Vector2f current_carrot = navigation_.GetCarrot();
+  navigation_.GetNavEdge(current_carrot,
+                         &closest_edge,
+                         &closest_dist);
+
+  // Project the point onto the edge
+  const Line2f edge = closest_edge.edge;
+  const Vector2f proj = edge.Projection(current_carrot);
+
+  // Get the angle of travel along the edge.
+  const float angle = GetTravelAngle(edge, current_carrot);
+
+  // Project the carrot to the 'right' side of the edge.
+  // Use this as the override carrot.
+  const Vector2f right(0.0, -closest_edge.width / 2);
+  Rotation2Df rotate(angle);
+  const Vector2f override = proj + rotate * right;
+  const Vector2f local_target = Rotation2Df(-theta_) * (override - pose_);
+  navigation_.SetOverride(local_target, 0.0);
+  target_locked_ = false;
+  navigation_.SetMaxVel(kMaxVel);
+  navigation_.SetObstacleMargin(0.1);
+  navigation_.SetClearanceWeight(-0.5);
+}
+
+// Moves out of the way of traffic, off to the appropriate side of the edge.
+void SocialNav::StepAside() {
+  // Find the navigation edge (line).
+  GraphDomain::NavigationEdge closest_edge;
+  float closest_dist;
+  // TODO(jaholtz) document GetTarget, GetCarrot, GetOverrideTarget, etc.
+  navigation_.GetNavEdge(pose_,
+                         &closest_edge,
+                         &closest_dist);
+
+  // Project the point onto the edge
+  const Line2f edge = closest_edge.edge;
+  const Vector2f proj = edge.Projection(pose_);
+
+  // Find the closest standoff point to the current robot.
+  const static float kStandAsideDist = 0.75;
+  const Vector2f right(0.0, -kStandAsideDist * closest_edge.width);
+  const Vector2f left(0.0, kStandAsideDist * closest_edge.width);
+  Rotation2Df rotate(geometry::Angle(edge.Dir()));
+  const Vector2f left_point = proj + rotate * left;
+  const Vector2f right_point = proj + rotate * right;
+
+  const float dist_l = (pose_ - left_point).norm();
+  const float dist_r = (pose_ - right_point).norm();
+
+  Vector2f target = right_point;
+  // Set the override to the closest stand off point.
+  if (dist_l < dist_r) {
+    target = left_point;
+  }
+  const Vector2f local_target = Rotation2Df(-theta_) * (target - pose_);
+  navigation_.SetOverride(local_target, 0.0);
+  target_locked_ = false;
+  navigation_.SetMaxVel(kMaxVel);
+  navigation_.SetObstacleMargin(0.1);
+  navigation_.SetClearanceWeight(-0.5);
+}
+
+// Stops in Place
+void SocialNav::Halt() {
+  target_locked_ = false;
+  navigation_.Pause();
+}
+
+// Follows the closest human moving in the desired travel direction.
 void SocialNav::Follow() {
   const float kFollowDist = 0.5;
   bool found = true;
@@ -218,6 +345,7 @@ void SocialNav::Follow() {
   navigation_.SetOverride(target_pose, 0.0);
 }
 
+// Passes the closest human in the desired travel direction.
 void SocialNav::Pass() {
   const float kLeadDist = 1.5;
   bool found = true;

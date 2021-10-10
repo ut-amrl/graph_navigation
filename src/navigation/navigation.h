@@ -132,6 +132,9 @@ class Navigation {
   float GetRobotLength();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
+  void GetNavEdge(const Eigen::Vector2f& point,
+                  GraphDomain::NavigationEdge* edge,
+                  float* closest_dist);
 
  private:
 
