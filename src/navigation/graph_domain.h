@@ -88,6 +88,7 @@ struct GraphDomain {
     uint64_t s1_id;
     float max_speed = 50.0f;
     float max_clearance = 10.0f;
+    float width = 1.0f;
     bool has_door;
     bool has_stairs;
 
@@ -96,6 +97,7 @@ struct GraphDomain {
       data["s0_id"] = s0_id;
       data["s1_id"] = s1_id;
       data["max_speed"] = max_speed;
+      data["width"] = width;
       data["max_clearance"] = max_clearance;
       data["has_door"] = has_door;
       data["has_stairs"] = has_stairs;
@@ -110,6 +112,7 @@ struct GraphDomain {
       e.s1_id = j["s1_id"].get<uint64_t>();
       e.max_speed = j["max_speed"].get<float>();
       e.max_clearance = j["max_clearance"].get<float>();
+      e.width = j["width"].get<float>();
 
       e.has_door = j["has_door"].get<bool>();
       e.has_stairs = j["has_stairs"].get<bool>();

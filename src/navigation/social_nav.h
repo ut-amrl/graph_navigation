@@ -66,6 +66,9 @@ class SocialNav {
   int target_id_;
   const bool local_humans_ = true;
   void GoAlone();
+  void Left();
+  void Right();
+  void StepAside();
   void Halt();
   void Follow();
   void Pass();
@@ -83,6 +86,8 @@ class SocialNav {
       const int& id_c,
       int& output_id);
   bool TargetGood();
+  float GetTravelAngle(const geometry::Line2f& edge,
+      const Eigen::Vector2f& current_carrot);
   const float kMaxVel = 1.5;
 };
 
