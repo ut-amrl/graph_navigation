@@ -476,12 +476,14 @@ void DrawTarget() {
   const Eigen::Vector2f target = navigation_->GetGraphNav()->GetTarget();
   const Eigen::Vector2f override = navigation_->GetGraphNav()->GetOverrideTarget();
   auto msg_copy = global_viz_msg_;
-  visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
-  visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
-  visualization::DrawCross(override, 0.2, 0x800080, local_viz_msg_);
+  if (navigation_->target_override_) {
+    visualization::DrawCross(override, 0.2, 0xFF0080, local_viz_msg_);
+  } else {
+    visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
+  }
   const Eigen::Rotation2Df rot(current_angle_);
   const Vector2f global_target = rot * target + current_loc_;
   const Vector2f global_over = rot * override + current_loc_;
