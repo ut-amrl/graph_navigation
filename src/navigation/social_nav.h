@@ -25,7 +25,7 @@
 
 namespace navigation {
 
-enum SocialAction { GoAlone, Halt, Follow, Pass };
+enum SocialAction { GoAlone, Halt, Follow, Pass, Left, Right, StepAside };
 
 struct Human {
   int id;
