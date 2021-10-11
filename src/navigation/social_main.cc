@@ -792,6 +792,12 @@ void RunSocial() {
       action = SocialAction::Follow;
     } else if (res.action == 3) {
       action = SocialAction::Pass;
+    } else if (res.action == 4) {
+      action = SocialAction::Left;
+    } else if (res.action == 5) {
+      action = SocialAction::Right;
+    } else if (res.action == 6) {
+      action = SocialAction::StepAside;
     }
   }
 
