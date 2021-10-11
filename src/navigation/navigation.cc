@@ -186,6 +186,10 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
   pause_ = false;
 }
 
+bool Navigation::Overriden() {
+  return target_override_;
+}
+
 void Navigation::Resume() {
   target_override_ = false;
 }
