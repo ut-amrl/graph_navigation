@@ -479,7 +479,7 @@ void DrawTarget() {
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
-  if (navigation_->target_override_) {
+  if (navigation_->GetGraphNav()->Overriden()) {
     visualization::DrawCross(override, 0.2, 0xFF0080, local_viz_msg_);
   } else {
     visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
@@ -757,6 +757,11 @@ void PublishVisualizationMarkers() {
       human_array_.markers.push_back(human_marker_);
       human_marker_.points.clear();
       human_marker_.id += 1;
+      visualization::DrawCross(human_pose, 0.2, 0xFF0080, local_viz_msg_);
+      visualization::DrawLine(human_pose,
+                              transformed_vel,
+                              0xFF0080,
+                              local_viz_msg_);
     }
   } else {
     auto temp_marker = human_marker_;

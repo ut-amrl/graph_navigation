@@ -182,6 +182,10 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
   override_target_ = loc;
 }
 
+bool Navigation::Overriden() {
+  return target_override_;
+}
+
 void Navigation::Resume() {
   nav_state_ = NavigationState::kGoto;
 }
