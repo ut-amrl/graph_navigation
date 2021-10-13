@@ -193,14 +193,6 @@ bool SocialNav::TargetGood() {
   return !too_far && !lost_target;
 }
 
-void SocialNav::GoAlone() {
-  target_locked_ = false;
-  navigation_.SetMaxVel(kMaxVel);
-  navigation_.SetObstacleMargin(0.1);
-  navigation_.SetClearanceWeight(-0.5);
-  navigation_.Resume();
-}
-
 // Helper function for left and right, identifies the robot's travel
 // direction along an edge, and returns the angle of edge travel.
 float SocialNav::GetTravelAngle(const Line2f& edge,
@@ -209,9 +201,15 @@ float SocialNav::GetTravelAngle(const Line2f& edge,
   const Vector2f dir_1(edge.p1 - edge.p0);
   const Vector2f dir_2(edge.p0 - edge.p1);
   const Vector2f robot_dir(current_carrot - pose_);
-  const float angle_1 = geometry::Angle(dir_1);
-  const float angle_2 = geometry::Angle(dir_2);
-  const float robot_angle = geometry::Angle(robot_dir);
+  float angle_1 = geometry::Angle(dir_1);
+  if (angle_1 < 0) {
+    angle_1 = angle_1 + M_PI;
+  }
+  const float angle_2 = angle_1 + (M_PI / 2);
+  float robot_angle = geometry::Angle(robot_dir);
+  if (robot_angle < 0) {
+    robot_angle = robot_angle + M_PI;
+  }
   const float diff_1 = math_util::AngleDiff(angle_1, robot_angle);
   const float diff_2 = math_util::AngleDiff(angle_2, robot_angle);
   if (diff_1 < diff_2) {
@@ -220,14 +218,22 @@ float SocialNav::GetTravelAngle(const Line2f& edge,
   return angle_2;
 }
 
+void SocialNav::GoAlone() {
+  target_locked_ = false;
+  navigation_.SetMaxVel(kMaxVel);
+  navigation_.SetObstacleMargin(0.1);
+  navigation_.SetClearanceWeight(-0.5);
+  navigation_.Resume();
+}
+
 // Drives in the left 'lane' with respect to the nav edge.
 void SocialNav::Left() {
-
   // Find the navigation edge (line).
   GraphDomain::NavigationEdge closest_edge;
-  float closest_dist;
+  float closest_dist = FLT_MAX;
   // TODO(jaholtz) document GetTarget, GetCarrot, GetOverrideTarget, etc.
-  const Vector2f current_carrot = navigation_.GetCarrot();
+  const Vector2f current_carrot = (Rotation2Df(theta_) *
+      navigation_.GetTarget()) + pose_;
   navigation_.GetNavEdge(current_carrot,
                          &closest_edge,
                          &closest_dist);
@@ -256,9 +262,10 @@ void SocialNav::Left() {
 void SocialNav::Right() {
   // Find the navigation edge (line).
   GraphDomain::NavigationEdge closest_edge;
-  float closest_dist;
+  float closest_dist = FLT_MAX;
   // TODO(jaholtz) document GetTarget, GetCarrot, GetOverrideTarget, etc.
-  const Vector2f current_carrot = navigation_.GetCarrot();
+  const Vector2f current_carrot = (Rotation2Df(theta_) *
+      navigation_.GetTarget()) + pose_;
   navigation_.GetNavEdge(current_carrot,
                          &closest_edge,
                          &closest_dist);

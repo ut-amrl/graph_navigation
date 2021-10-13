@@ -759,7 +759,7 @@ void PublishVisualizationMarkers() {
       human_marker_.id += 1;
       visualization::DrawCross(human_pose, 0.2, 0xFF0080, local_viz_msg_);
       visualization::DrawLine(human_pose,
-                              transformed_vel,
+                              -transformed_vel,
                               0xFF0080,
                               local_viz_msg_);
     }
