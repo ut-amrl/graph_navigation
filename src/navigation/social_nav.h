@@ -37,6 +37,7 @@ struct Human {
 class SocialNav {
  public:
   explicit SocialNav();
+  explicit SocialNav(const float& speed);
   void Run(const double& time,
            const SocialAction& action,
            const Eigen::Vector2f& robot_loc,
@@ -88,7 +89,7 @@ class SocialNav {
   bool TargetGood();
   float GetTravelAngle(const geometry::Line2f& edge,
       const Eigen::Vector2f& current_carrot);
-  const float kMaxVel = 1.5;
+  const float kMaxVel;
 };
 
 }  // namespace navigation

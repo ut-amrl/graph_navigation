@@ -112,7 +112,9 @@ struct GraphDomain {
       e.s1_id = j["s1_id"].get<uint64_t>();
       e.max_speed = j["max_speed"].get<float>();
       e.max_clearance = j["max_clearance"].get<float>();
-      e.width = j["width"].get<float>();
+      if (j.find("width") != j.end()) {
+        e.width = j["width"].get<float>();
+      }
 
       e.has_door = j["has_door"].get<bool>();
       e.has_stairs = j["has_stairs"].get<bool>();
