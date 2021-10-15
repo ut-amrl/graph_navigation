@@ -756,10 +756,12 @@ void PublishVisualizationMarkers() {
       human_marker_.points.clear();
       human_marker_.id += 1;
       visualization::DrawCross(human_pose, 0.2, 0xFF0080, local_viz_msg_);
-      visualization::DrawLine(human_pose,
-                              -transformed_vel,
-                              0xFF0080,
-                              local_viz_msg_);
+      if (t_vel.norm() > kEpsilon) {
+        visualization::DrawLine(human_pose,
+            t_vel + human_pose,
+            0xFF0080,
+            local_viz_msg_);
+      }
     }
   } else {
     auto temp_marker = human_marker_;
@@ -885,7 +887,6 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation");
   ros::NodeHandle n;
-  navigation_ = new SocialNav();
 
   // Map Loading
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
@@ -903,6 +904,7 @@ int main(int argc, char** argv) {
 
   navigation::NavigationParameters params;
   LoadConfig(&params);
+  navigation_ = new SocialNav(params.linear_limits.max_speed);
   navigation_->GetGraphNav()->Initialize(params, map_path);
   if (FLAGS_bag_mode) {
     map_.Load("/home/jaholtz/code/amrl_maps/AHG2/AHG2.vectormap.txt");

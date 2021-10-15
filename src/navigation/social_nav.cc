@@ -45,7 +45,19 @@ SocialNav::SocialNav() :
   theta_(0),
   target_locked_(false),
   humans_({}),
-  target_id_(0) {
+  target_id_(0),
+  kMaxVel(1.0) {
+}
+
+SocialNav::SocialNav(const float& speed) :
+  navigation_(),
+  last_action_(SocialAction::GoAlone),
+  pose_(0,0),
+  theta_(0),
+  target_locked_(false),
+  humans_({}),
+  target_id_(0),
+  kMaxVel(speed) {
 }
 
 void SocialNav::UpdateCommandHistory(const Twist& twist) {

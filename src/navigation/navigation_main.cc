@@ -393,7 +393,7 @@ void PublishPath() {
       path_pub_.publish(path_msg);
     }
     for (size_t i = 1; i < path.size(); i++) {
-      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0xFF007F00, 
+      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0xFF007F00,
           global_viz_msg_);
     }
     carrot_pub_.publish(CarrotToNavMsgsPath(navigation_.GetCarrot()));
