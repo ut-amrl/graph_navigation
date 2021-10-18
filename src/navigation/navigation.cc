@@ -137,6 +137,7 @@ Navigation::Navigation() :
     robot_angle_(0),
     robot_vel_(0, 0),
     robot_omega_(0),
+    nav_loc_complete_(true),
     nav_complete_(true),
     pause_(false),
     nav_goal_loc_(0, 0),
@@ -176,6 +177,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   nav_complete_ = false;
+  nav_loc_complete_ = false;
   plan_path_.clear();
 }
 
@@ -461,13 +463,14 @@ bool Navigation::PlanStillValid() {
   return false;
 }
 
-Vector2f Navigation::GetCarrot() {
+bool Navigation::GetCarrot(Vector2f& carrot) {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
 
   if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
     // Goal is within the carrot dist.
-    return plan_path_[0].loc;
+    carrot = plan_path_[0].loc;
+    return true;
   }
 
   // Find closest line segment in plan to current location
@@ -491,10 +494,8 @@ Vector2f Navigation::GetCarrot() {
     // The carrot will be the projection of the robot loc on to the edge.
     const Vector2f v0 = plan_path_[i0].loc;
     const Vector2f v1 = plan_path_[i1].loc;
-    Vector2f carrot;
-    float sqdist;
-    geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1, &carrot, &sqdist);
-    return carrot;
+    carrot = geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
+    return true;
   }
 
   // Iterate from current line segment to goal until the segment intersects
@@ -510,7 +511,7 @@ Vector2f Navigation::GetCarrot() {
       break;
     }
   }
-  i1 = i0 -1;
+  i1 = i0 - 1;
   // printf("i0:%d i1:%d\n", i0, i1);
   const Vector2f v0 = plan_path_[i0].loc;
   const Vector2f v1 = plan_path_[i1].loc;
@@ -520,13 +521,18 @@ Vector2f Navigation::GetCarrot() {
   //     V2COMP(robot_loc_), V2COMP(v0), V2COMP(v1), (v0 - v1).norm());
   const int num_intersections = geometry::CircleLineIntersection<float>(
       robot_loc_, params_.carrot_dist, v0, v1, &r0, &r1);
-  CHECK_GT(num_intersections, 0);
-  if (num_intersections == 1) return r0;
-  if ((r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
-    return r0;
-  } else {
-    return r1;
+  if (num_intersections == 0) {
+    fprintf(stderr, "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) sq_carrot_dist: (%f) closest_dist: (%f)\n",
+      v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), kSqCarrotDist, closest_dist);
+    return false;
   }
+
+  if (num_intersections == 1 || (r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
+    carrot = r0;
+  } else {
+    carrot = r1;
+  }
+  return true;
 }
 
 void Navigation::GetStraightFreePathLength(float* free_path_length,
@@ -644,7 +650,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     return;
   }
   // TODO(jaholtz) take into account override target here
-  const float goal_theta = atan2(local_target_.y(), local_target_.x());
+  const float goal_theta = nav_loc_complete_ ? nav_goal_angle_ : atan2(local_target_.y(), local_target_.x());
   const float dv = params_.dt * params_.angular_limits.max_acceleration;
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
@@ -735,6 +741,9 @@ string Navigation::GetNavStatus() {
   if (target_override_) {
     output = "Override";
   }
+  if (nav_loc_complete_) {
+    output = "Translation Complete";
+  }
   if (nav_complete_) {
     output = "Complete";
   }
@@ -818,17 +827,25 @@ bool Navigation::Run(const double& time,
   }
 
   // Get Carrot and check if done
-  const Vector2f carrot = GetCarrot();
+  Vector2f carrot;
+  bool foundCarrot = GetCarrot(carrot);
+  if (!foundCarrot) {
+    Halt(cmd_vel, cmd_angle_vel);
+    return false;
+  }
+
   // Check if complete.
-  nav_complete_ =
-      (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
+  if (!nav_loc_complete_) {
+    nav_loc_complete_ =  (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
       (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
+  }
+  
+  nav_complete_ = nav_loc_complete_ && abs(robot_angle_ - nav_goal_angle_) < params_.target_angle_tolerance;
   // Halt if necessary
   if (nav_complete_ || pause_) {
     Halt(cmd_vel, cmd_angle_vel);
     return true;
-  } else {
-    // TODO check if the robot needs to turn around.
+  } else if(!nav_loc_complete_) {
     // TODO(jaholtz) kLocalFOV should be a parameter
     static const float kLocalFOV = DegToRad(60.0);
     // Local Navigation
@@ -851,6 +868,9 @@ bool Navigation::Run(const double& time,
         RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
       }
     }
+  } else {
+    if (kDebug) printf("Reached Goal: TurnInPlace\n");
+    TurnInPlace(cmd_vel, cmd_angle_vel);
   }
 
   return true;

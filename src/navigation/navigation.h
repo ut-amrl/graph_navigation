@@ -98,7 +98,7 @@ class Navigation {
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
                               const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> GetPlanPath();
-  Eigen::Vector2f GetCarrot();
+  bool GetCarrot(Eigen::Vector2f& carrot);
   // Enable or disable autonomy.
   void Enable(bool enable);
   // Indicates whether autonomy is enabled or not.
@@ -188,6 +188,7 @@ class Navigation {
   Odom latest_odom_msg_;
 
   // Whether navigation is complete.
+  bool nav_loc_complete_;
   bool nav_complete_;
   bool pause_;
   // Navigation goal location.

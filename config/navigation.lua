@@ -28,6 +28,7 @@ NavigationParameters = {
   use_map_speed = true;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
+  target_angle_tolerance = 0.05;
 };
 
 AckermannSampler = {
