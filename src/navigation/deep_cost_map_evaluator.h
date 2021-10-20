@@ -71,6 +71,7 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   std::vector<float> latest_cost_components_;
 
   cv::Mat local_cost_map;
+  std::mutex cost_map_mutex;
 };
 
 }  // namespace motion_primitives

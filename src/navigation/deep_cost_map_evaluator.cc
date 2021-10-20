@@ -61,7 +61,7 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-const MIN_COST_RECOMP_MS = 50;
+const MIN_COST_RECOMP_MS = 20;
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
@@ -92,9 +92,11 @@ bool DeepCostMapEvaluator::LoadModel() {
 }
 
 void DeepCostMapEvaluator::UpdateLocalCostMap() {
+  RateLoop loop(1.0 / MIN_COST_RECOMP_MS);
   while(image != NULL) {
-    auto t0 = high_resolution_clock::now();
-    cv::Mat local_cost_map_copy = local_cost_map.clone();
+    cost_map_mutex.lock();
+    cv::Mat local_cost_map_copy = local_cost_map_.clone();
+    cost_map_mutex.unlock();
     cv::Mat warped = GetWarpedImage();
     cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
     
@@ -143,13 +145,12 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       }
     }
 
-    local_cost_map = local_cost_map_copy;
-    auto t1 = high_resolution_clock::now();
-    auto delta = (duration_cast<milliseconds>(t2 - t1)).count()
-
-    if (delta < MIN_COST_RECOMP_MS) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(MIN_COST_RECOMP_MS - delta));
-    }
+    //lock it
+    cost_map_mutex.lock();
+    local_cost_map_ = local_cost_map_copy;
+    UpdateMapToLocalFrame();
+    cost_map_mutex.unlock();
+    loop.Sleep();
   }
 }
 
@@ -163,7 +164,7 @@ void DeepCostMapEvaluator::UpdateMapToLocalFrame() {
   Eigen::Affine2f curr_trans = Eigen::Translation2f(curr_loc) * Eigen::Rotation2Df(curr_ang);
   Eigen::Affine2f prev_trans = Eigen::Translation2f(prev_loc) * Eigen::Rotation2Df(prev_ang);
   cv::Mat flipped_cost_map;
-  cv::flip(local_cost_map, flipped_cost_map, 0);
+  cv::flip(local_cost_map_, flipped_cost_map, 0);
 
   Eigen::Affine2f delta_trans = prev_trans.inverse() * curr_trans;
   
@@ -187,11 +188,13 @@ void DeepCostMapEvaluator::UpdateMapToLocalFrame() {
                cv::BORDER_CONSTANT,
                UNCERTAINTY_COST);
 
-  local_cost_map.setTo(0);
-  cv::flip(flipped_cost_map, local_cost_map, 0);
+  cost_map_mutex.lock();
+  local_cost_map_.setTo(0);
+  cv::flip(flipped_cost_map, local_cost_map_, 0);
 
   prev_loc = curr_loc;
   prev_ang = curr_ang;
+  cost_map_mutex.unlock();
 }
 
 shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
@@ -204,13 +207,13 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   auto t1 = high_resolution_clock::now();
   #endif
 
-  if (plan_idx > 1) {
-    UpdateMapToLocalFrame();
-  }
-
   #if PERF_BENCHMARK
   auto t3 = high_resolution_clock::now();
   #endif
+
+  cost_map_mutex.lock();
+  cv::Mat local_cost_map = local_cost_map_.clone();
+  cost_map_mutex.unlock();
 
   for (size_t i = 0; i < paths.size(); i++) {
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j+= blur_ ? 5 : 1) {
@@ -336,7 +339,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, warped_vis.rows));
   tiler.setCell(0, 0, orig_warped_vis);
   cv::Mat color_cost_img;
-  cvtColor(local_cost_map, color_cost_img, cv::COLOR_GRAY2RGB);
+  cvtColor(local_cost_map_, color_cost_img, cv::COLOR_GRAY2RGB);
   cv::normalize(color_cost_img, color_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
   cv::Mat overlay = color_cost_img.clone();
 
