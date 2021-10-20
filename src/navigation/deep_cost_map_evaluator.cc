@@ -26,6 +26,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <thread>
 
 #include "gflags/gflags.h"
 #include "math/line2d.h"
@@ -60,6 +61,8 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
+const MIN_COST_RECOMP_MS = 50;
+
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 
@@ -84,6 +87,70 @@ bool DeepCostMapEvaluator::LoadModel() {
     std::cout << "Error loading cost model:\n" << e.msg();
     return false;
   }
+
+  std::thread t1(&DeepCostMapEvaluator::updateLocalCostMap, this);
+}
+
+void DeepCostMapEvaluator::UpdateLocalCostMap() {
+  while(image != NULL) {
+    auto t0 = high_resolution_clock::now();
+    cv::Mat local_cost_map_copy = local_cost_map.clone();
+    cv::Mat warped = GetWarpedImage();
+    cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
+    
+    # if VIS_IMAGES
+    #endif
+    auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+
+    std::vector<size_t> patch_location_indices;
+    std::vector<at::Tensor> patch_tensors;
+
+    int blur_factor = 1;
+    float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
+
+    std::vector<Eigen::Vector2f> tile_locations = GetTilingLocations(warped, blur_step);
+    at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
+    for(size_t i = 0; i < tile_locations.size(); i++) {
+      auto image_loc = tile_locations[i];
+      float validity;
+      cv::Mat patch = GetPatchAtImageLocation(warped, image_loc, &validity, true).clone();
+
+      if (patch.rows > 0) {
+        auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
+        tensor_patch = tensor_patch.permute({ 2,0,1 });
+
+        patch_tensors.push_back(tensor_patch);
+        patch_location_indices.emplace_back(i);
+      } else {
+        
+      }
+    }
+
+    at::Tensor output;
+    if (patch_tensors.size() > 0) {
+      auto input_tensor = torch::stack(patch_tensors).to(device);
+
+      std::vector<torch::jit::IValue> input;
+      input.push_back(input_tensor);
+
+      output = cost_module.forward(input).toTensor().to(torch::kCPU);
+
+      for(int i = 0; i < output.size(0); i++) {
+        auto patch_idx = patch_location_indices[i];
+        auto patch_loc = tile_locations[patch_idx];
+        auto patch_rect = GetPatchRect(warped, patch_loc);
+        local_cost_map_copy(patch_rect) = output[i].item<double>();
+      }
+    }
+
+    local_cost_map = local_cost_map_copy;
+    auto t1 = high_resolution_clock::now();
+    auto delta = (duration_cast<milliseconds>(t2 - t1)).count()
+
+    if (delta < MIN_COST_RECOMP_MS) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(MIN_COST_RECOMP_MS - delta));
+    }
+  }
 }
 
 cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
@@ -92,7 +159,7 @@ cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
     min(ImageBasedEvaluator::PATCH_SIZE, img.rows - (int)patch_loc.y()));
 }
 
-void DeepCostMapEvaluator::UpdateLocalMap() {
+void DeepCostMapEvaluator::UpdateMapToLocalFrame() {
   Eigen::Affine2f curr_trans = Eigen::Translation2f(curr_loc) * Eigen::Rotation2Df(curr_ang);
   Eigen::Affine2f prev_trans = Eigen::Translation2f(prev_loc) * Eigen::Rotation2Df(prev_ang);
   cv::Mat flipped_cost_map;
@@ -133,70 +200,12 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   shared_ptr<PathRolloutBase> best = nullptr;
   plan_idx++;
 
-  cv::Mat warped = GetWarpedImage();
-  cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
-  
-  # if VIS_IMAGES
-  cv::Mat warped_vis = warped.clone();
-  #endif
-  auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
-
-  std::vector<size_t> patch_location_indices;
-  std::vector<at::Tensor> patch_tensors;
-
-  int blur_factor = 1;
-  float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
-
   #if PERF_BENCHMARK
   auto t1 = high_resolution_clock::now();
   #endif
 
   if (plan_idx > 1) {
-    UpdateLocalMap();
-  }
-
-  std::vector<Eigen::Vector2f> tile_locations = GetTilingLocations(warped, blur_step);
-  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
-  for(size_t i = 0; i < tile_locations.size(); i++) {
-    auto image_loc = tile_locations[i];
-    float validity;
-    cv::Mat patch = GetPatchAtImageLocation(warped, image_loc, &validity, true).clone();
-
-    if (patch.rows > 0) {
-      auto tensor_patch = torch::from_blob(patch.data, { patch.rows, patch.cols, patch.channels() }, at::kByte).to(torch::kFloat);
-      tensor_patch = tensor_patch.permute({ 2,0,1 });
-
-      patch_tensors.push_back(tensor_patch);
-      patch_location_indices.emplace_back(i);
-
-      // auto patch_rect = GetPatchRect(warped, image_loc);
-      // local_cost_map(patch_rect).setTo(0);
-    } else {
-      // auto patch_loc = tile_locations[i];
-      // auto patch_rect = GetPatchRect(warped, patch_loc);
-      // local_cost_map(patch_rect) += DeepCostMapEvaluator::UNCERTAINTY_COST / blur_factor;
-    }
-  }
-
-  #if PERF_BENCHMARK
-  auto t2 = high_resolution_clock::now();
-  #endif
-
-  at::Tensor output;
-  if (patch_tensors.size() > 0) {
-    auto input_tensor = torch::stack(patch_tensors).to(device);
-
-    std::vector<torch::jit::IValue> input;
-    input.push_back(input_tensor);
-
-    output = cost_module.forward(input).toTensor().to(torch::kCPU);
-
-    for(int i = 0; i < output.size(0); i++) {
-      auto patch_idx = patch_location_indices[i];
-      auto patch_loc = tile_locations[patch_idx];
-      auto patch_rect = GetPatchRect(warped, patch_loc);
-      local_cost_map(patch_rect) = output[i].item<double>();
-    }
+    UpdateMapToLocalFrame();
   }
 
   #if PERF_BENCHMARK
@@ -319,7 +328,9 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   # if VIS_IMAGES
-
+  cv::Mat warped = GetWarpedImage();
+  cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
+  cv::Mat warped_vis = warped.clone();
   auto tiler = ImageCells(2, 1, warped_vis.cols, warped_vis.rows);
   cv::Mat orig_warped_vis;
   cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, warped_vis.rows));
