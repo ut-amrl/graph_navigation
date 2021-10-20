@@ -61,7 +61,7 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-const MIN_COST_RECOMP_MS = 20;
+const double MIN_COST_RECOMP_MS = 20.0;
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
@@ -88,14 +88,22 @@ bool DeepCostMapEvaluator::LoadModel() {
     return false;
   }
 
-  std::thread t1(&DeepCostMapEvaluator::updateLocalCostMap, this);
+  std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
+}
+
+cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
+  return cv::Rect(patch_loc.x() - ImageBasedEvaluator::PATCH_SIZE / 2, patch_loc.y() - ImageBasedEvaluator::PATCH_SIZE / 2,
+    min(ImageBasedEvaluator::PATCH_SIZE, img.cols - (int)patch_loc.x()),
+    min(ImageBasedEvaluator::PATCH_SIZE, img.rows - (int)patch_loc.y()));
 }
 
 void DeepCostMapEvaluator::UpdateLocalCostMap() {
   RateLoop loop(1.0 / MIN_COST_RECOMP_MS);
-  while(image != NULL) {
+  while(image.rows > 0) {
     cost_map_mutex.lock();
     cv::Mat local_cost_map_copy = local_cost_map_.clone();
+    Eigen::Vector2f map_loc = curr_loc;
+    float map_ang = curr_ang;
     cost_map_mutex.unlock();
     cv::Mat warped = GetWarpedImage();
     cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
@@ -111,7 +119,6 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
     float blur_step = ImageBasedEvaluator::PATCH_SIZE / blur_factor;
 
     std::vector<Eigen::Vector2f> tile_locations = GetTilingLocations(warped, blur_step);
-    at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
     for(size_t i = 0; i < tile_locations.size(); i++) {
       auto image_loc = tile_locations[i];
       float validity;
@@ -148,23 +155,17 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
     //lock it
     cost_map_mutex.lock();
     local_cost_map_ = local_cost_map_copy;
-    UpdateMapToLocalFrame();
+    cost_map_loc_ = map_loc;
+    cost_map_ang_ = map_ang;
     cost_map_mutex.unlock();
     loop.Sleep();
   }
 }
-
-cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
-  return cv::Rect(patch_loc.x() - ImageBasedEvaluator::PATCH_SIZE / 2, patch_loc.y() - ImageBasedEvaluator::PATCH_SIZE / 2,
-    min(ImageBasedEvaluator::PATCH_SIZE, img.cols - (int)patch_loc.x()),
-    min(ImageBasedEvaluator::PATCH_SIZE, img.rows - (int)patch_loc.y()));
-}
-
-void DeepCostMapEvaluator::UpdateMapToLocalFrame() {
+void DeepCostMapEvaluator::UpdateMapToLocalFrame(cv::Mat& cost_map, const Eigen::Vector2f& loc, float ang) {
   Eigen::Affine2f curr_trans = Eigen::Translation2f(curr_loc) * Eigen::Rotation2Df(curr_ang);
-  Eigen::Affine2f prev_trans = Eigen::Translation2f(prev_loc) * Eigen::Rotation2Df(prev_ang);
+  Eigen::Affine2f prev_trans = Eigen::Translation2f(loc) * Eigen::Rotation2Df(ang);
   cv::Mat flipped_cost_map;
-  cv::flip(local_cost_map_, flipped_cost_map, 0);
+  cv::flip(cost_map, flipped_cost_map, 0);
 
   Eigen::Affine2f delta_trans = prev_trans.inverse() * curr_trans;
   
@@ -188,13 +189,8 @@ void DeepCostMapEvaluator::UpdateMapToLocalFrame() {
                cv::BORDER_CONSTANT,
                UNCERTAINTY_COST);
 
-  cost_map_mutex.lock();
-  local_cost_map_.setTo(0);
-  cv::flip(flipped_cost_map, local_cost_map_, 0);
-
-  prev_loc = curr_loc;
-  prev_ang = curr_ang;
-  cost_map_mutex.unlock();
+  cost_map.setTo(0);
+  cv::flip(flipped_cost_map, cost_map, 0);
 }
 
 shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
@@ -213,8 +209,15 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   cost_map_mutex.lock();
   cv::Mat local_cost_map = local_cost_map_.clone();
+  Eigen::Vector2f cm_loc = cost_map_loc_;
+  auto cm_ang = cost_map_ang_;
   cost_map_mutex.unlock();
 
+  if (plan_idx > 1) {
+    UpdateMapToLocalFrame(local_cost_map, cm_loc, cm_ang);
+  }
+
+  at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
   for (size_t i = 0; i < paths.size(); i++) {
     for(size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j+= blur_ ? 5 : 1) {
       float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
