@@ -564,6 +564,7 @@ void DrawPathOptions() {
         o.free_path_length,
         o.clearance,
         0x0000FF,
+        false,
         local_viz_msg_);
   }
   if (best_option != nullptr) {
@@ -573,6 +574,7 @@ void DrawPathOptions() {
         best_arc.length,
         0.0,
         0xFF0000,
+        true,
         local_viz_msg_);
   }
 }

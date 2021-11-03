@@ -1,3 +1,7 @@
+function deg2rad(deg)
+  return deg * (math.pi / 180)
+end
+
 NavigationParameters = {
   laser_topic = "scan";
   odom_topic = "odom";
@@ -29,8 +33,10 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
+  local_fov = deg2rad(50);
 };
 
 AckermannSampler = {
   max_curvature = 3;
+  clearance_path_clip_fraction = 0.8;
 };

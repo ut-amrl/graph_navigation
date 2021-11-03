@@ -71,6 +71,14 @@ struct Odom {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 };
 
+enum class NavigationState {
+  kStopped = 0,
+  kPaused = 1,
+  kGoto = 2,
+  kTurnInPlace = 3,
+  kOverride = 4
+};
+
 class Navigation {
  public:
   explicit Navigation();
@@ -187,10 +195,8 @@ class Navigation {
   // Newest odometry message received.
   Odom latest_odom_msg_;
 
-  // Whether navigation is complete.
-  bool nav_loc_complete_;
-  bool nav_complete_;
-  bool pause_;
+  NavigationState nav_state_;
+  
   // Navigation goal location.
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.
@@ -246,8 +252,6 @@ class Navigation {
   // Path evaluator.
   std::unique_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
 
-  // Whether or not local carrot is overriden
-  bool target_override_;
   // Last Set of path options sampled
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
       last_options_;

@@ -137,9 +137,7 @@ Navigation::Navigation() :
     robot_angle_(0),
     robot_vel_(0, 0),
     robot_omega_(0),
-    nav_loc_complete_(true),
-    nav_complete_(true),
-    pause_(false),
+    nav_state_(NavigationState::kStopped),
     nav_goal_loc_(0, 0),
     nav_goal_angle_(0),
     odom_initialized_(false),
@@ -172,24 +170,20 @@ void Navigation::Enable(bool enable) {
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
-  target_override_ = false;
-  pause_ = false;
+  nav_state_ = NavigationState::kGoto;
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
-  nav_complete_ = false;
-  nav_loc_complete_ = false;
   plan_path_.clear();
 }
 
 
 void Navigation::SetOverride(const Vector2f& loc, float angle) {
+  nav_state_ = NavigationState::kOverride;
   override_target_ = loc;
-  target_override_ = true;
-  pause_ = false;
 }
 
 void Navigation::Resume() {
-  target_override_ = false;
+  nav_state_ = NavigationState::kGoto;
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -574,7 +568,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
-  if (target_override_) {
+  if (nav_state_ == NavigationState::kOverride) {
     local_target = override_target_;
   }
 
@@ -642,40 +636,49 @@ void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
 }
 
 void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
+  static const bool kDebug = false;
   const float kMaxLinearSpeed = 0.1;
   const float velocity = robot_vel_.x();
-  float angular_cmd = 0;
+  cmd_angle_vel = 0;
   if (fabs(velocity) > kMaxLinearSpeed) {
     Halt(cmd_vel, cmd_angle_vel);
     return;
   }
-  // TODO(jaholtz) take into account override target here
-  const float goal_theta = nav_loc_complete_ ? nav_goal_angle_ : atan2(local_target_.y(), local_target_.x());
-  const float dv = params_.dt * params_.angular_limits.max_acceleration;
-  if (robot_omega_ * goal_theta < 0.0f) {
+  float dTheta = 0;
+  if (nav_state_ == NavigationState::kGoto) {
+    dTheta = atan2(local_target_.y(), local_target_.x());
+  } else if (nav_state_ == NavigationState::kOverride) {
+    dTheta = atan2(override_target_.y(), override_target_.x());
+  } else if (nav_state_ == NavigationState::kTurnInPlace) {
+    dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
+  }
+  if (kDebug) printf("dTheta: %f robot_angle: %f\n", RadToDeg(dTheta), RadToDeg(robot_angle_));
+
+  
+  const float s = Sign(dTheta);
+  if (robot_omega_ * dTheta < 0.0f) {
+    if (kDebug) printf("Wrong way\n");
+    const float dv = params_.dt * params_.angular_limits.max_acceleration;
     // Turning the wrong way!
     if (fabs(robot_omega_) < dv) {
-      angular_cmd = 0;
+      cmd_angle_vel = 0;
     } else {
-      angular_cmd = robot_omega_ - Sign(robot_omega_) * dv;
+      cmd_angle_vel = robot_omega_ - Sign(robot_omega_) * dv;
     }
   } else {
-    const float s = Sign(goal_theta);
-    angular_cmd = Run1DTimeOptimalControl(
+    cmd_angle_vel = s * Run1DTimeOptimalControl(
         params_.angular_limits,
         0,
-        robot_omega_,
-        s * goal_theta,
+        s * robot_omega_,
+        s * dTheta,
         0,
         params_.dt);
   }
-  // TODO: Motion profiling for omega.
-  cmd_angle_vel = Sign(goal_theta) * angular_cmd;
   cmd_vel = {0, 0};
 }
 
 void Navigation::Pause() {
-  pause_ = true;
+  nav_state_ = NavigationState::kPaused;
 }
 
 void Navigation::SetMaxVel(const float vel) {
@@ -735,19 +738,27 @@ float Navigation::GetAngularVelocity() {
   return robot_omega_;
 }
 
-// contents
 string Navigation::GetNavStatus() {
-  string output = "Normal";
-  if (target_override_) {
-    output = "Override";
+  switch (nav_state_) {
+    case NavigationState::kStopped: {
+      return "Stopped";
+    } break;
+    case NavigationState::kPaused: {
+      return "Paused";
+    } break;
+    case NavigationState::kGoto: {
+      return "Goto";
+    } break;
+    case NavigationState::kOverride: {
+      return "Override";
+    } break;
+    case NavigationState::kTurnInPlace: {
+      return "TurnInPlace";
+    } break;
+    default: {
+      return "Unknown";
+    } break;
   }
-  if (nav_loc_complete_) {
-    output = "Translation Complete";
-  }
-  if (nav_complete_) {
-    output = "Complete";
-  }
-  return output;
 }
 
 vector<Vector2f> Navigation::GetPredictedCloud() {
@@ -813,46 +824,77 @@ bool Navigation::Run(const double& time,
     return true;
   }
 
-  if (nav_complete_) {
-    if (kDebug) printf("Nav complete\n");
-    return true;
-  } else {
-    if (kDebug) printf("Nav running\n");
+  // Before swithcing states we need to update the local target.
+  if (nav_state_ == NavigationState::kGoto ||
+      nav_state_ == NavigationState::kOverride) {
+    // Recompute global plan as necessary.
+    if (!PlanStillValid()) {
+      if (kDebug) printf("Replanning\n");
+      plan_path_ = Plan(robot_loc_, nav_goal_loc_);
+    }
+    if (nav_state_ == NavigationState::kGoto) {
+      // Get Carrot and check if done
+      Vector2f carrot(0, 0);
+      bool foundCarrot = GetCarrot(carrot);
+      if (!foundCarrot) {
+        Halt(cmd_vel, cmd_angle_vel);
+        return false;
+      }
+      // Local Navigation
+      local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+    }
   }
 
-  // Replan as necessary (Global Plan)
-  if (!PlanStillValid()) {
-    if (kDebug) printf("Replanning\n");
-    plan_path_ = Plan(robot_loc_, nav_goal_loc_);
-  }
+  // Switch between navigation states.
+  NavigationState prev_state = nav_state_;
+  do {
+    prev_state = nav_state_;
+    if (nav_state_ == NavigationState::kGoto &&
+        local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
+        robot_vel_.squaredNorm() < Sq(params_.target_dist_tolerance)) {
+      nav_state_ = NavigationState::kTurnInPlace;
+    } else if (nav_state_ == NavigationState::kTurnInPlace &&
+          AngleDist(robot_angle_, nav_goal_angle_) < 
+          params_.target_angle_tolerance) {
+      nav_state_ = NavigationState::kStopped;
+    }
+  } while (prev_state != nav_state_);
 
-  // Get Carrot and check if done
-  Vector2f carrot;
-  bool foundCarrot = GetCarrot(carrot);
-  if (!foundCarrot) {
-    Halt(cmd_vel, cmd_angle_vel);
-    return false;
-  }
-
-  // Check if complete.
-  if (!nav_loc_complete_) {
-    nav_loc_complete_ =  (robot_loc_ - carrot).squaredNorm() < Sq(params_.target_dist_tolerance) &&
-      (robot_vel_).squaredNorm() < Sq(params_.target_dist_tolerance);
-  }
   
-  nav_complete_ = nav_loc_complete_ && abs(robot_angle_ - nav_goal_angle_) < params_.target_angle_tolerance;
-  // Halt if necessary
-  if (nav_complete_ || pause_) {
+  switch (nav_state_) {
+    case NavigationState::kStopped: {
+      if (kDebug) printf("\nNav complete\n");
+    } break;
+    case NavigationState::kPaused: {
+      if (kDebug) printf("\nNav paused\n");
+    } break;
+    case NavigationState::kGoto: {
+      if (kDebug) printf("\nNav Goto\n");
+    } break;
+    case NavigationState::kTurnInPlace: {
+      if (kDebug) printf("\nNav TurnInPlace\n");
+    } break;
+    case NavigationState::kOverride: {
+      if (kDebug) printf("\nNav override\n");
+    } break;
+    default: {
+      fprintf(stderr, "ERROR: Unknown nav state %d\n", 
+          static_cast<int>(nav_state_));
+    }
+  }
+
+  if (nav_state_ == NavigationState::kPaused ||
+      nav_state_ == NavigationState::kStopped) {
     Halt(cmd_vel, cmd_angle_vel);
     return true;
-  } else if(!nav_loc_complete_) {
-    // TODO(jaholtz) kLocalFOV should be a parameter
-    static const float kLocalFOV = DegToRad(60.0);
-    // Local Navigation
-    local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
-    // Handling social navigation override target
-    Vector2f local_target = local_target_;
-    if (target_override_) {
+  } else if (nav_state_ == NavigationState::kGoto ||
+      nav_state_ == NavigationState::kOverride) {
+    Vector2f local_target(0, 0);
+    if (nav_state_ == NavigationState::kGoto) {
+      // Local Navigation
+      local_target = local_target_;
+    } else {
+      // Running NavigationState::kOverride .
       local_target = override_target_;
     }
     const float theta = atan2(local_target.y(), local_target.x());
@@ -860,7 +902,7 @@ bool Navigation::Run(const double& time,
       local_target = params_.carrot_dist * local_target.normalized();
     }
     if (!FLAGS_no_local) {
-      if (fabs(theta) > kLocalFOV) {
+      if (fabs(theta) > params_.local_fov) {
         if (kDebug) printf("TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
@@ -868,7 +910,7 @@ bool Navigation::Run(const double& time,
         RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
       }
     }
-  } else {
+  } else if (nav_state_ == NavigationState::kTurnInPlace) {
     if (kDebug) printf("Reached Goal: TurnInPlace\n");
     TurnInPlace(cmd_vel, cmd_angle_vel);
   }
