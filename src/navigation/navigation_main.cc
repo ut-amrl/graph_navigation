@@ -478,6 +478,7 @@ void DrawPathOptions() {
         o.free_path_length,
         o.clearance,
         0x0000FF,
+        false,
         local_viz_msg_);
   }
   if (best_option != nullptr) {
@@ -485,8 +486,9 @@ void DrawPathOptions() {
       *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
     visualization::DrawPathOption(best_arc.curvature,
         best_arc.length,
-        0.0,
+        best_arc.clearance,
         0xFF0000,
+        true,
         local_viz_msg_);
   }
 }
@@ -661,6 +663,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(target_dist_tolerance);
   REAL_PARAM(target_vel_tolerance);
   REAL_PARAM(target_angle_tolerance);
+  REAL_PARAM(local_fov);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -686,6 +689,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->target_dist_tolerance = CONFIG_target_dist_tolerance;
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
   params->target_angle_tolerance = CONFIG_target_angle_tolerance;
+  params->local_fov = CONFIG_local_fov;
 }
 
 int main(int argc, char** argv) {

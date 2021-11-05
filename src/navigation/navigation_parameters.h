@@ -21,6 +21,8 @@
 
 #include <vector>
 
+#include "math/math_util.h"
+
 #ifndef NAVIGATION_PARAMETERS_H
 #define NAVIGATION_PARAMETERS_H
 
@@ -89,6 +91,8 @@ struct NavigationParameters {
   // angle tolerance to reaching target
   float target_angle_tolerance;
 
+  // Local field of view.
+  float local_fov;
 
   // Default constructor, just set defaults.
   NavigationParameters() :
@@ -108,7 +112,8 @@ struct NavigationParameters {
       use_map_speed(true),
       target_dist_tolerance(0.1),
       target_vel_tolerance(0.1),
-      target_angle_tolerance(M_PI / 12.0) {}
+      target_angle_tolerance(M_PI / 12.0),
+      local_fov(math_util::DegToRad(60.0)) {}
 };
 
 }  // namespace navigation
