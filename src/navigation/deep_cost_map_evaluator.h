@@ -62,7 +62,7 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   static constexpr double COST_WEIGHT = 4.0;
   static constexpr double BLUR_FACTOR = 0.05;
   static constexpr double DISCOUNT_FACTOR = 0.15; // discount per meter from the robot
-  
+  static constexpr bool CONTINUAL_LEARNING = true;
 
   cv::VideoWriter outputVideo;
   bool blur_;

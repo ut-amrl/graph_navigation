@@ -142,7 +142,11 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       std::vector<torch::jit::IValue> input;
       input.push_back(input_tensor);
 
-      output = cost_module.forward(input).toTensor().to(torch::kCPU);
+      output = cost_module.forward(input);
+      
+      printf("%s\n", output.toString().c_str(),);
+      // auto output_tensor = output.toTensor();
+      // .toTensor().to(torch::kCPU);
 
       for(int i = 0; i < output.size(0); i++) {
         auto patch_idx = patch_location_indices[i];
