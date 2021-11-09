@@ -95,12 +95,12 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  std::ofstream my_write_file("/home/bwilab/jackal_ws/src/graph_navigation/src/navigation/data.txt", std::ios::app);
+  // std::ofstream my_write_file("/home/bwilab/jackal_ws/src/graph_navigation/src/navigation/data.txt", std::ios::app);
   float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
   // int model_best_index = 0;
-  // float model_best =9999;
+  float model_best =9999;
   // int bestIndex =0;
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
@@ -118,7 +118,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
     float cost = FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length() + FLAGS_cw * paths[i]->Clearance();
 
     //Use the model cost
-    // cost = model_cost;
+    cost = model_cost;
 
 
     if (cost < best_cost) {
@@ -126,21 +126,21 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
       best_cost = cost;
       // bestIndex = i;
     }
-    // if(model_cost<model_best){
-    //   model_best = model_cost;
-    //   model_best_index = i;
-    // }
-    my_write_file << path_length;
-      my_write_file << " ";
-      my_write_file << paths[i]->Length();
-      my_write_file << " ";
-      my_write_file << paths[i]->Clearance();
-      my_write_file << " ";
-      my_write_file << "\n";
+    if(model_cost<model_best){
+      model_best = model_cost;
+      // model_best_index = i;
+    }
+    // my_write_file << path_length;
+    //   my_write_file << " ";
+    //   my_write_file << paths[i]->Length();
+    //   my_write_file << " ";
+    //   my_write_file << paths[i]->Clearance();
+    //   my_write_file << " ";
+    //   my_write_file << "\n";
 
     // std::printf("default best index = %d, model best index = %d, default cost = %f, model Cost = %f\n", bestIndex, model_best_index, best_cost, model_best);
   }
-  my_write_file.close();
+  // my_write_file.close();
   return best;
 }
 
