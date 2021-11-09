@@ -78,6 +78,7 @@ bool DeepCostMapEvaluator::LoadModel() {
   //     return -1;
   // }
   # endif
+  std::cout << "LOADING MODEL" << std::endl;
 
   try {
     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
@@ -143,12 +144,14 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       std::vector<torch::jit::IValue> input;
       input.push_back(input_tensor);
 
-      printf("RUNNING NETWORK\n");
+
+      std::cout << input_tensor.sizes() << std::endl;
 
       auto outputs = cost_module.forward(input).toTensorList();
       at::Tensor recon = outputs[1];
       at::Tensor costs = outputs[2];
-      printf("RAN NETWORK\n");
+      std::cout << recon << std::endl;
+      std::cout << costs << std::endl;
       // auto output_tensor = output.toTensor();
       // .toTensor().to(torch::kCPU);
 
@@ -381,6 +384,13 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   auto color = cv::Scalar(0, 255, 0);
   cv::line(color_cost_img_vis, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
 
+  //Initialize m
+  double minVal; 
+  double maxVal; 
+  Point minLoc; 
+  Point maxLoc;
+
+  minMaxLoc(local_cost_map_, &minVal, &maxVal, &minLoc, &maxLoc );
   cv::Mat resized_cost_img;
   cv::resize(color_cost_img_vis, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
 
@@ -388,7 +398,10 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   cv::Mat color_ood_img;
   cv::Mat resized_ood_img;
-  cvtColor(local_ood_map_ * 255.0f, color_ood_img, cv::COLOR_GRAY2RGB);
+  Mat m = local_ood_map_ * 25.0f;
+  minMaxLoc(m, &minVal, &maxVal, &minLoc, &maxLoc );
+  std::cout << "HERE2: " << maxVal << std::endl;
+  cvtColor(local_ood_map_ * 25.0f, color_ood_img, cv::COLOR_GRAY2RGB);
   cv::resize(color_ood_img, resized_ood_img, cv::Size(warped_vis.cols, warped_vis.rows));
 
   tiler.setCell(0, 2, resized_ood_img);

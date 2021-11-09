@@ -1,5 +1,5 @@
 NavigationParameters = {
-  image_topic = "/left/image_color/compressed";
+  image_topic = "/camera/rgb/image_raw/compressed";
   laser_topic = "/velodyne_2dscan";
   odom_topic = "/jackal_velocity_controller/odom";
   localization_topic = "localization";
@@ -27,12 +27,12 @@ NavigationParameters = {
   max_clearance = 1.0;
   can_traverse_stairs = false;
   use_map_speed = true;
-  use_kinect = false;
+  use_kinect = true;
   target_dist_tolerance = 1.2;
   target_vel_tolerance = 0.1;
-  model_path = "../preference_learning/comprehensive_models/jit_cost_model_outdoor_6dim.pt";
+  model_path = "../continual_learning_models/continual_learning_model_rae_first_pass.jit";
   embedding_model_path = "../preference_learning/comprehensive_models/jit_emb_model_outdoor_6dim.pt";
-  evaluator_type = "cost";
+  evaluator_type = "cost_map";
   blur = true;
 };
 

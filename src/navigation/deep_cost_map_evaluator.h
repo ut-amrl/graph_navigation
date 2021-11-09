@@ -41,6 +41,7 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   DeepCostMapEvaluator(const navigation::NavigationParameters& params) :
     ImageBasedEvaluator(params), blur_(params.blur) {
       local_cost_map_ = cv::Mat((int)ImageBasedEvaluator::CENTER.y() * 2, (int)ImageBasedEvaluator::CENTER.x() * 2, CV_32F, UNCERTAINTY_COST);
+      local_ood_map_ = cv::Mat((int)ImageBasedEvaluator::CENTER.y() * 2, (int)ImageBasedEvaluator::CENTER.x() * 2, CV_32F, UNCERTAINTY_COST);
     };
     //cost_module(navigation::EmbeddingNet(6), navigation::CostNet(6)) 
 
