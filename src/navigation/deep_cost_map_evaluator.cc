@@ -135,24 +135,23 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       }
     }
 
-    at::Tensor output;
     if (patch_tensors.size() > 0) {
       auto input_tensor = torch::stack(patch_tensors).to(device);
 
       std::vector<torch::jit::IValue> input;
       input.push_back(input_tensor);
 
-      output = cost_module.forward(input);
-      
-      printf("%s\n", output.toString().c_str(),);
+      auto outputs = cost_module.forward(input).toTensorList();
+      at::Tensor recon = outputs[1];
+      at::Tensor costs = outputs[2];
       // auto output_tensor = output.toTensor();
       // .toTensor().to(torch::kCPU);
 
-      for(int i = 0; i < output.size(0); i++) {
+      for(int i = 0; i < costs.size(0); i++) {
         auto patch_idx = patch_location_indices[i];
         auto patch_loc = tile_locations[patch_idx];
         auto patch_rect = GetPatchRect(warped, patch_loc);
-        local_cost_map_copy(patch_rect) = output[i].item<double>();
+        local_cost_map_copy(patch_rect) = costs[i].item<double>();
       }
     }
 
