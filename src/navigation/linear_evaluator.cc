@@ -37,6 +37,8 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "linear_evaluator.h"
+#include "torch/script.h"
+#include <fstream>
 
 using std::min;
 using std::max;
@@ -54,7 +56,7 @@ DEFINE_double(fw, -1, "Free path weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 
 namespace motion_primitives {
-
+auto module = torch::jit::load("/home/bwilab/jackal_ws/src/graph_navigation/src/navigation/IRL_script.pt");
 shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
     const vector<shared_ptr<PathRolloutBase>>& paths) {
   if (paths.size() == 0) return nullptr;
@@ -93,21 +95,52 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
+  std::ofstream my_write_file("/home/bwilab/jackal_ws/src/graph_navigation/src/navigation/data.txt", std::ios::app);
   float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
+  // int model_best_index = 0;
+  // float model_best =9999;
+  // int bestIndex =0;
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
         (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-    const float cost = FLAGS_dw * path_length +
-      FLAGS_fw * paths[i]->Length() +
-      FLAGS_cw * paths[i]->Clearance();\
+    
+    std::vector<torch::jit::IValue> inputs;
+    inputs.push_back(torch::tensor({path_length, paths[i]->Length(), paths[i]->Clearance()}));
+    auto output = module.forward(inputs).toTensor().to(torch::kCPU);
+    float model_cost = output[0].item<float>();
+    model_cost = std::abs(model_cost);
+
+
+    //default cost
+    float cost = FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length() + FLAGS_cw * paths[i]->Clearance();
+
+    //Use the model cost
+    // cost = model_cost;
+
+
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
+      // bestIndex = i;
     }
+    // if(model_cost<model_best){
+    //   model_best = model_cost;
+    //   model_best_index = i;
+    // }
+    my_write_file << path_length;
+      my_write_file << " ";
+      my_write_file << paths[i]->Length();
+      my_write_file << " ";
+      my_write_file << paths[i]->Clearance();
+      my_write_file << " ";
+      my_write_file << "\n";
+
+    // std::printf("default best index = %d, model best index = %d, default cost = %f, model Cost = %f\n", bestIndex, model_best_index, best_cost, model_best);
   }
+  my_write_file.close();
   return best;
 }
 

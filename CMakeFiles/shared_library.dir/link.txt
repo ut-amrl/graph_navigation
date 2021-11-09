@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -std=c++11 -Wall -Werror -O2 -g -DNDEBUG  -shared -Wl,-soname,libshared_library.so -o lib/libshared_library.so CMakeFiles/shared_library.dir/src/visualization/visualization.cc.o CMakeFiles/shared_library.dir/src/vector_map/vector_map.cc.o  -L/opt/ros/melodic/lib 

@@ -56,7 +56,8 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/linear_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation shared_library ${libs})
-
+find_package(Torch REQUIRED)
+target_link_libraries(navigation shared_library "${TORCH_LIBRARIES}")
 
 ADD_EXECUTABLE(navigation_tests
     src/navigation/navigation_tests.cc
