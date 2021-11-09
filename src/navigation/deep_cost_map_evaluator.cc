@@ -102,6 +102,7 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
   while(image.rows > 0) {
     cost_map_mutex.lock();
     cv::Mat local_cost_map_copy = local_cost_map_.clone();
+    cv::Mat local_ood_map_copy = local_ood_map_.clone();
     Eigen::Vector2f map_loc = curr_loc;
     float map_ang = curr_ang;
     cost_map_mutex.unlock();
@@ -136,14 +137,18 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
     }
 
     if (patch_tensors.size() > 0) {
+      c10::InferenceMode guard;
       auto input_tensor = torch::stack(patch_tensors).to(device);
 
       std::vector<torch::jit::IValue> input;
       input.push_back(input_tensor);
 
+      printf("RUNNING NETWORK\n");
+
       auto outputs = cost_module.forward(input).toTensorList();
       at::Tensor recon = outputs[1];
       at::Tensor costs = outputs[2];
+      printf("RAN NETWORK\n");
       // auto output_tensor = output.toTensor();
       // .toTensor().to(torch::kCPU);
 
@@ -153,11 +158,19 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
         auto patch_rect = GetPatchRect(warped, patch_loc);
         local_cost_map_copy(patch_rect) = costs[i].item<double>();
       }
+
+      for(int i = 0; i < recon.size(0); i++) {
+        auto patch_idx = patch_location_indices[i];
+        auto patch_loc = tile_locations[patch_idx];
+        auto patch_rect = GetPatchRect(warped, patch_loc);
+        local_ood_map_copy(patch_rect) = recon[i].item<double>();
+      }
     }
 
     //lock it
     cost_map_mutex.lock();
     local_cost_map_ = local_cost_map_copy;
+    local_ood_map_ = local_ood_map_copy;
     cost_map_loc_ = map_loc;
     cost_map_ang_ = map_ang;
     cost_map_mutex.unlock();
@@ -212,12 +225,14 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   cost_map_mutex.lock();
   cv::Mat local_cost_map = local_cost_map_.clone();
+  cv::Mat local_ood_map = local_ood_map_.clone();
   Eigen::Vector2f cm_loc = cost_map_loc_;
   auto cm_ang = cost_map_ang_;
   cost_map_mutex.unlock();
 
   if (plan_idx > 1) {
     UpdateMapToLocalFrame(local_cost_map, cm_loc, cm_ang);
+    UpdateMapToLocalFrame(local_ood_map, cm_loc, cm_ang);
   }
 
   at::Tensor path_costs = torch::zeros({(int)paths.size(), 1});
@@ -340,7 +355,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   cv::Mat warped = GetWarpedImage();
   cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
   cv::Mat warped_vis = warped.clone();
-  auto tiler = ImageCells(2, 1, warped_vis.cols, warped_vis.rows);
+  auto tiler = ImageCells(3, 1, warped_vis.cols, warped_vis.rows);
   cv::Mat orig_warped_vis;
   cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, warped_vis.rows));
   tiler.setCell(0, 0, orig_warped_vis);
@@ -370,6 +385,13 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   cv::resize(color_cost_img_vis, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
 
   tiler.setCell(0, 1, resized_cost_img);
+
+  cv::Mat color_ood_img;
+  cv::Mat resized_ood_img;
+  cvtColor(local_ood_map_ * 255.0f, color_ood_img, cv::COLOR_GRAY2RGB);
+  cv::resize(color_ood_img, resized_ood_img, cv::Size(warped_vis.cols, warped_vis.rows));
+
+  tiler.setCell(0, 2, resized_ood_img);
   warped_vis = tiler.image;
 
   latest_vis_image_ = warped_vis.clone();

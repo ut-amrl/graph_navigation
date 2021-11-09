@@ -71,6 +71,7 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   std::vector<float> latest_cost_components_;
 
   cv::Mat local_cost_map_;
+  cv::Mat local_ood_map_;
   Eigen::Vector2f cost_map_loc_;
   float cost_map_ang_;
   std::mutex cost_map_mutex;
