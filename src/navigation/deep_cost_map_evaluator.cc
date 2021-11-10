@@ -83,13 +83,14 @@ bool DeepCostMapEvaluator::LoadModel() {
   try {
     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     cost_module = torch::jit::load(params_.model_path, device);
+    std::cout << "launching thread MODEL" << std::endl;
+    std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading cost model:\n" << e.msg();
     return false;
   }
 
-  std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
 }
 
 cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
@@ -99,8 +100,15 @@ cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
 }
 
 void DeepCostMapEvaluator::UpdateLocalCostMap() {
+  std::cerr << "A0" << std::endl;
   RateLoop loop(1.0 / MIN_COST_RECOMP_MS);
-  while(image.rows > 0) {
+  std::cerr << "A1" << std::endl;
+  while(true) {
+    if (!(image.rows > 0)) {
+      loop.Sleep();
+      continue;
+    }
+    std::cerr << "A2" << std::endl;
     cost_map_mutex.lock();
     cv::Mat local_cost_map_copy = local_cost_map_.clone();
     cv::Mat local_ood_map_copy = local_ood_map_.clone();
@@ -137,6 +145,9 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       }
     }
 
+    // std::cerr << "PATCHES:" << patch_tensors.size() << std::endl;
+
+
     if (patch_tensors.size() > 0) {
       c10::InferenceMode guard;
       auto input_tensor = torch::stack(patch_tensors).to(device);
@@ -145,13 +156,14 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       input.push_back(input_tensor);
 
 
-      std::cout << input_tensor.sizes() << std::endl;
+      std::cerr << "INPUT SIZES:" << input_tensor.sizes() << std::endl;
 
-      auto outputs = cost_module.forward(input).toTensorList();
-      at::Tensor recon = outputs[1];
-      at::Tensor costs = outputs[2];
-      std::cout << recon << std::endl;
-      std::cout << costs << std::endl;
+      auto outputs = cost_module.forward(input).toTuple();
+      std::cout << "SIZES" <<  outputs->elements()[0].toTensor().sizes() << outputs->elements()[1].toTensor().sizes() << outputs->elements()[2].toTensor().sizes() << outputs->elements()[3].toTensor().sizes() << std::endl;
+      at::Tensor recon = outputs->elements()[1].toTensor();
+      at::Tensor costs = outputs->elements()[2].toTensor();
+      std::cerr << "RECON: " << recon << std::endl;
+      std::cerr << "COSTS: " <<  costs << std::endl;
       // auto output_tensor = output.toTensor();
       // .toTensor().to(torch::kCPU);
 
@@ -362,49 +374,46 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   cv::Mat orig_warped_vis;
   cv::resize(warped_vis, orig_warped_vis, cv::Size(warped_vis.cols, warped_vis.rows));
   tiler.setCell(0, 0, orig_warped_vis);
-  cv::Mat color_cost_img;
-  cvtColor(local_cost_map_, color_cost_img, cv::COLOR_GRAY2RGB);
-  cv::normalize(color_cost_img, color_cost_img, 0, 255.0f, cv::NORM_MINMAX, CV_8U);
-  cv::Mat overlay = color_cost_img.clone();
+  cv::Mat color_cost_img = local_cost_map.clone();
+  // std::cout << local_cost_map * 25.0f;
+  cvtColor(local_cost_map, color_cost_img, cv::COLOR_GRAY2RGB);
+  cv::normalize(color_cost_img, color_cost_img, 0.0f, 255.0f, cv::NORM_MINMAX, CV_8U);
+  //Initialize m
+  // double minVal; 
+  // double maxVal; 
+  // Point minLoc; 
+  // Point maxLoc;
+
+  // minMaxLoc(color_cost_img, &minVal, &maxVal, &minLoc, &maxLoc );
+  // std::cout << "MAX: " << maxVal << std::endl;
 
   for(size_t i = 0; i < paths.size(); i++) {
     for(float f = 0; f < 1.0; f += 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * (blur_ ? 5 : 1)) {
       auto state = paths[i]->GetIntermediateState(f);
       auto image_loc = GetImageLocation(state.translation);
       auto color = (paths[i] == best) ? cv::Scalar(255, 0, 0) : cv::Scalar(0, normalized_path_costs.at<float>(i, 0) * 25, 0);
-      cv::circle(overlay, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
+      cv::circle(color_cost_img, cv::Point(image_loc.x(), image_loc.y()), 4, color, 3);
     }
   }
-  auto alpha = 0.5f;
-  cv::Mat color_cost_img_vis;
-  cv::addWeighted(overlay, alpha, color_cost_img, 1 - alpha, 0, color_cost_img_vis);
 
   auto target_img_loc = GetImageLocation(local_target);
   auto curr_img_loc = GetImageLocation(Vector2f(0, 0));
   auto color = cv::Scalar(0, 255, 0);
-  cv::line(color_cost_img_vis, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
+  cv::line(color_cost_img, cv::Point(curr_img_loc.x(), curr_img_loc.y()), cv::Point(target_img_loc.x(), target_img_loc.y()), color, 2);
 
-  //Initialize m
-  double minVal; 
-  double maxVal; 
-  Point minLoc; 
-  Point maxLoc;
-
-  minMaxLoc(local_cost_map_, &minVal, &maxVal, &minLoc, &maxLoc );
   cv::Mat resized_cost_img;
-  cv::resize(color_cost_img_vis, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
+  cv::resize(color_cost_img, resized_cost_img, cv::Size(warped_vis.cols, warped_vis.rows));
 
-  tiler.setCell(0, 1, resized_cost_img);
+  tiler.setCell(0, 1, resized_cost_img.clone());
 
   cv::Mat color_ood_img;
   cv::Mat resized_ood_img;
-  Mat m = local_ood_map_ * 25.0f;
-  minMaxLoc(m, &minVal, &maxVal, &minLoc, &maxLoc );
-  std::cout << "HERE2: " << maxVal << std::endl;
-  cvtColor(local_ood_map_ * 25.0f, color_ood_img, cv::COLOR_GRAY2RGB);
+  // Mat m = local_ood_map;
+  // minMaxLoc(m, &minVal, &maxVal, &minLoc, &maxLoc );
+  // std::cout << "HERE2: " << maxVal << std::endl;
+  cvtColor(local_ood_map, color_ood_img, cv::COLOR_GRAY2RGB);
   cv::resize(color_ood_img, resized_ood_img, cv::Size(warped_vis.cols, warped_vis.rows));
-
-  tiler.setCell(0, 2, resized_ood_img);
+  tiler.setCell(0, 2, resized_ood_img.clone());
   warped_vis = tiler.image;
 
   latest_vis_image_ = warped_vis.clone();

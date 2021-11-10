@@ -92,7 +92,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
 
   Eigen::Vector2f SCALING;
   Eigen::Vector2f CENTER;
-  static const int PATCH_SIZE = 40;
+  static const int PATCH_SIZE = 64;
   static const int HALF_PATCH_SIZE = PATCH_SIZE / 2;
   static const int PATCH_PIXEL_COUNT = PATCH_SIZE * PATCH_SIZE;
   static constexpr float PATCH_EMPTY_THRESHOLD = 0.15f;
