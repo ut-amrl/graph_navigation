@@ -85,6 +85,8 @@ bool DeepCostMapEvaluator::LoadModel() {
     cost_module = torch::jit::load(params_.model_path, device);
     std::cout << "launching thread MODEL" << std::endl;
     std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
+    t1.detach();
+    std::cout << "launced thread MODEL" << std::endl;
     return true;
   } catch(const c10::Error& e) {
     std::cout << "Error loading cost model:\n" << e.msg();
@@ -100,15 +102,12 @@ cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
 }
 
 void DeepCostMapEvaluator::UpdateLocalCostMap() {
-  std::cerr << "A0" << std::endl;
   RateLoop loop(1.0 / MIN_COST_RECOMP_MS);
-  std::cerr << "A1" << std::endl;
   while(true) {
     if (!(image.rows > 0)) {
       loop.Sleep();
       continue;
     }
-    std::cerr << "A2" << std::endl;
     cost_map_mutex.lock();
     cv::Mat local_cost_map_copy = local_cost_map_.clone();
     cv::Mat local_ood_map_copy = local_ood_map_.clone();
@@ -156,14 +155,14 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       input.push_back(input_tensor);
 
 
-      std::cerr << "INPUT SIZES:" << input_tensor.sizes() << std::endl;
+      // std::cerr << "INPUT SIZES:" << input_tensor.sizes() << std::endl;
 
       auto outputs = cost_module.forward(input).toTuple();
-      std::cout << "SIZES" <<  outputs->elements()[0].toTensor().sizes() << outputs->elements()[1].toTensor().sizes() << outputs->elements()[2].toTensor().sizes() << outputs->elements()[3].toTensor().sizes() << std::endl;
+      // std::cout << "SIZES" <<  outputs->elements()[0].toTensor().sizes() << outputs->elements()[1].toTensor().sizes() << outputs->elements()[2].toTensor().sizes() << outputs->elements()[3].toTensor().sizes() << std::endl;
       at::Tensor recon = outputs->elements()[1].toTensor();
       at::Tensor costs = outputs->elements()[2].toTensor();
-      std::cerr << "RECON: " << recon << std::endl;
-      std::cerr << "COSTS: " <<  costs << std::endl;
+      // std::cerr << "RECON: " << recon << std::endl;
+      // std::cerr << "COSTS: " <<  costs << std::endl;
       // auto output_tensor = output.toTensor();
       // .toTensor().to(torch::kCPU);
 
@@ -412,6 +411,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   // minMaxLoc(m, &minVal, &maxVal, &minLoc, &maxLoc );
   // std::cout << "HERE2: " << maxVal << std::endl;
   cvtColor(local_ood_map, color_ood_img, cv::COLOR_GRAY2RGB);
+  cv::normalize(color_ood_img, color_ood_img, 0.0f, 255.0f, cv::NORM_MINMAX, CV_8U);
   cv::resize(color_ood_img, resized_ood_img, cv::Size(warped_vis.cols, warped_vis.rows));
   tiler.setCell(0, 2, resized_ood_img.clone());
   warped_vis = tiler.image;
