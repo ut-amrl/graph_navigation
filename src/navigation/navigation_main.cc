@@ -30,7 +30,6 @@
 #include "opencv2/core/mat.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
-#include <opencv2/viz/types.hpp>
 
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
