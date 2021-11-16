@@ -366,7 +366,6 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
     out_msg.encoding = sensor_msgs::image_encodings::BGR8;
     out_msg.image = local_image;
     local_image_pub_.publish(out_msg);
-    navigation_.UpdateLocalImage(local_image);
   }
 }
 
