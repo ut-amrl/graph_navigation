@@ -93,7 +93,6 @@ class Navigation {
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
-  void UpdateLocalImage(cv::Mat image);
 
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
