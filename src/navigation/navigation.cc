@@ -239,7 +239,7 @@ void Navigation::UpdateOdometry(const Odom& msg) {
     odom_initialized_ = true;
   }
   if (should_add_odom_to_history) {
-    odom_history_.insert(std::begin(odom_history_), msg);
+    odom_history_.insert(std::begin(odom_history_) + 1, msg);
     if (odom_history_.size() > kOdomHistorySize) {
       odom_history_.pop_back();
     }
