@@ -35,30 +35,6 @@
 
 namespace motion_primitives {
 
-struct MotionLimits {
-  // Maximum permissible acceleration magnitude.
-  // NOTE: Must be positive!
-  float max_acceleration;
-  // Maximum permissible deceleration magnitude.
-  // NOTE: Must be positive!
-  float max_deceleration;
-  // Maximum permissible speed.
-  // NOTE: Must be positive!
-  float max_speed;
-
-  MotionLimits() : 
-      max_acceleration(0),
-      max_deceleration(0),
-      max_speed(0) {}
-
-  MotionLimits(float max_acceleration,
-               float max_deceleration,
-               float max_speed) : 
-      max_acceleration(max_acceleration),
-      max_deceleration(max_deceleration),
-      max_speed(max_speed) {}
-};
-
 // A path rollout, with the start being the robot's current pose in the robot
 // frame - 0,0,0.
 struct PathRolloutBase {
@@ -184,7 +160,7 @@ struct PathEvaluatorBase {
   cv::Mat image;
 };
 
-float Run1DTimeOptimalControl(const MotionLimits& limits,
+float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,
                               const float x_init, 
                               const float v_init, 
                               const float x_final, 

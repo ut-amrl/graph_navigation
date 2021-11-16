@@ -31,6 +31,8 @@
 #ifndef ACKERMANN_MOTION_PRIMITIVES_H
 #define ACKERMANN_MOTION_PRIMITIVES_H
 
+using navigation::MotionLimits;
+
 namespace motion_primitives {
 
 // Path rollout sampler. 
@@ -54,9 +56,6 @@ struct AckermannSampler : PathRolloutSamplerBase {
 
   void CheckObstacles(ConstantCurvatureArc* path);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
   MotionLimits angular_limits;
   MotionLimits linear_limits;
   float dt;
@@ -68,9 +67,6 @@ struct AckermannSampler : PathRolloutSamplerBase {
   float base_link_offset;
   float obstacle_margin;
   float max_clearance;
->>>>>>> 6d93f5f... WIP refactoring models
-=======
->>>>>>> ca5ca27... Updates from lots of testing in simulation
 };
 
 }  // namespace motion_primitives

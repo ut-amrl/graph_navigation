@@ -6,7 +6,7 @@ MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
 MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
-SET(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Werror")
+SET(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Werror")
 SET(LIBRARY_NAME "graph_nav_lib"
     CACHE STRING "Name of compiled library")
 
@@ -21,7 +21,9 @@ ENDIF()
 
 INCLUDE($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 ROSBUILD_INIT()
-SET(ROS_BUILD_SHARED_LIBS true)
+
+SET(ROS_BUILD_STATIC_LIBS true)
+SET(ROS_BUILD_SHARED_LIBS false)
 
 
 
@@ -89,7 +91,7 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
                         src/navigation/navigation.cc)
-TARGET_LINK_LIBRARIES(social_nav shared_library ${libs})
+TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})
-add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})  ${libs})
+add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})

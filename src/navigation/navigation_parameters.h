@@ -94,11 +94,6 @@ struct NavigationParameters {
   // Local field of view.
   float local_fov;
 
-  // Distance tolerance to reaching target.
-  float target_dist_tolerance;
-  // Velocity tolerance to reaching target.
-  float target_vel_tolerance;
-
   bool use_ikd;
   std::string model_path;
 

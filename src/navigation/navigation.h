@@ -210,7 +210,7 @@ class Navigation {
   // Odometry-reported robot angle.
   float odom_angle_;
   // Newest odometry message received.
-  nav_msgs::Odometry latest_odom_msg_;
+  navigation::Odom latest_odom_msg_;
   // Newest image received.
   cv::Mat latest_image_;
   // GT local image.
@@ -218,7 +218,7 @@ class Navigation {
   
   
   // retain the last 15 odom messages
-  std::vector<nav_msts::Odometry> odom_history_;
+  std::vector<navigation::Odom> odom_history_;
   const size_t kOdomHistorySize = 15;
   bool should_add_odom_to_history;
 

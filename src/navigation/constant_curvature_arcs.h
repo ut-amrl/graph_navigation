@@ -37,7 +37,6 @@ struct ConstantCurvatureArc : PathRolloutBase {
   // Length of the path rollout.
   float Length() const override;
 
-  // FPL
   float FPL() const override;
 
   // Angular distance traversed.

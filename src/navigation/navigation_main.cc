@@ -26,6 +26,11 @@
 #include <string.h>
 #include <inttypes.h>
 #include <vector>
+#include "cv_bridge/cv_bridge.h"
+#include "opencv2/core/mat.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include <opencv2/viz/types.hpp>
 
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
@@ -68,7 +73,6 @@
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
 #include <cv_bridge/cv_bridge.h>
-#include <opencv2/viz/types.hpp>
 
 
 #include "motion_primitives.h"
@@ -123,6 +127,7 @@ CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_string(global_image, "", "Global image map");
+DEFINE_bool(debug_images, false, "whether or not to debug images");
 
 // DECLARE_int32(v);
 
@@ -774,13 +779,9 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(use_map_speed);
   REAL_PARAM(target_dist_tolerance);
   REAL_PARAM(target_vel_tolerance);
-<<<<<<< HEAD
   REAL_PARAM(target_angle_tolerance);
   REAL_PARAM(local_fov);
-  BOOL_PARAM(use_kinect);
-=======
   BOOL_PARAM(use_ikd);
->>>>>>> 304d255... start on visual ikd
   STRING_PARAM(model_path);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
@@ -806,13 +807,9 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->use_map_speed = CONFIG_use_map_speed;
   params->target_dist_tolerance = CONFIG_target_dist_tolerance;
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
-<<<<<<< HEAD
   params->target_angle_tolerance = CONFIG_target_angle_tolerance;
   params->local_fov = CONFIG_local_fov;
-  params->use_kinect = CONFIG_use_kinect;
-=======
   params->use_ikd = CONFIG_use_ikd;
->>>>>>> 304d255... start on visual ikd
   params->model_path = CONFIG_model_path;
 }
 
@@ -930,13 +927,10 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
-<<<<<<< HEAD
   ros::Subscriber image_sub = n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
-=======
   
   ros::Subscriber accel_sub = n.subscribe(CONFIG_accel_topic, 1, &AccelCallback);
   ros::Subscriber gyro_sub = n.subscribe(CONFIG_gyro_topic, 1, &GyroCallback);
->>>>>>> 304d255... start on visual ikd
 
   if (FLAGS_debug_images) cv::namedWindow(kOpenCVWindow);
   RateLoop loop(1.0 / params.dt);

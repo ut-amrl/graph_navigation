@@ -57,8 +57,7 @@ AckermannSampler::AckermannSampler() {
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
-    // path.length = min(nav_params.max_free_path_length, local_target.x());
-    path.length = nav_params.max_free_path_length;
+    path.length = min(nav_params.max_free_path_length, local_target.x());
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
@@ -166,15 +165,9 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     const float stopping_dist = 
       vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
     if (path.length < stopping_dist) {
-<<<<<<< HEAD
       path.length = 0;
     }
     
-=======
-      printf("STOPPING DIST %f %f\n", stopping_dist, path.length);
-      path.length = 0;
-    }
->>>>>>> 07eb586... update blurring
     return;
   }
   const float path_radius = 1.0 / path.curvature;

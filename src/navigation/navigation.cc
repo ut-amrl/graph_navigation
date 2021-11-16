@@ -151,6 +151,7 @@ Navigation::Navigation() :
     sampler_(nullptr),
     evaluator_(nullptr) {
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+  evaluator_ = std::unique_ptr<PathEvaluatorBase>(new LinearEvaluator());
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
