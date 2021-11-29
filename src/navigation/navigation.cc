@@ -1276,6 +1276,10 @@ bool Navigation::GetStaticEdgesFailureProb(
   const int kFailureTypeCount = 2;
   std::array<float, kFailureTypeCount> failure_prob_fwd {0, 0};
   std::array<float, kFailureTypeCount> failure_prob_rev {0, 0};
+  // Prob values smaller than this threshold will be set to zero
+  const float kEpsilonThresh = 0.025;
+  // Prob values smaller than this threshold will be set to zero
+  const float kEpsilonThresh = 0.025;
 
   for (auto& edge : planning_domain_.static_edges) {
     // Compute the failure prob for forward direction
@@ -1285,11 +1289,23 @@ bool Navigation::GetStaticEdgesFailureProb(
         if (edge.traversal_count[0] > 0) {
           failure_prob_fwd[i] = static_cast<float>(edge.failure_count_fwd[i]) /
                                 static_cast<float>(edge.traversal_count[0]);
+          if (failure_prob_fwd[i] < kEpsilonThresh) {
+            failure_prob_fwd[i] = 0;
+          }
           failure_prob_fwd[i] =
               std::min(static_cast<float>(failure_prob_fwd[i]), 0.99f);
+          if (failure_prob_fwd[i] < kEpsilonThresh) {
+        if (failure_prob_fwd[i] < kEpsilonThresh) {
+          failure_prob_fwd[i] = 0;
+        }
+            failure_prob_fwd[i] = 0;
+          }
         }
       } else {
         failure_prob_fwd[i] = edge.failure_belief_normalized[0][i];
+        if (failure_prob_fwd[i] < kEpsilonThresh) {
+          failure_prob_fwd[i] = 0;
+        }
       }
 
       edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
@@ -1297,17 +1313,29 @@ bool Navigation::GetStaticEdgesFailureProb(
     }
 
     // Compute the failure prob for reverse direction
+          if (failure_prob_rev[i] < kEpsilonThresh) {
+            failure_prob_rev[i] = 0;
+          }
     for (size_t i = 0; i < kFailureTypeCount; i++) {
       failure_prob_rev[i] = 0.0;
       if (get_frequentist_estimates) {
+        if (failure_prob_rev[i] < kEpsilonThresh) {
+          failure_prob_rev[i] = 0;
+        }
         if (edge.traversal_count[1] > 0) {
           failure_prob_rev[i] = static_cast<float>(edge.failure_count_rev[i]) /
                                 static_cast<float>(edge.traversal_count[1]);
           failure_prob_rev[i] =
               std::min(static_cast<float>(failure_prob_rev[i]), 0.99f);
+          if (failure_prob_rev[i] < kEpsilonThresh) {
+            failure_prob_rev[i] = 0;
+          }
         }
       } else {
         failure_prob_rev[i] = edge.failure_belief_normalized[1][i];
+        if (failure_prob_rev[i] < kEpsilonThresh) {
+          failure_prob_rev[i] = 0;
+        }
       }
 
       edges_failure_prob->push_back(GenerateIntrospectivePerceptionInfoMsg(
@@ -1469,6 +1497,8 @@ void Navigation::RunObstacleAvoidance() {
   const float dist_left =
       max<float>(0.0, best_option.free_path_length - params_.obstacle_margin);
 
+  // Scale down the max angular velocity for turning in place
+  const float kAngularVelLimitScalar = 0.3;
   const float speed = robot_vel_.norm();
   float max_speed = min<float>(params_.linear_limits.speed,
       sqrt(2.0f * params_.linear_limits.accel * best_option.clearance));
@@ -1495,7 +1525,7 @@ void Navigation::Halt() {
   // printf("%8.3f %8.3f\n", velocity, velocity_cmd);
   SendCommand(velocity_cmd, 0);
 }
-
+        params_.angular_limits.speed * kAngularVelLimitScalar, params_.angular_limits.accel,
 void Navigation::TurnInPlace() {
   const float kMaxLinearSpeed = 0.1;
   const float velocity = robot_vel_.x();
