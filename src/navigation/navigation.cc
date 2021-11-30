@@ -1287,9 +1287,6 @@ bool Navigation::GetStaticEdgesFailureProb(
         if (edge.traversal_count[0] > 0) {
           failure_prob_fwd[i] = static_cast<float>(edge.failure_count_fwd[i]) /
                                 static_cast<float>(edge.traversal_count[0]);
-          if (failure_prob_fwd[i] < kEpsilonThresh) {
-            failure_prob_fwd[i] = 0;
-          }
           failure_prob_fwd[i] =
               std::min(static_cast<float>(failure_prob_fwd[i]), 0.99f);
           if (failure_prob_fwd[i] < kEpsilonThresh) {
@@ -1311,9 +1308,6 @@ bool Navigation::GetStaticEdgesFailureProb(
     for (size_t i = 0; i < kFailureTypeCount; i++) {
       failure_prob_rev[i] = 0.0;
       if (get_frequentist_estimates) {
-        if (failure_prob_rev[i] < kEpsilonThresh) {
-          failure_prob_rev[i] = 0;
-        }
         if (edge.traversal_count[1] > 0) {
           failure_prob_rev[i] = static_cast<float>(edge.failure_count_rev[i]) /
                                 static_cast<float>(edge.traversal_count[1]);
