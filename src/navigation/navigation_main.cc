@@ -185,8 +185,13 @@ void IntrospectivePerceptionCallback(
   // The minimum time interval between consecutive reports of the same type of
   // failure in order for that to be added as a new failure instance (seconds).
   const float kMinPeriod = 7.0;
+  // The minimum increase in the estimated failure likelihood in order for that 
+  // to be added as a new failure instance even if the time interval is smaller 
+  // than kMinPeriod (probability).
+  const float kMinFailureLikelihoodChange = 0.1;
   bool navigation_edge_found = false;
   static std::unordered_map<int, double> failure_type_to_last_time_map;
+  static std::unordered_map<int, double> failure_type_to_last_prob_map;
   graph_navigation::IntrospectivePerceptionInfo complemented_info;
 
   introspection::ObservationType obs_type;
@@ -222,11 +227,19 @@ void IntrospectivePerceptionCallback(
     // if more than kMinPeriod seconds has passed since last failure of the
     // same type
     double curr_time = ros::Time::now().toSec();
-    if (!((failure_type_to_last_time_map.find(msg.failure_type) !=
-           failure_type_to_last_time_map.end()) &&
-          (curr_time - failure_type_to_last_time_map[msg.failure_type] <
-           kMinPeriod))) {
+
+    if (failure_type_to_last_time_map.find(msg.failure_type) ==
+        failure_type_to_last_time_map.end()) {
       failure_type_to_last_time_map[msg.failure_type] = curr_time;
+      failure_type_to_last_prob_map[msg.failure_type] = msg.failure_likelihood;
+      navigation_.AddFailureInstance(msg);
+    } else if ((msg.failure_likelihood -
+                    failure_type_to_last_prob_map[msg.failure_type] >
+                kMinFailureLikelihoodChange) ||
+               (curr_time - failure_type_to_last_time_map[msg.failure_type] >
+                kMinPeriod)) {
+      failure_type_to_last_time_map[msg.failure_type] = curr_time;
+      failure_type_to_last_prob_map[msg.failure_type] = msg.failure_likelihood;
       navigation_.AddFailureInstance(msg);
     }
   }
