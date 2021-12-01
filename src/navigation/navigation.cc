@@ -1714,7 +1714,7 @@ void Navigation::AddFailureInstance(
     const graph_navigation::IntrospectivePerceptionRawInfo& msg) {
   // The offset between the current robot location and the location
   // to log the predicted failure at (meters).
-  const float kFailureLocationOffset = 3.0;
+  const float kFailureLocationOffset = 2.5; // 3.0
 
   // TODO(srabiee): turn off debug mode
   const bool kDebug = false;
