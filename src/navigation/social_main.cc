@@ -34,6 +34,7 @@
 #include "amrl_msgs/HumanStateArrayMsg.h"
 #include "amrl_msgs/HumanStateMsg.h"
 #include "constant_curvature_arcs.h"
+#include "motion_primitives.h"
 #include "geometry_msgs/Point.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "glog/logging.h"
@@ -84,6 +85,8 @@ using navigation::SocialNav;
 using navigation::SocialAction;
 using navigation::MotionLimits;
 using navigation::PathOption;
+using motion_primitives::PathRolloutBase;
+using motion_primitives::ConstantCurvatureArc;
 using ros::Time;
 using ros_helpers::Eigen3DToRosPoint;
 using ros_helpers::Eigen2DToRosPoint;
@@ -447,6 +450,7 @@ vector<amrl_msgs::Pose2Df> HumanVels(const vector<Human>& humans) {
 }
 
 void FillRequest(SocialPipsSrv::Request* req) {
+  cout << "service request" << endl;
   amrl_msgs::Pose2Df robot_pose, robot_vel, goal_pose, door_pose;
   robot_pose.x = current_loc_.x();
   robot_pose.y = current_loc_.y();
@@ -483,12 +487,14 @@ void DrawTarget() {
   const Eigen::Vector2f target = navigation_->GetGraphNav()->GetTarget();
   const Eigen::Vector2f override = navigation_->GetGraphNav()->GetOverrideTarget();
   auto msg_copy = global_viz_msg_;
-  visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
-  visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
-  visualization::DrawCross(override, 0.2, 0x800080, local_viz_msg_);
+  if (navigation_->GetGraphNav()->Overriden()) {
+    visualization::DrawCross(override, 0.2, 0x0000FF, local_viz_msg_);
+  } else {
+    visualization::DrawCross(target, 0.2, 0x0000FF, local_viz_msg_);
+  }
   const Eigen::Rotation2Df rot(current_angle_);
   const Vector2f global_target = rot * target + current_loc_;
   const Vector2f global_over = rot * override + current_loc_;
@@ -760,6 +766,11 @@ void PublishVisualizationMarkers() {
       human_array_.markers.push_back(human_marker_);
       human_marker_.points.clear();
       human_marker_.id += 1;
+      visualization::DrawCross(human_pose, 0.2, 0xFF0080, local_viz_msg_);
+      visualization::DrawLine(human_pose,
+                              transformed_vel,
+                              0xFF0080,
+                              local_viz_msg_);
     }
   } else {
     auto temp_marker = human_marker_;
@@ -797,6 +808,12 @@ void RunSocial() {
       action = SocialAction::Follow;
     } else if (res.action == 3) {
       action = SocialAction::Pass;
+    } else if (res.action == 4) {
+      action = SocialAction::Left;
+    } else if (res.action == 5) {
+      action = SocialAction::Right;
+    } else if (res.action == 6) {
+      action = SocialAction::StepAside;
     }
   }
 
@@ -830,13 +847,22 @@ bool SocialService(socialNavSrv::Request &req,
                    socialNavSrv::Response& res) {
   visualization::ClearVisualizationMsg(local_viz_msg_);
   SocialAction action = SocialAction::GoAlone;
-  if (req.action == 1) {
-    action = SocialAction::Halt;
-  } else if (req.action == 2) {
-    action = SocialAction::Follow;
-  } else if (req.action == 3) {
-    action = SocialAction::Pass;
-  }
+  cout << "Action: " << req.action << endl;
+    if (req.action == 0) {
+      action = SocialAction::GoAlone;
+    } else if (req.action == 1) {
+      action = SocialAction::Halt;
+    } else if (req.action == 2) {
+      action = SocialAction::Follow;
+    } else if (req.action == 3) {
+      action = SocialAction::Pass;
+    } else if (req.action == 4) {
+      action = SocialAction::Left;
+    } else if (req.action == 5) {
+      action = SocialAction::Right;
+    } else if (req.action == 6) {
+      action = SocialAction::StepAside;
+    }
 
   navigation::Odom odom = OdomHandler(req.odom);
   odom.time += FLAGS_dt;
@@ -865,7 +891,7 @@ bool SocialService(socialNavSrv::Request &req,
   SendCommand(cmd_vel, cmd_angle_vel);
   DrawRobot();
   DrawPathOptions();
-  // DrawTarget();
+  DrawTarget();
   PublishVisualizationMarkers();
   viz_pub_.publish(local_viz_msg_);
   viz_pub_.publish(global_viz_msg_);

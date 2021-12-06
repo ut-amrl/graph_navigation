@@ -8,6 +8,8 @@ bin/*
 .clangd/*
 srv_gen/*
 src/graph_navigation/
+src/graph_navigation/srv/*
+src/graph_navigation/__init__.py
 
 # Prerequisites
 *.d

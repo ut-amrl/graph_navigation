@@ -1,0 +1,64 @@
+name: Build-Test
+# Run this workflow every time a new commit pushed to your repository
+on: push
+
+jobs:
+  # Set the job key. The key is displayed as the job name
+  # when a job name is not provided
+  build-test:
+    # Name the Job
+    name: Build test
+    # Set the type of machine to run on
+    runs-on: ubuntu-20.04
+
+    steps:
+      # Run package update
+      - name: Run package update
+        run: |
+          sudo apt update
+          sudo apt dist-upgrade -y
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt-get install g++ cmake libpopt-dev \
+            liblua5.1-dev libeigen3-dev \
+            libjpeg8-dev libgoogle-perftools-dev \
+            libsuitesparse-dev libblas-dev liblapack-dev libopenmpi-dev \
+            libgoogle-glog-dev libgflags-dev libceres-dev libtbb-dev
+
+      # Install ROS
+      - name: Install ROS
+        run: |
+          sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+          sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+          sudo apt update
+          sudo apt install ros-noetic-desktop
+          sudo apt install python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
+          sudo rosdep init
+          rosdep update
+
+
+      # Checks out a copy of your repository
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+
+      # Checkout and build amrl_msgs
+      - name: Get amrl_msgs
+        run: |
+          source /opt/ros/noetic/setup.bash
+          export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/../amrl_msgs
+          cd $GITHUB_WORKSPACE/..
+          git clone https://github.com/ut-amrl/amrl_msgs.git
+          cd amrl_msgs
+          make
+
+      # Compiles the code
+      - name: Run build
+        run: |
+          source /opt/ros/noetic/setup.bash
+          export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/../amrl_msgs
+          cd $GITHUB_WORKSPACE
+          make

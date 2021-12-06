@@ -162,6 +162,10 @@ void Navigation::Initialize(const NavigationParameters& params,
   sampler_->SetNavParams(params);
 }
 
+bool Navigation::Initialized() {
+  return initialized_ && odom_initialized_ && loc_initialized_;
+}
+
 bool Navigation::Enabled() const {
   return enabled_;
 }
@@ -184,6 +188,10 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
   override_target_ = loc;
   target_override_ = true;
   pause_ = false;
+}
+
+bool Navigation::Overriden() {
+  return target_override_;
 }
 
 void Navigation::Resume() {
@@ -308,6 +316,7 @@ void Navigation::TrapezoidTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
       params_.dt);
   cmd_vel = {velocity_cmd, 0};
   cmd_angle_vel = 0;
+  printf("x: %.3f d:%.3f v: %.3f cmd:%.3f\n", x, FLAGS_test_dist, speed, velocity_cmd);
 }
 
 void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
@@ -564,7 +573,7 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const bool debug = false;
+  const bool debug = FLAGS_v > 1;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
@@ -756,6 +765,14 @@ float Navigation::GetObstacleMargin() {
   return params_.obstacle_margin;
 }
 
+float Navigation::GetRobotWidth() {
+  return params_.robot_width;
+}
+
+float Navigation::GetRobotLength() {
+  return params_.robot_length;
+}
+
 vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
@@ -768,37 +785,49 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
-void Navigation::Run(const double& time,
+void Navigation::GetNavEdge(const Vector2f &point,
+                            GraphDomain::NavigationEdge* closest_edge,
+                            float* closest_distance) {
+  planning_domain_.GetClosestEdge(point, closest_edge, closest_distance);
+}
+
+bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
-  const bool kDebug = false;
+  const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
-    if (kDebug) printf("Not initialized\n");
-    return;
+    if (kDebug) printf("Parameters and maps not initialized\n");
+    return false;
   }
   if (!odom_initialized_) {
     if (kDebug) printf("Odometry not initialized\n");
-    return;
-  }
-  ForwardPredict(ros::Time::now().toSec() + params_.system_latency);
-  if (FLAGS_test_toc) {
-    TrapezoidTest(cmd_vel, cmd_angle_vel);
-    return;
-  } else if (FLAGS_test_obstacle) {
-    ObstacleTest(cmd_vel, cmd_angle_vel);
-    return;
-  } else if (FLAGS_test_avoidance) {
-    ObstAvTest(cmd_vel, cmd_angle_vel);
-    return;
-  } else if (FLAGS_test_planner) {
-    PlannerTest();
-    return;
-  } else if (FLAGS_test_latency) {
-    LatencyTest(cmd_vel, cmd_angle_vel);
-    return;
+    return false;
   }
 
   ForwardPredict(time + params_.system_latency);
+  if (FLAGS_test_toc) {
+    TrapezoidTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } else if (FLAGS_test_obstacle) {
+    ObstacleTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } else if (FLAGS_test_avoidance) {
+    ObstAvTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } else if (FLAGS_test_planner) {
+    PlannerTest();
+    return true;
+  } else if (FLAGS_test_latency) {
+    LatencyTest(cmd_vel, cmd_angle_vel);
+    return true;
+  }
+
+  if (nav_complete_) {
+    if (kDebug) printf("Nav complete\n");
+    return true;
+  } else {
+    if (kDebug) printf("Nav running\n");
+  }
 
   // Replan as necessary (Global Plan)
   if (!PlanStillValid()) {
@@ -815,7 +844,7 @@ void Navigation::Run(const double& time,
   // Halt if necessary
   if (nav_complete_ || pause_) {
     Halt(cmd_vel, cmd_angle_vel);
-    return;
+    return true;
   } else {
     // TODO check if the robot needs to turn around.
     // TODO(jaholtz) kLocalFOV should be a parameter
@@ -842,6 +871,8 @@ void Navigation::Run(const double& time,
       }
     }
   }
+
+  return true;
 }
 
 }  // namespace navigation

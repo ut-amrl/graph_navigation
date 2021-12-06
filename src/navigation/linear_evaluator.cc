@@ -50,7 +50,7 @@ using namespace math_util;
 
 DEFINE_double(dw, 1, "Distance weight");
 DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
+DEFINE_double(fw, -5, "Free path weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 
 namespace motion_primitives {
@@ -79,7 +79,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   bool obstacle_free = true;
   float best_path_length = FLT_MAX;
   for (size_t i = 0; i < paths.size(); ++i) {
-    if (!paths[i]->ObstacleFree()) obstacle_free = false;
+    // if (!paths[i]->ObstacleFree()) obstacle_free = false;
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
         (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);

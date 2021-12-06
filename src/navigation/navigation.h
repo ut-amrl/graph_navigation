@@ -81,7 +81,7 @@ class Navigation {
   void UpdateCommandHistory(Twist twist);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
-  void Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
   void GetFreePathLength(float curvature,
@@ -90,6 +90,7 @@ class Navigation {
                          Eigen::Vector2f* obstruction);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   void SetOverride(const Eigen::Vector2f& loc, float angle);
+  bool Overriden();
   void Resume();
   bool PlanStillValid();
   void Plan(Eigen::Vector2f goal_loc);
@@ -108,6 +109,7 @@ class Navigation {
   // Set parameters for navigation.
   void Initialize(const NavigationParameters& params,
                   const std::string& map_file);
+  bool Initialized();
 
   // Allow client programs to configure navigation parameters
   void SetMaxVel(const float vel);
@@ -128,8 +130,13 @@ class Navigation {
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
   float GetObstacleMargin();
+  float GetRobotWidth();
+  float GetRobotLength();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
+  void GetNavEdge(const Eigen::Vector2f& point,
+                  GraphDomain::NavigationEdge* edge,
+                  float* closest_dist);
 
  private:
 
