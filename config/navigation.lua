@@ -34,6 +34,8 @@ NavigationParameters = {
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
   local_fov = deg2rad(50);
+  use_kinect = true;
+  evaluator_type = "linear";
 };
 
 AckermannSampler = {

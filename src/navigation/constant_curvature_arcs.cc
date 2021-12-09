@@ -43,6 +43,10 @@ float ConstantCurvatureArc::Length() const {
   return length;
 }
 
+float ConstantCurvatureArc::FPL() const {
+  return fpl;
+}
+
 float ConstantCurvatureArc::AngularLength() const {
   return angular_length;
 }
@@ -62,6 +66,19 @@ void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
   vel_cmd.x() = Run1DTimeOptimalControl(
       linear_limits, 0, vel.x(), length, 0, dt);
   ang_vel_cmd = vel_cmd.x() * curvature;
+}
+
+Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
+  const float a = Sign(curvature) * angular_length * f;
+  if (length == 0) {
+    // Pure rotational motion.
+    return Pose2Df(a, Vector2f(0, 0));
+  }
+  if (fabs(curvature) < FLT_MIN) {
+    return Pose2Df(0, Vector2f(length, 0));
+  }
+  const float r = 1.0 / curvature;
+  return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
 }
 
 Pose2Df ConstantCurvatureArc::EndPoint() const {

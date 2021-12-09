@@ -42,6 +42,7 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
+#include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
 
 using Eigen::Rotation2Df;
@@ -149,7 +150,20 @@ Navigation::Navigation() :
     sampler_(nullptr),
     evaluator_(nullptr) {
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
-  evaluator_ = std::unique_ptr<PathEvaluatorBase>(new LinearEvaluator());
+
+  
+  PathEvaluatorBase* evaluator;
+  if (params_.evaluator_type == "cost_map") {
+    auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
+    cost_map_evaluator->LoadModel();
+    evaluator = (PathEvaluatorBase*) cost_map_evaluator;
+  } else if (params_.evaluator_type == "linear") {
+    evaluator = (PathEvaluatorBase*) new LinearEvaluator();
+  } else {
+    printf("Uknown evaluator type %s\n", params_.evaluator_type.c_str());
+    exit(1);
+  }
+  evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
@@ -398,6 +412,11 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
   PruneLatencyQueue();
 }
 
+void Navigation::ObserveImage(cv::Mat image, double time) {
+  latest_image_ = image;
+  t_image_ = time;
+}
+
 vector<int> Navigation::GlobalPlan(const Vector2f& initial,
                                    const Vector2f& end) {
   auto plan = Plan(initial, end);
@@ -572,8 +591,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     local_target = override_target_;
   }
 
-  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
-  evaluator_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
+  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     printf("%lu options\n", paths.size());

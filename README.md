@@ -7,6 +7,8 @@
 1. [glog](https://github.com/google/glog)
 1. [gflags](https://github.com/gflags/gflags)
 1. [Lua5.1](http://www.lua.org/)
+1. [LibTorch](https://pytorch.org/get-started/locally/): Unpack the libtorch zip
+   file to `/opt/libtorch`.
 
 You can install the system dependencies on *buntu using:
 ```
@@ -39,4 +41,9 @@ sudo apt install libgoogle-glog-dev libgflags-dev liblua5.1-0-dev
 
 ## Run
 
-Run `./bin/navigation`
+Run `./bin/navigation`   
+Some helpful flags:
+* `_image_transport:=compressed` to tell it to subscribe to the compressed
+  stream of the image transport (useful when playing back a bag file that only
+  included the compressed stream).
+* `--debug_images` to show debug visualization images.

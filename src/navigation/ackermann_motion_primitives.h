@@ -38,7 +38,6 @@ struct AckermannSampler : PathRolloutSamplerBase {
   // Given the robot's current dynamic state and an obstacle point cloud, return
   // a set of valid path rollout options that are collision-free.
   std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) override;
-
   // Default constructor, init parameters.
   AckermannSampler();
 

@@ -36,7 +36,10 @@ namespace motion_primitives {
 struct ConstantCurvatureArc : PathRolloutBase {
   // Length of the path rollout.
   float Length() const override;
-  
+
+  // FPL
+  float FPL() const override;
+
   // Angular distance traversed.
   float AngularLength() const override;
 
@@ -53,6 +56,8 @@ struct ConstantCurvatureArc : PathRolloutBase {
   // The pose of the robot at the end of the path rollout.
   pose_2d::Pose2Df EndPoint() const override;
 
+  pose_2d::Pose2Df GetIntermediateState(float f) const override;
+
   // The pose of the robot at the end of the path rollout.
   void GetControls(const navigation::MotionLimits& linear_limits,
                    const navigation::MotionLimits& angular_limits,
@@ -64,6 +69,7 @@ struct ConstantCurvatureArc : PathRolloutBase {
 
   float curvature;
   float length;
+  float fpl;
   float angular_length;
   float clearance;
   Eigen::Vector2f obstruction;

@@ -26,6 +26,11 @@
 #include <string.h>
 #include <inttypes.h>
 #include <vector>
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.h>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
@@ -48,6 +53,7 @@
 #include "graph_navigation/graphNavSrv.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
+#include "sensor_msgs/CompressedImage.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "nav_msgs/Odometry.h"
@@ -91,11 +97,13 @@ using navigation::MotionLimits;
 using ros_helpers::InitRosHeader;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
+const string kOpenCVWindow = "Image window";
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
+CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
@@ -106,6 +114,7 @@ CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_bool(debug_images, false, "Show debug images");
 
 // DECLARE_int32(v);
 
@@ -122,6 +131,7 @@ float goal_angle_ = 0;
 navigation::Odom odom_;
 vector<Vector2f> point_cloud_;
 sensor_msgs::LaserScan last_laser_msg_;
+cv::Mat last_image_;
 Navigation navigation_;
 
 // Publishers
@@ -664,6 +674,9 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(target_vel_tolerance);
   REAL_PARAM(target_angle_tolerance);
   REAL_PARAM(local_fov);
+  BOOL_PARAM(use_kinect);
+  STRING_PARAM(model_path);
+  STRING_PARAM(evaluator_type);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -690,6 +703,43 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
   params->target_angle_tolerance = CONFIG_target_angle_tolerance;
   params->local_fov = CONFIG_local_fov;
+  params->use_kinect = CONFIG_use_kinect;
+  params->model_path = CONFIG_model_path;
+  params->evaluator_type = CONFIG_evaluator_type;
+
+  if (params->use_kinect) {
+    params->K = { 622.90532,   0.     , 639.44796, 0.     , 620.84752, 368.20234, 0.     ,   0.     ,   1.     };
+    params->D = { 0.092890, -0.046208, 0.000622, -0.001104, 0.000000 };
+    
+    params->H.push_back({-0.5,-1.5, 405, 387});
+    params->H.push_back({0.5,-1.5, 840, 384});
+    params->H.push_back({0.5,-2.5, 764, 281});
+    params->H.push_back({-0.5,-2.5, 499, 283});
+  } else {
+    params->K = { 867.04679,   0.     , 653.18207, 0.     , 866.39461, 537.77518, 0.     ,   0.     ,   1.};
+    params->D = { -0.059124, 0.081963, 0.000743, 0.002461, 0.000000 };
+    params->H.push_back({-0.5,-1.5,369,696});
+    params->H.push_back({0.5,-1.5,971,687});
+    params->H.push_back({0.5,-2.5,835,570});
+    params->H.push_back({-0.5,-2.5,478,573});
+  }
+}
+
+void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
+  try {
+    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
+        msg, sensor_msgs::image_encodings::BGR8);
+    last_image_ = image->image;
+  } catch (cv_bridge::Exception& e) {
+    fprintf(stderr, "cv_bridge exception: %s\n", e.what());
+    return;
+  }
+  navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
+  // Update GUI Window
+  if (FLAGS_debug_images) {
+    cv::imshow(kOpenCVWindow, last_image_);
+    cv::waitKey(3);
+  }
 }
 
 int main(int argc, char** argv) {
