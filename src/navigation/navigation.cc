@@ -150,8 +150,16 @@ Navigation::Navigation() :
     sampler_(nullptr),
     evaluator_(nullptr) {
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+}
 
-  
+void Navigation::Initialize(const NavigationParameters& params,
+                            const string& map_file) {
+  // Initialize status message
+  params_ = params;
+  planning_domain_ = GraphDomain(map_file, &params_);
+  initialized_ = true;
+  sampler_->SetNavParams(params);
+
   PathEvaluatorBase* evaluator;
   if (params_.evaluator_type == "cost_map") {
     auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
@@ -164,15 +172,6 @@ Navigation::Navigation() :
     exit(1);
   }
   evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
-}
-
-void Navigation::Initialize(const NavigationParameters& params,
-                            const string& map_file) {
-  // Initialize status message
-  params_ = params;
-  planning_domain_ = GraphDomain(map_file, &params_);
-  initialized_ = true;
-  sampler_->SetNavParams(params);
 }
 
 bool Navigation::Enabled() const {

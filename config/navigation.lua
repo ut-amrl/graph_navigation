@@ -35,6 +35,7 @@ NavigationParameters = {
   target_angle_tolerance = 0.05;
   local_fov = deg2rad(50);
   use_kinect = true;
+  model_path = "../preference_learning/comprehensive_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "linear";
 };
 

@@ -710,7 +710,6 @@ void LoadConfig(navigation::NavigationParameters* params) {
   if (params->use_kinect) {
     params->K = { 622.90532,   0.     , 639.44796, 0.     , 620.84752, 368.20234, 0.     ,   0.     ,   1.     };
     params->D = { 0.092890, -0.046208, 0.000622, -0.001104, 0.000000 };
-    
     params->H.push_back({-0.5,-1.5, 405, 387});
     params->H.push_back({0.5,-1.5, 840, 384});
     params->H.push_back({0.5,-2.5, 764, 281});
@@ -723,6 +722,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
     params->H.push_back({0.5,-2.5,835,570});
     params->H.push_back({-0.5,-2.5,478,573});
   }
+  std::cout << "SET PARAMS" << std::endl;
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
