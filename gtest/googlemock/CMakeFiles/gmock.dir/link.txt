@@ -1,1 +1,1 @@
-/usr/bin/c++ -fPIC -std=c++11 -Wall -Werror -O2 -g -DNDEBUG  -shared -Wl,-soname,libgmock.so -o ../../lib/libgmock.so CMakeFiles/gmock.dir/__/googletest/src/gtest-all.cc.o CMakeFiles/gmock.dir/src/gmock-all.cc.o -lpthread 
+/usr/bin/c++ -fPIC -std=c++14 -Wall -Werror -fopenmp -DC10_USE_GLOG -O2 -g -DNDEBUG -shared -Wl,-soname,libgmock.so -o ../../lib/libgmock.so CMakeFiles/gmock.dir/usr/src/googletest/googletest/src/gtest-all.cc.o CMakeFiles/gmock.dir/src/gmock-all.cc.o   -L/opt/ros/melodic/lib  -Wl,-rpath,/opt/ros/melodic/lib -lpthread 

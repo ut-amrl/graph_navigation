@@ -7,6 +7,6 @@
 # new environment variables
 
 # modified environment variables
-export CMAKE_PREFIX_PATH="/home/fri/jackal_ws/src/graph_navigation/devel:$CMAKE_PREFIX_PATH"
-export ROSLISP_PACKAGE_DIRECTORIES="/home/fri/jackal_ws/src/graph_navigation/devel/share/common-lisp:$ROSLISP_PACKAGE_DIRECTORIES"
-export ROS_PACKAGE_PATH="/home/fri/jackal_ws/src/graph_navigation:$ROS_PACKAGE_PATH"
+export CMAKE_PREFIX_PATH="/home/bwilab/jackal_ws/src/graph_navigation/devel:$CMAKE_PREFIX_PATH"
+export ROSLISP_PACKAGE_DIRECTORIES='/home/bwilab/jackal_ws/src/graph_navigation/devel/share/common-lisp'
+export ROS_PACKAGE_PATH='/home/fri/jackal_ws/src/graph_navigation:/home/bwilab/jackal_ws/src/graph_navigation:/opt/ros/melodic/share'

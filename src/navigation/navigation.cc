@@ -591,7 +591,19 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     if (debug) printf("No paths found\n");
     return;
   }
+  
+  //Calls evaluator here
   auto best_path = evaluator_->FindBest(paths);
+  std::ofstream my_write_file("/home/bwilab/jackal_ws/src/graph_navigation/src/navigation/data.txt", std::ios::app);
+  //print the pointcloud 
+  for (size_t i =0;i<point_cloud_.size();i+=100){
+    my_write_file<<point_cloud_[i];
+  }
+  ConstantCurvatureArc arc = *reinterpret_cast<ConstantCurvatureArc*>(best_path.get());
+  my_write_file<<arc.curvature;
+  my_write_file.close();
+  cout<<point_cloud_.size()/100<<endl;
+
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");
     // No valid path found!

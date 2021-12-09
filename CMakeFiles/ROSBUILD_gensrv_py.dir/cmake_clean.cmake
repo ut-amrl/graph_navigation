@@ -1,7 +1,6 @@
 file(REMOVE_RECURSE
-  "srv_gen"
-  "srv_gen"
   "src/graph_navigation/srv"
+  "srv_gen"
   "CMakeFiles/ROSBUILD_gensrv_py"
   "src/graph_navigation/srv/__init__.py"
   "src/graph_navigation/srv/_graphNavSrv.py"

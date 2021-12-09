@@ -134,7 +134,6 @@ class Navigation {
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
  private:
-
   // Test 1D TOC motion in a straight line.
   void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test driving straight up to the next obstacle.

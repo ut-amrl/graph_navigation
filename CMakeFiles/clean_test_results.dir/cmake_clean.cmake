@@ -1,7 +1,6 @@
 file(REMOVE_RECURSE
-  "srv_gen"
-  "srv_gen"
   "src/graph_navigation/srv"
+  "srv_gen"
   "CMakeFiles/clean_test_results"
 )
 

@@ -1,7 +1,6 @@
 file(REMOVE_RECURSE
-  "srv_gen"
-  "srv_gen"
   "src/graph_navigation/srv"
+  "srv_gen"
   "CMakeFiles/ROSBUILD_gensrv_cpp"
   "srv_gen/cpp/include/graph_navigation/graphNavSrv.h"
   "srv_gen/cpp/include/graph_navigation/socialNavSrv.h"

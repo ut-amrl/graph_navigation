@@ -1,16 +1,22 @@
 file(REMOVE_RECURSE
-  "srv_gen"
-  "srv_gen"
   "src/graph_navigation/srv"
-  "CMakeFiles/social_nav.dir/src/navigation/social_nav.cc.o"
-  "CMakeFiles/social_nav.dir/src/navigation/social_main.cc.o"
-  "CMakeFiles/social_nav.dir/src/navigation/motion_primitives.cc.o"
+  "srv_gen"
   "CMakeFiles/social_nav.dir/src/navigation/ackermann_motion_primitives.cc.o"
+  "CMakeFiles/social_nav.dir/src/navigation/ackermann_motion_primitives.cc.o.d"
   "CMakeFiles/social_nav.dir/src/navigation/constant_curvature_arcs.cc.o"
+  "CMakeFiles/social_nav.dir/src/navigation/constant_curvature_arcs.cc.o.d"
   "CMakeFiles/social_nav.dir/src/navigation/linear_evaluator.cc.o"
+  "CMakeFiles/social_nav.dir/src/navigation/linear_evaluator.cc.o.d"
+  "CMakeFiles/social_nav.dir/src/navigation/motion_primitives.cc.o"
+  "CMakeFiles/social_nav.dir/src/navigation/motion_primitives.cc.o.d"
   "CMakeFiles/social_nav.dir/src/navigation/navigation.cc.o"
-  "bin/social_nav.pdb"
+  "CMakeFiles/social_nav.dir/src/navigation/navigation.cc.o.d"
+  "CMakeFiles/social_nav.dir/src/navigation/social_main.cc.o"
+  "CMakeFiles/social_nav.dir/src/navigation/social_main.cc.o.d"
+  "CMakeFiles/social_nav.dir/src/navigation/social_nav.cc.o"
+  "CMakeFiles/social_nav.dir/src/navigation/social_nav.cc.o.d"
   "bin/social_nav"
+  "bin/social_nav.pdb"
 )
 
 # Per-language clean rules from dependency scanning.

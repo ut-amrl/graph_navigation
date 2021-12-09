@@ -1,9 +1,10 @@
 file(REMOVE_RECURSE
-  "srv_gen"
-  "srv_gen"
   "src/graph_navigation/srv"
-  "CMakeFiles/shared_library.dir/src/visualization/visualization.cc.o"
+  "srv_gen"
   "CMakeFiles/shared_library.dir/src/vector_map/vector_map.cc.o"
+  "CMakeFiles/shared_library.dir/src/vector_map/vector_map.cc.o.d"
+  "CMakeFiles/shared_library.dir/src/visualization/visualization.cc.o"
+  "CMakeFiles/shared_library.dir/src/visualization/visualization.cc.o.d"
   "lib/libshared_library.pdb"
   "lib/libshared_library.so"
 )
