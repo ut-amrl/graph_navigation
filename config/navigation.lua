@@ -34,13 +34,13 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(50);
+  local_fov = deg2rad(90);
   use_kinect = true;
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "cost_map";
 };
 
 AckermannSampler = {
-  max_curvature = 3;
+  max_curvature = 2.5;
   clearance_path_clip_fraction = 0.8;
 };

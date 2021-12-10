@@ -29,8 +29,6 @@
 #include "image_based_evaluator.h"
 #include "shared/util/timer.h"
 
-#include <opencv2/videoio.hpp>
-
 #ifndef DEEP_COST_MAP_EVALUATOR_H
 #define DEEP_COST_MAP_EVALUATOR_H
 
@@ -55,15 +53,14 @@ struct DeepCostMapEvaluator :  ImageBasedEvaluator {
   torch::jit::script::Module cost_module;
 
   static constexpr float UNCERTAINTY_COST = 10.0f;
-  static constexpr double DISTANCE_WEIGHT = -2.2;
+  static constexpr double DISTANCE_WEIGHT = -3.5;
   static constexpr double CLEARANCE_WEIGHT = -0.25;
-  static constexpr double FPL_WEIGHT = -1.5;
+  static constexpr double FPL_WEIGHT = -0.75;
   static constexpr double COST_WEIGHT = 4.0;
   static constexpr double BLUR_FACTOR = 0.05;
-  static constexpr double DISCOUNT_FACTOR = 0.15; // discount per meter from the robot
+  static constexpr double DISCOUNT_FACTOR = 0.25; // discount per meter from the robot
   
 
-  cv::VideoWriter outputVideo;
   int plan_idx = 0;
 
   std::vector<float> latest_cost_components_;

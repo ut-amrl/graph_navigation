@@ -61,21 +61,21 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
-  const Vector2f turn_center(0, turn_radius);
-  const Vector2f target_radial = local_target - turn_center;
-  const Vector2f middle_radial =
-      fabs(turn_radius) * target_radial.normalized();
-  const float middle_angle =
-      atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
-  const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
+  // const Vector2f turn_center(0, turn_radius);
+  // const Vector2f target_radial = local_target - turn_center;
+  // const Vector2f middle_radial =
+  //     fabs(turn_radius) * target_radial.normalized();
+  // const float middle_angle =
+  //     atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
+  // const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
   const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
-  path.length = min<float>({
+  path.fpl = min<float>({
       nav_params.max_free_path_length, 
-      dist_closest_to_goal,
+      // dist_closest_to_goal,
       quarter_circle_dist});
   const float stopping_dist = 
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
-  path.length = max(path.length, stopping_dist);
+  path.length = max(path.fpl, stopping_dist);
 }
 
 vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
@@ -134,19 +134,20 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   if (fabs(path.curvature) < kEpsilon) {
     for (const Vector2f& p : point_cloud) {
       if (fabs(p.y()) > w || p.x() < 0.0f) continue;
-      path.length = min(path.length, p.x() - l);
+      path.fpl = min(path.fpl, p.x() - l);
     }
     path.clearance = nav_params.max_clearance;
     for (const Vector2f& p : point_cloud) {
-      if (p.x() - l > path.length || p.x() < 0.0) continue;
+      if (p.x() - l > path.fpl || p.x() < 0.0) continue;
       path.clearance = min<float>(path.clearance, fabs(fabs(p.y() - w)));
     }
     path.clearance = max(0.0f, path.clearance);
-    path.length = max(0.0f, path.length);
+    path.fpl = max(0.0f, path.fpl);
+    path.length = max(0.0f, path.fpl);
 
     const float stopping_dist = 
       vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
-    if (path.length < stopping_dist) {
+    if (path.fpl < stopping_dist) {
       path.length = 0;
     }
     

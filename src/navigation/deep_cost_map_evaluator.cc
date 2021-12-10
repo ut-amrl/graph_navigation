@@ -62,7 +62,7 @@ using std::chrono::milliseconds;
 
 const double MIN_COST_RECOMP_MS = 20.0;
 
-#define PERF_BENCHMARK 0
+#define PERF_BENCHMARK 1
 #define VIS_IMAGES 1
 
 namespace motion_primitives {
@@ -72,6 +72,7 @@ bool DeepCostMapEvaluator::LoadModel() {
     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     cost_module = torch::jit::load(params_.model_path, device);
     std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
+    t1.detach();
     return true;
   } catch(const c10::Error& e) {
     std::cerr << "Error loading cost model:\n" << e.msg();
@@ -87,7 +88,11 @@ cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
 
 void DeepCostMapEvaluator::UpdateLocalCostMap() {
   RateLoop loop(1.0 / MIN_COST_RECOMP_MS);
-  while(image.rows > 0) {
+  while(true) {
+    if (!(image.rows > 0)) {
+      loop.Sleep();
+      continue;
+    }
     cost_map_mutex.lock();
     cv::Mat local_cost_map_copy = local_cost_map_.clone();
     Eigen::Vector2f map_loc = curr_loc;
@@ -125,7 +130,6 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       }
     }
 
-
     #if PERF_BENCHMARK
     auto t2 = high_resolution_clock::now();
     #endif
@@ -137,6 +141,7 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       std::vector<torch::jit::IValue> input;
       input.push_back(input_tensor);
 
+      at::GradMode::set_enabled(false);
       output = cost_module.forward(input).toTensor().to(torch::kCPU);
 
       for(int i = 0; i < output.size(0); i++) {
@@ -314,6 +319,7 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     latest_cost_components_.push_back(CLEARANCE_WEIGHT * paths[i]->Clearance());
     latest_cost_components_.push_back(COST_WEIGHT * normalized_path_costs.at<float>(i, 0));
     latest_cost_components_.push_back(cost);
+    // std::cout << "COST" << latest_cost_components_ << std::endl;
     
     if (cost < best_cost) {
       best = paths[i];
