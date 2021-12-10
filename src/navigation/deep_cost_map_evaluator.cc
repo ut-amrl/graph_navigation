@@ -62,7 +62,7 @@ using std::chrono::milliseconds;
 
 const double MIN_COST_RECOMP_MS = 20.0;
 
-#define PERF_BENCHMARK 1
+#define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
 
 namespace motion_primitives {
