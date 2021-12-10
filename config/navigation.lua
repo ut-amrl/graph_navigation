@@ -3,9 +3,10 @@ function deg2rad(deg)
 end
 
 NavigationParameters = {
-  laser_topic = "scan";
-  odom_topic = "odom";
+  laser_topic = "/velodyne_2dscan";
+  odom_topic = "/jackal_velocity_controller/odom";
   localization_topic = "localization";
+  image_topic = "/camera/rgb/image_raw/compressed";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
   laser_loc = {
@@ -19,10 +20,10 @@ NavigationParameters = {
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
-  carrot_dist = 2.5;
+  carrot_dist = 10;
   system_latency = 0.24;
   obstacle_margin = 0.15;
-  num_options = 41;
+  num_options = 31;
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
@@ -35,8 +36,8 @@ NavigationParameters = {
   target_angle_tolerance = 0.05;
   local_fov = deg2rad(50);
   use_kinect = true;
-  model_path = "../preference_learning/comprehensive_models/jit_cost_model_outdoor_6dim.pt";
-  evaluator_type = "linear";
+  model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
+  evaluator_type = "cost_map";
 };
 
 AckermannSampler = {

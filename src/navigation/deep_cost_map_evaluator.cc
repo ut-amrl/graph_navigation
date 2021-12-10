@@ -68,26 +68,15 @@ const double MIN_COST_RECOMP_MS = 20.0;
 namespace motion_primitives {
 
 bool DeepCostMapEvaluator::LoadModel() {
-  # if VIS_IMAGES
-  // int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
-  // outputVideo.open("vis/video_vis.avi", codec, 4.0, cv::Size(800, 800), true);
-  // if (!outputVideo.isOpened())
-  // {
-  //     cout  << "Could not open the output video for write" << endl;
-  //     return -1;
-  // }
-  # endif
-
   try {
     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
     cost_module = torch::jit::load(params_.model_path, device);
+    std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
     return true;
   } catch(const c10::Error& e) {
-    std::cout << "Error loading cost model:\n" << e.msg();
+    std::cerr << "Error loading cost model:\n" << e.msg();
     return false;
   }
-
-  std::thread t1(&DeepCostMapEvaluator::UpdateLocalCostMap, this);
 }
 
 cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
@@ -104,11 +93,13 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
     Eigen::Vector2f map_loc = curr_loc;
     float map_ang = curr_ang;
     cost_map_mutex.unlock();
+
+    #if PERF_BENCHMARK
+    auto t1 = high_resolution_clock::now();
+    #endif
     cv::Mat warped = GetWarpedImage();
     cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
     
-    # if VIS_IMAGES
-    #endif
     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
 
     std::vector<size_t> patch_location_indices;
@@ -134,6 +125,11 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       }
     }
 
+
+    #if PERF_BENCHMARK
+    auto t2 = high_resolution_clock::now();
+    #endif
+
     at::Tensor output;
     if (patch_tensors.size() > 0) {
       auto input_tensor = torch::stack(patch_tensors).to(device);
@@ -151,12 +147,22 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
       }
     }
 
+
+    #if PERF_BENCHMARK
+    auto t3 = high_resolution_clock::now();
+    #endif
+
     //lock it
     cost_map_mutex.lock();
     local_cost_map_ = local_cost_map_copy;
     cost_map_loc_ = map_loc;
     cost_map_ang_ = map_ang;
     cost_map_mutex.unlock();
+
+    #if PERF_BENCHMARK
+    std::cout << "Patch Collection Time" << (duration_cast<milliseconds>(t2 - t1)).count() << "ms" << std::endl;
+    std::cout << "Network Execution Time" << (duration_cast<milliseconds>(t3 - t2)).count() << "ms" << std::endl;
+    #endif
     loop.Sleep();
   }
 }
@@ -197,10 +203,6 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   if (paths.size() == 0) return nullptr;
   shared_ptr<PathRolloutBase> best = nullptr;
   plan_idx++;
-
-  #if PERF_BENCHMARK
-  auto t1 = high_resolution_clock::now();
-  #endif
 
   #if PERF_BENCHMARK
   auto t3 = high_resolution_clock::now();
@@ -361,14 +363,6 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   warped_vis = tiler.image;
 
   latest_vis_image_ = warped_vis.clone();
-
-  // std::cout << local_cost_map << std::endl;
-  
-  // outputVideo.write(warped_vis);
-  // std::ostringstream out_img_stream;
-  // out_img_stream << "vis/images/warped_vis_" << plan_idx << ".png";
-  // std::string out_img_name = out_img_stream.str();
-  // cv::imwrite(out_img_name, warped_vis);
   #endif
 
   #if PERF_BENCHMARK
@@ -376,8 +370,6 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
   #endif
 
   #if PERF_BENCHMARK
-  std::cout << "Patch Collection Time" << (duration_cast<milliseconds>(t2 - t1)).count() << "ms" << std::endl;
-  std::cout << "Network Execution Time" << (duration_cast<milliseconds>(t3 - t2)).count() << "ms" << std::endl;
   std::cout << "Linear Evaluation Time" << (duration_cast<milliseconds>(t4 - t3)).count() << "ms" << std::endl;
   std::cout << "Visualization Time" << (duration_cast<milliseconds>(t5 - t4)).count() << "ms" << std::endl;
   #endif

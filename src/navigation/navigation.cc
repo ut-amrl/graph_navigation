@@ -803,6 +803,15 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
 
+const cv::Mat& Navigation::GetVisualizationImage() {
+  if (params_.evaluator_type == "cost_map") {
+    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_vis_image_;
+  } else {
+    std::cerr << "No visualization image for linear evaluator" << std::endl;
+    exit(1);
+  }
+}
+
 std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }

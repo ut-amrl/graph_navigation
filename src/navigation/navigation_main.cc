@@ -146,6 +146,7 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+image_transport::Publisher viz_img_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -722,7 +723,6 @@ void LoadConfig(navigation::NavigationParameters* params) {
     params->H.push_back({0.5,-2.5,835,570});
     params->H.push_back({-0.5,-2.5,478,573});
   }
-  std::cout << "SET PARAMS" << std::endl;
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
@@ -749,6 +749,7 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
+  image_transport::ImageTransport it_(n);
 
   // Map Loading
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
@@ -780,6 +781,7 @@ int main(int argc, char** argv) {
       FLAGS_twist_drive_topic, 1);
   status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
+  viz_img_pub_ = it_.advertise("vis_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
@@ -802,6 +804,8 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =
       n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
+  ros::Subscriber img_sub = 
+      n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
@@ -812,6 +816,9 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+
+  std_msgs::Header viz_img_header; // empty viz_img_header
+  viz_img_header.stamp = ros::Time::now(); // time
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
@@ -839,6 +846,10 @@ int main(int argc, char** argv) {
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
+      if (params.evaluator_type == "cost_map") {
+        cv_bridge::CvImage viz_img(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
+        viz_img_pub_.publish(viz_img.toImageMsg());
+      }
 
       // Publish Commands
       SendCommand(cmd_vel, cmd_angle_vel);

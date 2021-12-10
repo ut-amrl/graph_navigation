@@ -139,6 +139,7 @@ class Navigation {
   float GetObstacleMargin();
   float GetRobotWidth();
   float GetRobotLength();
+  const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 

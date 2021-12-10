@@ -86,7 +86,7 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
   cv::Mat cameraMatrix;
   cv::Mat distortionMatrix;
   cv::Mat homography;
-  cv::Mat latest_vis_image_;
+  cv::Mat latest_vis_image_ = cv::Mat::zeros(10, 10, CV_32F);
 
   const navigation::NavigationParameters& params_;
 
