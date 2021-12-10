@@ -60,7 +60,7 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-const double MIN_COST_RECOMP_MS = 20.0;
+const double COST_RECOMP_DT = 0.05;
 
 #define PERF_BENCHMARK 0
 #define VIS_IMAGES 1
@@ -87,16 +87,21 @@ cv::Rect GetPatchRect(const cv::Mat& img, const Eigen::Vector2f& patch_loc) {
 }
 
 void DeepCostMapEvaluator::UpdateLocalCostMap() {
-  RateLoop loop(1.0 / MIN_COST_RECOMP_MS);
+  RateLoop loop(1.0 / COST_RECOMP_DT);
+  int map_updates = 0;
   while(true) {
     if (!(image.rows > 0)) {
       loop.Sleep();
       continue;
     }
+
     cost_map_mutex.lock();
     cv::Mat local_cost_map_copy = local_cost_map_.clone();
     Eigen::Vector2f map_loc = curr_loc;
     float map_ang = curr_ang;
+    if (map_updates > 0) {
+      UpdateMapToLocalFrame(local_cost_map_copy, cost_map_loc_, cost_map_ang_);
+    }
     cost_map_mutex.unlock();
 
     #if PERF_BENCHMARK
@@ -162,6 +167,7 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
     local_cost_map_ = local_cost_map_copy;
     cost_map_loc_ = map_loc;
     cost_map_ang_ = map_ang;
+    map_updates++;
     cost_map_mutex.unlock();
 
     #if PERF_BENCHMARK
