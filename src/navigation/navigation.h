@@ -100,6 +100,7 @@ class Navigation {
                               const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> GetPlanPath();
   Eigen::Vector2f GetCarrot();
+  bool GoalRange();
   // Enable or disable autonomy.
   void Enable(bool enable);
   // Indicates whether autonomy is enabled or not.

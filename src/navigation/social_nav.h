@@ -54,6 +54,7 @@ class SocialNav {
 
   int GetTargetId();
   Eigen::Vector2f GetLocalTarget();
+  Eigen::Vector2f GetRightTarget();
   Navigation* GetGraphNav();
  private:
   Navigation navigation_;

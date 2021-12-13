@@ -117,6 +117,7 @@ DEFINE_bool(social_mode, true, "Listen to a service instead of topics.");
 DEFINE_bool(bag_mode, false, "Publish Drive Commands or not.");
 DEFINE_string(topic_prefix, "", "Prefix for robot id.");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_bool(no_joystick, false, "Whether to use joystick or not");
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
@@ -178,6 +179,10 @@ void SignalHandler(int) {
   }
   printf("Exiting.\n");
   run_ = false;
+}
+
+void EnablerCallback(const std_msgs::Bool& msg) {
+  enabled_ = msg.data;
 }
 
 void LoadConfig(navigation::NavigationParameters* params) {
@@ -295,6 +300,15 @@ void GoalCallback(const amrl_msgs::Pose2Df& msg) {
   goal_set_ = true;
   goal_ = {msg.x, msg.y};
   goal_angle_ = msg.theta;
+  navigation_->SetNavGoal({goal_.x(), goal_.y()}, goal_angle_);
+  goal_set_ = true;
+}
+
+void TargetCallback(const amrl_msgs::Localization2DMsg& msg) {
+ goal_ = {msg.pose.x, msg.pose.y};
+ goal_angle_ = msg.pose.theta;
+ navigation_->SetNavGoal({goal_.x(), goal_.y()}, goal_angle_);
+ goal_set_ = true;
 }
 
 void VelocityCb(const geometry_msgs::Twist& msg) {
@@ -406,7 +420,11 @@ geometry_msgs::TwistStamped GetTwistMsg(const Vector2f& vel,
   return drive_msg;
 }
 
-void SendCommand(const Vector2f& vel, const float& ang_vel) {
+void SendCommand(Vector2f& vel, float& ang_vel) {
+  if (!FLAGS_no_joystick && !enabled_) {
+    vel.setZero();
+    ang_vel = 0;
+  }
   geometry_msgs::TwistStamped drive_msg;
   InitRosHeader("base_link", &drive_msg.header);
   drive_msg.header.stamp = ros::Time::now();
@@ -450,7 +468,6 @@ vector<amrl_msgs::Pose2Df> HumanVels(const vector<Human>& humans) {
 }
 
 void FillRequest(SocialPipsSrv::Request* req) {
-  cout << "service request" << endl;
   amrl_msgs::Pose2Df robot_pose, robot_vel, goal_pose, door_pose;
   robot_pose.x = current_loc_.x();
   robot_pose.y = current_loc_.y();
@@ -462,7 +479,11 @@ void FillRequest(SocialPipsSrv::Request* req) {
   robot_vel.x = current_vel_.x();
   robot_vel.y = current_vel_.y();
   robot_vel.theta = current_angular_vel_;
-  const Vector2f local_target = navigation_->GetLocalTarget();
+  const static bool kNewSkill = true;
+  Vector2f local_target = navigation_->GetLocalTarget();
+  if (kNewSkill) {
+    local_target = navigation_->GetRightTarget();
+  }
   req->local_target.x = local_target.x();
   req->local_target.y = local_target.y();
   req->robot_poses = {robot_pose};
@@ -768,7 +789,7 @@ void PublishVisualizationMarkers() {
       human_marker_.id += 1;
       visualization::DrawCross(human_pose, 0.2, 0xFF0080, local_viz_msg_);
       visualization::DrawLine(human_pose,
-                              transformed_vel,
+                              human_pose + transformed_vel,
                               0xFF0080,
                               local_viz_msg_);
     }
@@ -819,8 +840,6 @@ void RunSocial() {
 
   Vector2f cmd_vel;
   float cmd_angle_vel;
-  navigation_->SetNavGoal({goal_.x(), goal_.y()},
-                          goal_angle_);
   navigation_->Run(ros::Time::now().toSec(),
                    action,
                    current_loc_,
@@ -832,9 +851,9 @@ void RunSocial() {
   SendCommand(cmd_vel, cmd_angle_vel);
   DrawRobot();
   DrawPathOptions();
-  // DrawTarget();
+  DrawTarget();
   viz_pub_.publish(local_viz_msg_);
-  // viz_pub_.publish(global_viz_msg_);
+  viz_pub_.publish(global_viz_msg_);
 }
 
 void RunBagfile() {
@@ -846,6 +865,7 @@ void RunBagfile() {
 bool SocialService(socialNavSrv::Request &req,
                    socialNavSrv::Response& res) {
   visualization::ClearVisualizationMsg(local_viz_msg_);
+  visualization::ClearVisualizationMsg(global_viz_msg_);
   SocialAction action = SocialAction::GoAlone;
   cout << "Action: " << req.action << endl;
     if (req.action == 0) {
@@ -958,8 +978,12 @@ int main(int argc, char** argv) {
       n.subscribe("human_states", 1, &HumanCallback);
   ros::Subscriber goal_sub =
       n.subscribe("/set_goal", 1, &GoalCallback);
+  ros::Subscriber target_sub =
+      n.subscribe("/set_nav_target", 1, &TargetCallback);
   ros::Subscriber vel_sub =
     n.subscribe("/robot0/navigation/cmd_vel", 1, &VelocityCb);
+  ros::Subscriber enabler_sub =
+    n.subscribe("CONFIG_enable_topic", 1, &EnablerCallback);
 
   ros::ServiceServer nav_srv =
     n.advertiseService("graphNavSrv", &PlanService);
@@ -974,6 +998,8 @@ int main(int argc, char** argv) {
   } else {
     RateLoop loop(1.0 / FLAGS_dt);
     while (run_ && ros::ok()) {
+      visualization::ClearVisualizationMsg(local_viz_msg_);
+      visualization::ClearVisualizationMsg(global_viz_msg_);
       ros::spinOnce();
       if (goal_set_) {
         if (FLAGS_bag_mode) {

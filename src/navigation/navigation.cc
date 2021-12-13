@@ -470,6 +470,14 @@ bool Navigation::PlanStillValid() {
   return false;
 }
 
+bool Navigation::GoalRange() {
+  const float kSqCarrotDist = Sq(params_.carrot_dist);
+  if (plan_path_.size() < 1) {
+    return true;
+  }
+  return (plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist;
+}
+
 Vector2f Navigation::GetCarrot() {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
@@ -656,7 +664,11 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     return;
   }
   // TODO(jaholtz) take into account override target here
-  const float goal_theta = atan2(local_target_.y(), local_target_.x());
+  Vector2f local_target = local_target_;
+  if (target_override_) {
+    local_target = override_target_;
+  }
+  const float goal_theta = atan2(local_target.y(), local_target.x());
   const float dv = params_.dt * params_.angular_limits.max_acceleration;
   if (robot_omega_ * goal_theta < 0.0f) {
     // Turning the wrong way!
