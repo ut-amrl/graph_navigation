@@ -34,11 +34,8 @@ namespace motion_primitives {
 
 struct ImageBasedEvaluator :  PathEvaluatorBase {
   ImageBasedEvaluator(const navigation::NavigationParameters& params) : params_(params) {
-    cameraMatrix = cv::Mat(3, 3, CV_64F);
-    memcpy(cameraMatrix.data, params.K.data(), params.K.size()*sizeof(double));
-
-    distortionMatrix = cv::Mat(5, 1, CV_64F);
-    memcpy(distortionMatrix.data, params.D.data(), params.D.size()*sizeof(double));
+    cameraMatrix = params.K;
+    distortionMatrix = params.D;
 
     // Homography computation
     SCALING = Eigen::Vector2f(100, 100);
@@ -56,9 +53,11 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     std::vector<cv::Point2f> input_points;
     std::vector<Eigen::Vector2f> output_points_vec;
 
-    for(auto point_pair : params.H) {
-      input_points.emplace_back(point_pair[2], point_pair[3]);
-      output_points_vec.emplace_back(point_pair[0], point_pair[1]);
+    for(int i = 0; i < params.H.rows; i++) {
+      auto input_point = cv::Point2f(params.H.at<float>(i, 2), params.H.at<float>(i, 3));
+      auto output_point = Eigen::Vector2f(params.H.at<float>(i, 0), params.H.at<float>(i, 1));
+      input_points.push_back(input_point);
+      output_points_vec.push_back(output_point);
     }
 
     std::vector<cv::Point2f> output_points;

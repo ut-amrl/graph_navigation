@@ -648,6 +648,46 @@ void PublishVisualizationMarkers() {
   pose_marker_publisher_.publish(pose_marker_);
 }
 
+int LoadCameraCalibrationCV(
+    const std::string& calibration_file,
+    cv::Mat* camera_mat_ptr,
+    cv::Mat* dist_coeffs_cv_ptr,
+    cv::Mat* homography_mat_ptr) {
+  cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
+
+  if (!camera_settings.isOpened()) {
+    LOG(ERROR) << "Failed to open camera settings file at: " << calibration_file
+               << endl;
+    return -1;
+  }
+
+  cv::FileNode node = camera_settings["K"];
+  if (!node.empty() && camera_mat_ptr != nullptr) {
+    *camera_mat_ptr = node.mat();
+  } else {
+    LOG(ERROR) << "Camera calibration matrix not read! Check configuration "
+                  "file is in default yaml format.";
+  }
+
+  node = camera_settings["D"];
+  if (!node.empty() && dist_coeffs_cv_ptr != nullptr) {
+    *dist_coeffs_cv_ptr = node.mat();
+  } else {
+    LOG(ERROR) << "Camera distortion coefficients not read! Check "
+                  "configuration file is in default yaml format.";
+  }
+
+  node = camera_settings["H"];
+  if (!node.empty() && homography_mat_ptr != nullptr) {
+    *homography_mat_ptr = node.mat();
+  } else {
+    LOG(ERROR) << "Camera homography matrix not read! Check configuration file "
+                  "is in default yaml format.";
+  }
+
+  return 0;
+}
+
 void LoadConfig(navigation::NavigationParameters* params) {
   #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
   #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
@@ -678,6 +718,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   BOOL_PARAM(use_kinect);
   STRING_PARAM(model_path);
   STRING_PARAM(evaluator_type);
+  STRING_PARAM(camera_calibration_path);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -708,21 +749,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->model_path = CONFIG_model_path;
   params->evaluator_type = CONFIG_evaluator_type;
 
-  if (params->use_kinect) {
-    params->K = { 622.90532,   0.     , 639.44796, 0.     , 620.84752, 368.20234, 0.     ,   0.     ,   1.     };
-    params->D = { 0.092890, -0.046208, 0.000622, -0.001104, 0.000000 };
-    params->H.push_back({-0.5,-1.5, 405, 387});
-    params->H.push_back({0.5,-1.5, 840, 384});
-    params->H.push_back({0.5,-2.5, 764, 281});
-    params->H.push_back({-0.5,-2.5, 499, 283});
-  } else {
-    params->K = { 867.04679,   0.     , 653.18207, 0.     , 866.39461, 537.77518, 0.     ,   0.     ,   1.};
-    params->D = { -0.059124, 0.081963, 0.000743, 0.002461, 0.000000 };
-    params->H.push_back({-0.5,-1.5,369,696});
-    params->H.push_back({0.5,-1.5,971,687});
-    params->H.push_back({0.5,-2.5,835,570});
-    params->H.push_back({-0.5,-2.5,478,573});
-  }
+  // TODO Rather than loading camera homography from a file, compute it from camera transformation info
+  LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {

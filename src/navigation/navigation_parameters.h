@@ -20,6 +20,7 @@
 //========================================================================
 
 #include <vector>
+#include "opencv2/opencv.hpp"
 
 #ifndef NAVIGATION_PARAMETERS_H
 #define NAVIGATION_PARAMETERS_H
@@ -96,9 +97,9 @@ struct NavigationParameters {
 
   std::string model_path;
 
-  std::vector<double> K;
-  std::vector<double> D;
-  std::vector<std::vector<float>> H;
+  cv::Mat K;
+  cv::Mat D;
+  cv::Mat H;
 
   // Default constructor, just set defaults.
   NavigationParameters() :

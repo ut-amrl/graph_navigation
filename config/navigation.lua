@@ -36,6 +36,7 @@ NavigationParameters = {
   target_angle_tolerance = 0.05;
   local_fov = deg2rad(90);
   use_kinect = true;
+  camera_calibration_path = "config/camera_calibration.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "cost_map";
 };

@@ -160,7 +160,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   initialized_ = true;
   sampler_->SetNavParams(params);
 
-  PathEvaluatorBase* evaluator;
+  PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
     auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
     cost_map_evaluator->LoadModel();
