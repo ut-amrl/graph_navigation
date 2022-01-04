@@ -71,10 +71,11 @@ void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
 Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
   const float a = Sign(curvature) * angular_length * f;
   if (length == 0) {
-    // Pure rotational motion.
+    // Pure rotational motion
     return Pose2Df(a, Vector2f(0, 0));
   }
   if (fabs(curvature) < FLT_MIN) {
+    // Straight-line motion
     return Pose2Df(0, Vector2f(length, 0));
   }
   const float r = 1.0 / curvature;
