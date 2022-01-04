@@ -89,6 +89,7 @@ Pose2Df ConstantCurvatureArc::EndPoint() const {
     return Pose2Df(a, Vector2f(0, 0));
   }
   if (fabs(curvature) < FLT_MIN) {
+    // Straight-line motion
     return Pose2Df(0, Vector2f(length, 0));
   }
   const float r = 1.0 / curvature;
