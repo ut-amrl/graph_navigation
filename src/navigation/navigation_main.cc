@@ -847,9 +847,11 @@ int main(int argc, char** argv) {
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
-
-  cv_bridge::CvImage viz_img(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
-
+  cv_bridge::CvImage viz_img;
+  if (params.evaluator_type == "cost_map") {
+    viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
+  }
+  
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
