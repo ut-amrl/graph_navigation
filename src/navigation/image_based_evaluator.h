@@ -53,9 +53,14 @@ struct ImageBasedEvaluator :  PathEvaluatorBase {
     std::vector<cv::Point2f> input_points;
     std::vector<Eigen::Vector2f> output_points_vec;
 
+    if (params.H.rows == 0) {
+      std::cerr << "Homography information is missing!" << std::endl;
+      exit(1);
+    }
+
     for(int i = 0; i < params.H.rows; i++) {
-      auto input_point = cv::Point2f(params.H.at<float>(i, 2), params.H.at<float>(i, 3));
-      auto output_point = Eigen::Vector2f(params.H.at<float>(i, 0), params.H.at<float>(i, 1));
+      auto input_point = cv::Point2f(params.H.at<double>(i, 2), params.H.at<double>(i, 3));
+      auto output_point = Eigen::Vector2f(params.H.at<double>(i, 0), params.H.at<double>(i, 1));
       input_points.push_back(input_point);
       output_points_vec.push_back(output_point);
     }

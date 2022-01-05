@@ -656,7 +656,7 @@ int LoadCameraCalibrationCV(
   cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
 
   if (!camera_settings.isOpened()) {
-    LOG(ERROR) << "Failed to open camera settings file at: " << calibration_file
+    std::cerr << "Failed to open camera settings file at: " << calibration_file
                << endl;
     return -1;
   }
@@ -665,7 +665,7 @@ int LoadCameraCalibrationCV(
   if (!node.empty() && camera_mat_ptr != nullptr) {
     *camera_mat_ptr = node.mat();
   } else {
-    LOG(ERROR) << "Camera calibration matrix not read! Check configuration "
+    std::cerr << "Camera calibration matrix not read! Check configuration "
                   "file is in default yaml format.";
   }
 
@@ -673,7 +673,7 @@ int LoadCameraCalibrationCV(
   if (!node.empty() && dist_coeffs_cv_ptr != nullptr) {
     *dist_coeffs_cv_ptr = node.mat();
   } else {
-    LOG(ERROR) << "Camera distortion coefficients not read! Check "
+    std::cerr << "Camera distortion coefficients not read! Check "
                   "configuration file is in default yaml format.";
   }
 
@@ -681,7 +681,7 @@ int LoadCameraCalibrationCV(
   if (!node.empty() && homography_mat_ptr != nullptr) {
     *homography_mat_ptr = node.mat();
   } else {
-    LOG(ERROR) << "Camera homography matrix not read! Check configuration file "
+    std::cerr << "Camera homography matrix not read! Check configuration file "
                   "is in default yaml format.";
   }
 
