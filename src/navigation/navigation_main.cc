@@ -26,6 +26,11 @@
 #include <string.h>
 #include <inttypes.h>
 #include <vector>
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.h>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
@@ -48,6 +53,7 @@
 #include "graph_navigation/graphNavSrv.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
+#include "sensor_msgs/CompressedImage.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "nav_msgs/Odometry.h"
@@ -91,11 +97,13 @@ using navigation::MotionLimits;
 using ros_helpers::InitRosHeader;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
+const string kOpenCVWindow = "Image window";
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
+CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
@@ -106,6 +114,7 @@ CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_bool(debug_images, false, "Show debug images");
 
 // DECLARE_int32(v);
 
@@ -122,6 +131,7 @@ float goal_angle_ = 0;
 navigation::Odom odom_;
 vector<Vector2f> point_cloud_;
 sensor_msgs::LaserScan last_laser_msg_;
+cv::Mat last_image_;
 Navigation navigation_;
 
 // Publishers
@@ -136,6 +146,7 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+image_transport::Publisher viz_img_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -637,6 +648,46 @@ void PublishVisualizationMarkers() {
   pose_marker_publisher_.publish(pose_marker_);
 }
 
+int LoadCameraCalibrationCV(
+    const std::string& calibration_file,
+    cv::Mat* camera_mat_ptr,
+    cv::Mat* dist_coeffs_cv_ptr,
+    cv::Mat* homography_mat_ptr) {
+  cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
+
+  if (!camera_settings.isOpened()) {
+    std::cerr << "Failed to open camera settings file at: " << calibration_file
+               << endl;
+    return -1;
+  }
+
+  cv::FileNode node = camera_settings["K"];
+  if (!node.empty() && camera_mat_ptr != nullptr) {
+    *camera_mat_ptr = node.mat();
+  } else {
+    std::cerr << "Camera calibration matrix not read! Check configuration "
+                  "file is in default yaml format.";
+  }
+
+  node = camera_settings["D"];
+  if (!node.empty() && dist_coeffs_cv_ptr != nullptr) {
+    *dist_coeffs_cv_ptr = node.mat();
+  } else {
+    std::cerr << "Camera distortion coefficients not read! Check "
+                  "configuration file is in default yaml format.";
+  }
+
+  node = camera_settings["H"];
+  if (!node.empty() && homography_mat_ptr != nullptr) {
+    *homography_mat_ptr = node.mat();
+  } else {
+    std::cerr << "Camera homography matrix not read! Check configuration file "
+                  "is in default yaml format.";
+  }
+
+  return 0;
+}
+
 void LoadConfig(navigation::NavigationParameters* params) {
   #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
   #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
@@ -664,6 +715,10 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(target_vel_tolerance);
   REAL_PARAM(target_angle_tolerance);
   REAL_PARAM(local_fov);
+  BOOL_PARAM(use_kinect);
+  STRING_PARAM(model_path);
+  STRING_PARAM(evaluator_type);
+  STRING_PARAM(camera_calibration_path);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -690,6 +745,29 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->target_vel_tolerance = CONFIG_target_vel_tolerance;
   params->target_angle_tolerance = CONFIG_target_angle_tolerance;
   params->local_fov = CONFIG_local_fov;
+  params->use_kinect = CONFIG_use_kinect;
+  params->model_path = CONFIG_model_path;
+  params->evaluator_type = CONFIG_evaluator_type;
+
+  // TODO Rather than loading camera homography from a file, compute it from camera transformation info
+  LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
+}
+
+void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
+  try {
+    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
+        msg, sensor_msgs::image_encodings::BGR8);
+    last_image_ = image->image;
+  } catch (cv_bridge::Exception& e) {
+    fprintf(stderr, "cv_bridge exception: %s\n", e.what());
+    return;
+  }
+  navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
+  // Update GUI Window
+  if (FLAGS_debug_images) {
+    cv::imshow(kOpenCVWindow, last_image_);
+    cv::waitKey(3);
+  }
 }
 
 int main(int argc, char** argv) {
@@ -699,6 +777,7 @@ int main(int argc, char** argv) {
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
+  image_transport::ImageTransport it_(n);
 
   // Map Loading
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
@@ -730,6 +809,7 @@ int main(int argc, char** argv) {
       FLAGS_twist_drive_topic, 1);
   status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
+  viz_img_pub_ = it_.advertise("vis_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
@@ -752,6 +832,8 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =
       n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
+  ros::Subscriber img_sub = 
+      n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
@@ -763,6 +845,13 @@ int main(int argc, char** argv) {
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
 
+  std_msgs::Header viz_img_header; // empty viz_img_header
+  viz_img_header.stamp = ros::Time::now(); // time
+  cv_bridge::CvImage viz_img;
+  if (params.evaluator_type == "cost_map") {
+    viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
+  }
+  
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
@@ -789,6 +878,10 @@ int main(int argc, char** argv) {
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
+      if (params.evaluator_type == "cost_map") {
+        viz_img.image = navigation_.GetVisualizationImage();
+        viz_img_pub_.publish(viz_img.toImageMsg());
+      }
 
       // Publish Commands
       SendCommand(cmd_vel, cmd_angle_vel);
