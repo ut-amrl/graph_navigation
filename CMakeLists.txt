@@ -22,6 +22,7 @@ INCLUDE($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 ROSBUILD_INIT()
 SET(ROS_BUILD_SHARED_LIBS true)
 
+FIND_PACKAGE(OpenCV REQUIRED)
 
 MESSAGE(STATUS "ROS-Overrride Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "CXX Flags: ${CMAKE_CXX_FLAGS}")
@@ -41,6 +42,7 @@ INCLUDE_DIRECTORIES(src/shared)
 INCLUDE_DIRECTORIES(src/config_reader/include)
 INCLUDE_DIRECTORIES(src/third_party)
 INCLUDE_DIRECTORIES(src)
+INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 ROSBUILD_GENMSG()
 ROSBUILD_GENSRV()
@@ -55,7 +57,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
                         )
-TARGET_LINK_LIBRARIES(navigation shared_library ${libs})
+TARGET_LINK_LIBRARIES(navigation shared_library ${libs} ${OpenCV_LIBS})
 
 
 ADD_EXECUTABLE(navigation_tests
