@@ -77,7 +77,7 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
                         src/navigation/navigation.cc)
-TARGET_LINK_LIBRARIES(social_nav shared_library ${libs})
+TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${OpenCV_LIBS})
 
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})
 add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})

@@ -27,6 +27,7 @@
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
+#include "eight_connected_pref_domain.h"
 #include "graph_domain.h"
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
@@ -101,11 +102,11 @@ class Navigation {
   void Resume();
   bool PlanStillValid();
   void Plan(Eigen::Vector2f goal_loc);
-  std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,
+  std::vector<EightConnectedPrefDomain::State> Plan(const Eigen::Vector2f& initial,
                                        const Eigen::Vector2f& end);
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
                               const Eigen::Vector2f& end);
-  std::vector<GraphDomain::State> GetPlanPath();
+  std::vector<EightConnectedPrefDomain::State> GetPlanPath();
   bool GetCarrot(Eigen::Vector2f& carrot);
   // Enable or disable autonomy.
   void Enable(bool enable);
@@ -221,10 +222,10 @@ class Navigation {
   const std::string maps_dir_;
 
   // Planning domain for A* planner.
-  GraphDomain planning_domain_;
+  EightConnectedPrefDomain planning_domain_;
 
   // Previously computed navigation plan.
-  std::vector<GraphDomain::State> plan_path_;
+  std::vector<EightConnectedPrefDomain::State> plan_path_;
 
   // Local navigation target for obstacle avoidance planner, in the robot's
   // reference frame.

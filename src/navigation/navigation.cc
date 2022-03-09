@@ -36,6 +36,7 @@
 #include "shared/util/timer.h"
 #include "shared/util/timer.h"
 #include "eight_connected_domain.h"
+#include "eight_connected_pref_domain.h"
 #include "graph_domain.h"
 #include "astar.h"
 
@@ -109,16 +110,16 @@ struct GraphVisualizer {
   GraphVisualizer(bool visualize) :
              kVisualize(visualize) { }
 
-  void DrawEdge(const navigation::GraphDomain::State& s1,
-                const navigation::GraphDomain::State& s2) {
+  void DrawEdge(const navigation::EightConnectedPrefDomain::State& s1,
+                const navigation::EightConnectedPrefDomain::State& s2) {
     if (!kVisualize) return;
     static const bool kDebug = false;
     if (kDebug) {
       printf("%7.2f,%7.2f -> %7.2f,%7.2f\n",
-            s1.loc.x(),
-            s1.loc.y(),
-            s2.loc.x(),
-            s2.loc.y());
+            s1.x(),
+            s1.y(),
+            s2.x(),
+            s2.y());
     }
     // visualization::DrawLine(s1.loc, s2.loc, 0xC0C0C0, global_viz_msg_);
     // viz_pub_.publish(global_viz_msg_);
@@ -156,7 +157,8 @@ void Navigation::Initialize(const NavigationParameters& params,
                             const string& map_file) {
   // Initialize status message
   params_ = params;
-  planning_domain_ = GraphDomain(map_file, &params_);
+  // planning_domain_ = EightConnectedPrefDomain(0.0f, 0.0f, Vector2f{0, 0}, 0.4f, map_file);
+  planning_domain_.SetMap(map_file);
   initialized_ = true;
   sampler_->SetNavParams(params);
 }
@@ -187,7 +189,7 @@ void Navigation::Resume() {
 }
 
 void Navigation::UpdateMap(const string& map_path) {
-  planning_domain_.Load(map_path);
+  planning_domain_.SetMap(map_path);
   plan_path_.clear();
 }
 
@@ -403,31 +405,31 @@ vector<int> Navigation::GlobalPlan(const Vector2f& initial,
   auto plan = Plan(initial, end);
   std::vector<int> path;
   for (auto& node : plan ) {
-    path.push_back(node.id);
+    path.push_back(planning_domain_.StateToKey(node));
   }
   return path;
 }
 
-vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
+vector<EightConnectedPrefDomain::State> Navigation::Plan(const Vector2f& initial,
                                             const Vector2f& end) {
-  vector<GraphDomain::State> path;
+  vector<EightConnectedPrefDomain::State> path;
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   static const bool kVisualize = true;
-  typedef navigation::GraphDomain Domain;
-  planning_domain_.ResetDynamicStates();
-  const uint64_t start_id = planning_domain_.AddDynamicState(initial);
-  const uint64_t goal_id = planning_domain_.AddDynamicState(end);
-  Domain::State start = planning_domain_.states[start_id];
-  Domain::State goal = planning_domain_.states[goal_id];
+  typedef navigation::EightConnectedPrefDomain Domain;
+  // planning_domain_.ResetDynamicStates();
+  const uint64_t start_id = planning_domain_.StateToKey(initial);
+  const uint64_t goal_id = planning_domain_.StateToKey(end);
+  Domain::State start = planning_domain_.KeyToState(start_id);
+  Domain::State goal = planning_domain_.KeyToState(goal_id);
   GraphVisualizer graph_viz(kVisualize);
   const bool found_path =
       AStar(start, goal, planning_domain_, &graph_viz, &path);
   if (found_path) {
     CHECK(path.size() > 0);
-    Vector2f s1 = plan_path_[0].loc;
+    Vector2f s1 = plan_path_[0];
     for (size_t i = 1; i < plan_path_.size(); ++i) {
-      Vector2f s2 = plan_path_[i].loc;
+      Vector2f s2 = plan_path_[i];
       s1 = s2;
     }
   } else {
@@ -448,8 +450,8 @@ bool Navigation::PlanStillValid() {
   for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
     const float dist_from_segment =
         geometry::DistanceFromLineSegment(robot_loc_,
-                                          plan_path_[i].loc,
-                                          plan_path_[i + 1].loc);
+                                          plan_path_[i],
+                                          plan_path_[i + 1]);
     if (dist_from_segment < FLAGS_max_plan_deviation) {
       return true;
     }
@@ -461,9 +463,9 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
 
-  if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
+  if ((plan_path_[0] - robot_loc_).squaredNorm() < kSqCarrotDist) {
     // Goal is within the carrot dist.
-    carrot = plan_path_[0].loc;
+    carrot = plan_path_[0];
     return true;
   }
 
@@ -471,8 +473,8 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   float closest_dist = FLT_MAX;
   int i0 = 0, i1 = 1;
   for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
-    const Vector2f v0 = plan_path_[i].loc;
-    const Vector2f v1 = plan_path_[i + 1].loc;
+    const Vector2f v0 = plan_path_[i];
+    const Vector2f v1 = plan_path_[i + 1];
     const float dist_to_segment = geometry::DistanceFromLineSegment(
         robot_loc_, v0, v1);
     if (dist_to_segment < closest_dist) {
@@ -486,8 +488,8 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   if (closest_dist > kSqCarrotDist) {
     // Closest edge on the plan is farther than carrot dist to the robot.
     // The carrot will be the projection of the robot loc on to the edge.
-    const Vector2f v0 = plan_path_[i0].loc;
-    const Vector2f v1 = plan_path_[i1].loc;
+    const Vector2f v0 = plan_path_[i0];
+    const Vector2f v1 = plan_path_[i1];
     carrot = geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
     return true;
   }
@@ -500,15 +502,15 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   for (int i = i1; i - 1 >= 0; --i) {
     i0 = i;
     // const Vector2f v0 = plan_path_[i].loc;
-    const Vector2f v1 = plan_path_[i - 1].loc;
+    const Vector2f v1 = plan_path_[i - 1];
     if ((v1 - robot_loc_).squaredNorm() > kSqCarrotDist) {
       break;
     }
   }
   i1 = i0 - 1;
   // printf("i0:%d i1:%d\n", i0, i1);
-  const Vector2f v0 = plan_path_[i0].loc;
-  const Vector2f v1 = plan_path_[i1].loc;
+  const Vector2f v0 = plan_path_[i0];
+  const Vector2f v1 = plan_path_[i1];
   Vector2f r0, r1;
   #define V2COMP(v) v.x(), v.y()
   // printf("%f,%f %f,%f %f,%f %f\n",
@@ -602,8 +604,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   vel_cmd = {0, 0};
 
   float max_map_speed = params_.linear_limits.max_speed;
-  planning_domain_.GetClearanceAndSpeedFromLoc(
-      robot_loc_, nullptr, &max_map_speed);
+  // planning_domain_.GetClearanceAndSpeedFromLoc(
+  //     robot_loc_, nullptr, &max_map_speed);
   auto linear_limits = params_.linear_limits;
   linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
   best_path->GetControls(linear_limits,
@@ -789,7 +791,7 @@ std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }
 
-vector<GraphDomain::State> Navigation::GetPlanPath() {
+vector<EightConnectedPrefDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 

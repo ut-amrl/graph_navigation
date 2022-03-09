@@ -378,8 +378,8 @@ void PublishPath() {
     path_msg.header.frame_id="map";
     for (size_t i = 0; i < path.size(); i++) {
       geometry_msgs::PoseStamped pose_plan;
-      pose_plan.pose.position.x = path[i].loc.x();
-      pose_plan.pose.position.y = path[i].loc.y();
+      pose_plan.pose.position.x = path[i].x();
+      pose_plan.pose.position.y = path[i].y();
 
       pose_plan.pose.orientation.x = 0;
       pose_plan.pose.orientation.y = 0;
@@ -393,7 +393,7 @@ void PublishPath() {
       path_pub_.publish(path_msg);
     }
     for (size_t i = 1; i < path.size(); i++) {
-      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0xFF007F00, 
+      visualization::DrawLine(path[i - 1], path[i], 0xFF007F00, 
           global_viz_msg_);
     }
     Vector2f carrot;
