@@ -9,6 +9,7 @@ MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 SET(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Werror")
 SET(LIBRARY_NAME "graph_nav_lib"
     CACHE STRING "Name of compiled library")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 IF(${CMAKE_BUILD_TYPE} MATCHES "Release")
   MESSAGE(STATUS "Additional Flags for Release mode")

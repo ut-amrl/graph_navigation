@@ -51,8 +51,8 @@ struct EightConnectedPrefDomain {
 
   EightConnectedPrefDomain() : 
       kResolution(0.4),
-      kMapWidthInt(0),
-      kMapHeightInt(0),
+      kMapWidthInt(188),
+      kMapHeightInt(105),
       kDiagonalLength(std::sqrt(2.0f)),
       kMapOrigin(Eigen::Vector2f{0, 0}),
       // vector_map_("fakemapfile"),
@@ -94,6 +94,9 @@ struct EightConnectedPrefDomain {
     const uint64_t x2_int = k_s2 % kMapWidthInt;
     const uint64_t y2_int = k_s2 / kMapWidthInt;
 
+    // printf("costmap size is %d, %d\n", costmap.size().height, costmap.size().width);
+    // printf("states are %ld, %ld\n", k_s1, k_s2);
+    // printf("indexing into (%ld, %ld) and (%ld, %ld)\n", y1_int, x1_int, y2_int, x2_int);
     if (x1_int == x2_int || y1_int == y2_int) {
       return 0.5 * costmap.at<int>(y1_int, x1_int) + 0.5 * costmap.at<int>(y2_int, x2_int);
     } else {
@@ -146,18 +149,18 @@ struct EightConnectedPrefDomain {
     neighbors->clear();
     const uint64_t x_int = s_key % kMapWidthInt;
     const uint64_t y_int = s_key / kMapWidthInt;
-    if (true) {
-      const State s = KeyToState(s_key);
-      CheckAndAdd<1, 0>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<1, 1>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<0, 1>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<-1, 1>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<-1, 0>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<-1, -1>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<0, -1>(s, x_int, y_int, s_key, neighbors);
-      CheckAndAdd<1, -1>(s, x_int, y_int, s_key, neighbors);
-      return;
-    }
+    // if (true) {
+    //   const State s = KeyToState(s_key);
+    //   CheckAndAdd<1, 0>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<1, 1>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<0, 1>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<-1, 1>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<-1, 0>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<-1, -1>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<0, -1>(s, x_int, y_int, s_key, neighbors);
+    //   CheckAndAdd<1, -1>(s, x_int, y_int, s_key, neighbors);
+    //   return;
+    // }
     const bool x_plus = (x_int + 1 < kMapWidthInt);
     const bool x_minus = (x_int > 0);
     const bool y_plus = (y_int + 1 < kMapHeightInt);

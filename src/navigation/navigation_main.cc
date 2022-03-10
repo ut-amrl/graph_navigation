@@ -702,6 +702,7 @@ int main(int argc, char** argv) {
 
   // Map Loading
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+  std::cout << "got map path as " << map_path << std::endl;
   std::string deprecated_path =
       navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
   if (!FileExists(map_path) && FileExists(deprecated_path)) {
@@ -747,7 +748,8 @@ int main(int argc, char** argv) {
 
   // Subscribers
   ros::Subscriber velocity_sub =
-      n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
+      n.subscribe("/jackal_velocity_controller/odom", 1, &OdometryCallback);
+  cout << "odom topic is " << CONFIG_odom_topic << std::endl;
   ros::Subscriber localization_sub =
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =

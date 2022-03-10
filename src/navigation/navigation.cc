@@ -422,7 +422,7 @@ vector<EightConnectedPrefDomain::State> Navigation::Plan(const Vector2f& initial
   const uint64_t goal_id = planning_domain_.StateToKey(end);
   Domain::State start = planning_domain_.KeyToState(start_id);
   Domain::State goal = planning_domain_.KeyToState(goal_id);
-  GraphVisualizer graph_viz(kVisualize);
+  EightGridVisualizer graph_viz(kVisualize);
   const bool found_path =
       AStar(start, goal, planning_domain_, &graph_viz, &path);
   if (found_path) {

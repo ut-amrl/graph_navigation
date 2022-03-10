@@ -109,7 +109,7 @@ bool AStar(const typename Domain::State& start,
   SimpleQueue<uint64_t, AStarPriority> queue;
   const uint64_t k_start = domain.StateToKey(start);
   const uint64_t k_goal = domain.StateToKey(goal);
-  if (kDebug) printf("A* plan from %lu to %lu\n", k_start, k_goal);
+  printf("A* plan from (%f, %f) to (%f, %f)\n", start[0], start[1], goal[0], goal[1]);
   // Add start to priority queue.
   queue.Push(k_start, AStarPriority(0, domain.Heuristic(start, goal)));
   g_values_[k_start] = 0;
