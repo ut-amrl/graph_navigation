@@ -55,11 +55,10 @@ struct EightConnectedPrefDomain {
       kMapHeightInt(105),
       kDiagonalLength(std::sqrt(2.0f)),
       kMapOrigin(Eigen::Vector2f{0, 0}),
-      // vector_map_("fakemapfile"),
       kMargin(0.1),
-      offset_(80.39, 44.34),
-      costmap(cv::imread("cost_gmapbig.png")) {
-      }
+      offset_(0, 0),
+      // offset_(80.39, 44.34),
+      costmap(cv::imread("cost_gmapbig.png")) {}
   
   void SetMap(const std::string& map_file) {
     vector_map_ = vector_map::VectorMap(map_file);
