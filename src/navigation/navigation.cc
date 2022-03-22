@@ -39,6 +39,7 @@
 #include "eight_connected_pref_domain.h"
 #include "graph_domain.h"
 #include "astar.h"
+#include "visualization/visualization.h"
 
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
@@ -90,7 +91,7 @@ struct EightGridVisualizer {
   void DrawEdge(const navigation::EightConnectedDomain::State& s1,
                 const navigation::EightConnectedDomain::State& s2) {
     if (!kVisualize) return;
-    static const bool kDebug = false;
+    static const bool kDebug = true;
     if (kDebug) {
       printf("%7.2f,%7.2f -> %7.2f,%7.2f\n",
             s1.x(),
@@ -98,8 +99,7 @@ struct EightGridVisualizer {
             s2.x(),
             s2.y());
     }
-    // visualization::DrawLine(s1, s2, 0x606060, global_viz_msg_);
-    // viz_pub_.publish(global_viz_msg_);
+    navigation::DrawEdge(s1, s2);
     if (kDebug) Sleep(0.05);
   }
 
@@ -844,6 +844,12 @@ bool Navigation::Run(const double& time,
       }
       // Local Navigation
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+    }
+    auto s1 = plan_path_[0];
+    for (size_t i = 0; i < plan_path_.size(); i++) {
+      auto s2 = plan_path_[i];
+      navigation::DrawEdge(s1, s2);
+      s1 = s2;
     }
   }
 

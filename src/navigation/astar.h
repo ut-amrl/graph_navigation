@@ -98,7 +98,7 @@ bool AStar(const typename Domain::State& start,
            std::vector<typename Domain::State>* path) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-  static const uint64_t kMaxEdgeExpansions = 1000;
+  static const uint64_t kMaxEdgeExpansions = 100000;
   static const bool kDebug = false;
   std::unordered_map<uint64_t, uint64_t> parent_map_;
   // G-values of nodes in the open and closed list.
@@ -109,7 +109,7 @@ bool AStar(const typename Domain::State& start,
   SimpleQueue<uint64_t, AStarPriority> queue;
   const uint64_t k_start = domain.StateToKey(start);
   const uint64_t k_goal = domain.StateToKey(goal);
-  printf("A* plan from (%f, %f) to (%f, %f)\n", start[0], start[1], goal[0], goal[1]);
+  printf("A* plan from (%f, %f) = [%ld] to (%f, %f) = [%ld]\n", start[0], start[1], k_start, goal[0], goal[1], k_goal);
   // Add start to priority queue.
   queue.Push(k_start, AStarPriority(0, domain.Heuristic(start, goal)));
   g_values_[k_start] = 0;
@@ -152,8 +152,8 @@ bool AStar(const typename Domain::State& start,
           parent_map_[k_next] = k_current;
           g_values_[k_next] = g;
           queue.Push(k_next, AStarPriority(g, h));
-          viz->DrawEdge(domain.KeyToState(k_current),
-                        domain.KeyToState(k_next));
+          // viz->DrawEdge(domain.KeyToState(k_current),
+          //               domain.KeyToState(k_next));
           if (kDebug) printf(" Push to open list");
         }
         if (kDebug) printf("\n");

@@ -56,7 +56,7 @@ struct EightConnectedPrefDomain {
       kDiagonalLength(std::sqrt(2.0f)),
       kMapOrigin(Eigen::Vector2f{0, 0}),
       kMargin(0.1),
-      offset_(0, 0),
+      offset_(0, 60),
       // offset_(80.39, 44.34),
       costmap(cv::imread("cost_gmapbig.png")) {}
   

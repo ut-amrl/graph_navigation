@@ -25,6 +25,7 @@
 
 #include "eigen3/Eigen/Dense"
 
+#include "amrl_msgs/VisualizationMsg.h"
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
 #include "eight_connected_pref_domain.h"
@@ -79,6 +80,8 @@ enum class NavigationState {
   kTurnInPlace = 3,
   kOverride = 4
 };
+
+void DrawEdge(Eigen::Vector2f s1, Eigen::Vector2f s2);
 
 class Navigation {
  public:

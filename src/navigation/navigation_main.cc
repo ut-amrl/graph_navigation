@@ -90,6 +90,7 @@ using geometry::kEpsilon;
 using navigation::MotionLimits;
 using ros_helpers::InitRosHeader;
 
+
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
@@ -143,6 +144,11 @@ visualization_msgs::Marker pose_marker_;
 visualization_msgs::Marker target_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
+
+void navigation::DrawEdge(Eigen::Vector2f s1, Eigen::Vector2f s2) {
+    visualization::DrawLine(s1, s2, 0x606060, global_viz_msg_);
+    viz_pub_.publish(global_viz_msg_);
+}
 
 void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
