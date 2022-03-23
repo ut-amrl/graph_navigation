@@ -270,6 +270,7 @@ void HaltCallback(const std_msgs::Bool& msg) {
 }
 
 void ExternalCarrotCallback(const amrl_msgs::Point2D& msg) {
+  printf("Received external carrot (%f, %f)\n", msg.x, msg.y);
   navigation_.SetExternalCarrot(Vector2f {msg.x, msg.y});
 }
 
@@ -751,7 +752,7 @@ int main(int argc, char** argv) {
 
   // Subscribers
   ros::Subscriber velocity_sub =
-      n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
+      n.subscribe("/jackal_velocity_controller/odom", 1, &OdometryCallback);
   ros::Subscriber localization_sub =
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =

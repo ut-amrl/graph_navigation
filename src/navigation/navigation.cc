@@ -841,9 +841,9 @@ bool Navigation::Run(const double& time,
     if (nav_state_ == NavigationState::kGoto) {
       // Get Carrot and check if done
       Vector2f carrot(0, 0);
-      if (is_external)
+      if (is_external) {
         carrot = external_target_;
-      else {
+      } else {
         bool foundCarrot = GetCarrot(carrot);
         if (!foundCarrot) {
           Halt(cmd_vel, cmd_angle_vel);
