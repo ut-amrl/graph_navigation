@@ -144,6 +144,7 @@ Navigation::Navigation() :
     loc_initialized_(false),
     t_point_cloud_(0),
     t_odometry_(0),
+    is_external(false),
     enabled_(false),
     initialized_(false),
     sampler_(nullptr),
@@ -793,6 +794,11 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
+void Navigation::SetExternalCarrot(const Eigen::Vector2f& carrot) {
+  is_external = true;
+  external_target_ = carrot;
+}
+
 bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
@@ -835,10 +841,14 @@ bool Navigation::Run(const double& time,
     if (nav_state_ == NavigationState::kGoto) {
       // Get Carrot and check if done
       Vector2f carrot(0, 0);
-      bool foundCarrot = GetCarrot(carrot);
-      if (!foundCarrot) {
-        Halt(cmd_vel, cmd_angle_vel);
-        return false;
+      if (is_external)
+        carrot = external_target_;
+      else {
+        bool foundCarrot = GetCarrot(carrot);
+        if (!foundCarrot) {
+          Halt(cmd_vel, cmd_angle_vel);
+          return false;
+        }
       }
       // Local Navigation
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);

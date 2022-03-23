@@ -269,6 +269,10 @@ void HaltCallback(const std_msgs::Bool& msg) {
   navigation_.Pause();
 }
 
+void ExternalCarrotCallback(const amrl_msgs::Point2D& msg) {
+  navigation_.SetExternalCarrot(Vector2f {msg.x, msg.y});
+}
+
 AckermannCurvatureDriveMsg TwistToAckermann(
     const geometry_msgs::TwistStamped& twist) {
   AckermannCurvatureDriveMsg ackermann_msg;
@@ -762,6 +766,7 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+  ros::Subscriber external_carrot_sub = n.subscribe("external_carrot", 1, &ExternalCarrotCallback);
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
