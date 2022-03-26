@@ -21,7 +21,6 @@ ADD_LIBRARY(ut_amrl_navigation
             navigation/motion_primitives.cc
             navigation/navigation.cc
             vector_map/vector_map.cc
-            visualization/visualization.cc
 )
 TARGET_LINK_LIBRARIES(ut_amrl_navigation
                       amrl_shared_lib

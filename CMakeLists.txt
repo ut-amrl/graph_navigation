@@ -54,10 +54,14 @@ ROSBUILD_GENSRV()
 
 MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
-ROSBUILD_ADD_EXECUTABLE(navigation src/navigation/navigation_main.cc)
+ROSBUILD_ADD_EXECUTABLE(navigation
+                        src/navigation/navigation_main.cc
+                        src/visualization/visualization.cc)
 TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation)
 
-ROSBUILD_ADD_EXECUTABLE(social_nav src/navigation/social_main.cc)
+ROSBUILD_ADD_EXECUTABLE(social_nav
+                        src/navigation/social_main.cc
+                        src/visualization/visualization.cc)
 TARGET_LINK_LIBRARIES(social_nav ut_amrl_social_navigation)
 
 ADD_DEPENDENCIES(navigation ${catkin_EXPORTED_TARGETS})
