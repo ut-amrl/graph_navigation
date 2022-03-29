@@ -143,6 +143,8 @@ class Navigation {
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
+  void SetExternalCarrot(const Eigen::Vector2f& carrot);
+
  private:
 
   // Test 1D TOC motion in a straight line.
@@ -238,6 +240,9 @@ class Navigation {
 
   // Global frame, set by an override message
   Eigen::Vector2f override_target_;
+
+  bool is_external;
+  Eigen::Vector2f external_target_;
 
   // // Message for status publishing
 

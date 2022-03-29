@@ -6,7 +6,7 @@ NavigationParameters = {
   laser_topic = "/velodyne_2dscan";
   odom_topic = "/jackal_velocity_controller/odom";
   localization_topic = "localization";
-  image_topic = "/camera/rgb/image_raw/compressed";
+  image_topic = "/left/image_raw/compressed";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
   laser_loc = {
@@ -37,8 +37,8 @@ NavigationParameters = {
   local_fov = deg2rad(90);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
-  model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
-  evaluator_type = "linear";
+  model_path = "/home/amrl_user/kavan/preference_learning_models/jit_cost_model_outdoor_6dim.pt";
+  evaluator_type = "cost_map";
 };
 
 AckermannSampler = {

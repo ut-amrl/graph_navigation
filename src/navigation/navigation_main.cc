@@ -280,6 +280,11 @@ void HaltCallback(const std_msgs::Bool& msg) {
   navigation_.Pause();
 }
 
+void ExternalCarrotCallback(const amrl_msgs::Point2D& msg) {
+  printf("Received external carrot (%f, %f)\n", msg.x, msg.y);
+  navigation_.SetExternalCarrot(Vector2f {msg.x, msg.y});
+}
+
 AckermannCurvatureDriveMsg TwistToAckermann(
     const geometry_msgs::TwistStamped& twist) {
   AckermannCurvatureDriveMsg ackermann_msg;
@@ -827,7 +832,7 @@ int main(int argc, char** argv) {
 
   // Subscribers
   ros::Subscriber velocity_sub =
-      n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
+      n.subscribe("/jackal_velocity_controller/odom", 1, &OdometryCallback);
   ros::Subscriber localization_sub =
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =
@@ -844,6 +849,7 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+  ros::Subscriber external_carrot_sub = n.subscribe("external_carrot", 1, &ExternalCarrotCallback);
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
