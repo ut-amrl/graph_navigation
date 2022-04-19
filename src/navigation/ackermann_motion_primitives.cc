@@ -57,7 +57,9 @@ AckermannSampler::AckermannSampler() {
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
+    printf("max_fpl:%f local_target.x:%f\n", nav_params.max_free_path_length, local_target.x());
     path.length = min(nav_params.max_free_path_length, local_target.x());
+    path.fpl = path.length;
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
@@ -135,10 +137,16 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   // The robot's half-width.
   const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;
   if (fabs(path.curvature) < kEpsilon) {
+    printf("Straight fpl: %f\n", path.fpl);
     for (const Vector2f& p : point_cloud) {
       if (fabs(p.y()) > w || p.x() < 0.0f) continue;
       path.fpl = min(path.fpl, p.x() - l);
+      if (p.x() - l < 0.0) {
+        printf("Limiting point: %f, %f\n", p.x(), p.y());
+        // break;
+      }
     }
+    printf("Straight fpl2: %f\n", path.fpl);
     path.clearance = nav_params.max_clearance;
     for (const Vector2f& p : point_cloud) {
       if (p.x() - l > path.fpl || p.x() < 0.0) continue;

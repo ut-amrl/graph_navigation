@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
+#include "nav_msgs/Path.h"
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -33,6 +34,9 @@
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
+
+
+extern nav_msgs::Path global_path_move_base;
 
 namespace navigation {
 
@@ -78,6 +82,8 @@ enum class NavigationState {
   kTurnInPlace = 3,
   kOverride = 4
 };
+
+
 
 class Navigation {
  public:

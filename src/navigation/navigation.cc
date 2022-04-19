@@ -62,6 +62,8 @@ using std::vector;
 using namespace math_util;
 using namespace motion_primitives;
 
+nav_msgs::Path global_path_move_base;
+
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
 DEFINE_bool(test_obstacle, false, "Run obstacle detection test");

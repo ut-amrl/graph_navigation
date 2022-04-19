@@ -112,8 +112,8 @@ CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
-DEFINE_string(map, "UT_Campus", "Name of navigation map file");
-DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_string(map, "EmptyMap", "Name of navigation map file");
+DEFINE_string(twist_drive_topic, "/cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
 
 // DECLARE_int32(v);
@@ -188,7 +188,7 @@ void LaserHandler(const sensor_msgs::LaserScan& msg) {
            GetWallTime() - msg.header.stamp.toSec());
   }
   // Location of the laser on the robot. Assumes the laser is forward-facing.
-  const Vector2f kLaserLoc(CONFIG_laser_loc_x, CONFIG_laser_loc_x);
+  const Vector2f kLaserLoc(CONFIG_laser_loc_x, CONFIG_laser_loc_y);
   static float cached_dtheta_ = 0;
   static float cached_angle_min_ = 0;
   static size_t cached_num_rays_ = 0;
@@ -264,6 +264,29 @@ void SignalHandler(int) {
   run_ = false;
 }
 
+
+// void PathCallback(const nav_msgs::Path& msg) {
+//   printf("getting path \n");
+//   global_path_move_base = msg;
+//   for(int i = 0; i < 10;i++) {
+//      printf("%f, %f \n",global_path_move_base.poses[i].pose.position.x, global_path_move_base.poses[i].pose.position.y);
+//   }
+//   vector<navigation::GraphDomain::State> move_base_path;
+//   int i = 0;
+//   for(const auto pose: global_path_move_base.poses) {
+//     navigation::GraphDomain::State tempState(i, pose.pose.position.x, pose.pose.position.y);
+//     if(i % 4 == 0) {
+//       move_base_path.push_back(tempState);
+//     }
+//     //std::reverse(move_base_path.begin(),move_base_path.end());
+//     i++;
+//   }
+//   Navigation::plan_path_ = move_base_path;
+//   for(int i = 0; i < 10;i++) {
+//     printf("inside: %f, %f \n",plan_path_[i].loc.x(), plan_path_[i].loc.y());
+//   }
+// }
+
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   static string map  = "";
   if (FLAGS_v > 2) {
@@ -274,6 +297,26 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
     map = msg.map;
     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
   }
+}
+
+void LocalizationSpoofedCallback(const nav_msgs::Odometry& msg) {
+
+  float x = msg.pose.pose.orientation.x;
+  float y = msg.pose.pose.orientation.y;
+  float z = msg.pose.pose.orientation.z;
+  float w = msg.pose.pose.orientation.w;
+
+  float siny_cosp = 2 * (w * z + x * y);
+  float cosy_cosp = 1 - 2 * (y *y + z * z);
+  float yaw = std::atan2(siny_cosp, cosy_cosp);
+  // float yaw = atan2(2.0*(msg.pose.pose.orientation.y*msg.pose.pose.orientation.z + msg.pose.pose.orientation.w*msg.pose.pose.orientation.x), msg.pose.pose.orientation.w*msg.pose.pose.orientation.w - msg.pose.pose.orientation.x*msg.pose.pose.orientation.x - msg.pose.pose.orientation.y*msg.pose.pose.orientation.y +msg.pose.pose.orientation.z*msg.pose.pose.orientation.z);
+  //yaw = yaw < 0 ? yaw + 3.1415 : yaw - 3.1415;
+  cout << "\n" << endl;
+  cout << msg.pose.pose.position.x << endl;
+  cout << msg.pose.pose.position.y << endl;
+  cout << yaw << endl;
+  cout << "\n" << endl;
+  navigation_.UpdateLocation(Vector2f(msg.pose.pose.position.x, msg.pose.pose.position.y), yaw);
 }
 
 void HaltCallback(const std_msgs::Bool& msg) {
@@ -835,7 +878,7 @@ int main(int argc, char** argv) {
   ros::Subscriber img_sub = 
       n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
-      n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
+      n.subscribe("move_base_simple/localgoal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
       n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
   ros::Subscriber enabler_sub =
@@ -844,7 +887,7 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
-
+  //ros::Subscriber path_sub = n.subscribe("/move_base/TrajectoryPlannerROS/global_plan",1,&PathCallback);
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
   cv_bridge::CvImage viz_img;
@@ -852,8 +895,10 @@ int main(int argc, char** argv) {
     viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
   }
   
+  CumulativeFunctionTimer run_loop_timer("Nav Loop");
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
+    CumulativeFunctionTimer::Invocation invoke(&run_loop_timer);
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
