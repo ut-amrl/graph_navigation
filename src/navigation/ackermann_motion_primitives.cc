@@ -56,10 +56,13 @@ AckermannSampler::AckermannSampler() {
 
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
+  const float stopping_dist =
+      Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
   if (fabs(path.curvature) < kEpsilon) {
     path.length = min(nav_params.max_free_path_length, local_target.x());
+    path.length = max(path.length, stopping_dist);
     return;
-  } 
+  }
   const float turn_radius = 1.0f / path.curvature;
   const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
   const Vector2f turn_center(0, turn_radius);
@@ -69,15 +72,11 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   const float middle_angle =
       atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
   const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
-  path.fpl = min<float>({
-      nav_params.max_free_path_length, 
-      quarter_circle_dist});
   path.length = min<float>({
-    path.fpl,
-    dist_closest_to_goal
+      nav_params.max_free_path_length,
+      quarter_circle_dist,
+      dist_closest_to_goal
   });
-  const float stopping_dist = 
-      Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
   path.length = max(path.length, stopping_dist);
 }
 
@@ -91,9 +90,9 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     };
     return samples;
   }
-  const float max_domega = 
+  const float max_domega =
       nav_params.dt * nav_params.angular_limits.max_acceleration;
-  const float max_dv = 
+  const float max_dv =
       nav_params.dt * nav_params.linear_limits.max_acceleration;
   const float robot_speed = fabs(vel.x());
   float c_min = -CONFIG_max_curvature;
@@ -111,7 +110,6 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
-      sample->angular_length = fabs(sample->length * c);
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   } else {
@@ -120,11 +118,10 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
-      sample->angular_length = fabs(sample->length * c);
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   }
-  
+
   return samples;
 }
 
@@ -132,30 +129,33 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   // How much the robot's body extends in front of its base link frame.
   const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
+  // How much the robot's body extends behind its base link frame.
+  const float l_back = 0.5 * nav_params.robot_length + nav_params.base_link_offset + nav_params.obstacle_margin;
   // The robot's half-width.
   const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;
+  const float stopping_dist =
+      vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
   if (fabs(path.curvature) < kEpsilon) {
     for (const Vector2f& p : point_cloud) {
-      if (fabs(p.y()) > w || p.x() < 0.0f) continue;
-      path.fpl = min(path.fpl, p.x() - l);
+      if (fabs(p.y()) > w || p.x() < -l_back) continue;
+      path.length = min(path.length, p.x() - l);
     }
     path.clearance = nav_params.max_clearance;
+    // return;
     for (const Vector2f& p : point_cloud) {
-      if (p.x() - l > path.fpl || p.x() < 0.0) continue;
-      path.clearance = min<float>(path.clearance, fabs(fabs(p.y() - w)));
+      if (p.x() > CONFIG_clearance_clip * path.length + l ||
+          p.x() < -l_back) continue;
+      path.clearance = min<float>(path.clearance, fabs(p.y()));
     }
     path.clearance = max(0.0f, path.clearance);
-    path.fpl = max(0.0f, path.fpl);
-    path.length = min(path.fpl, path.length);
-
-    const float stopping_dist = 
-      vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
-    if (path.fpl < stopping_dist) {
+    path.length = max(0.0f, path.length);
+    if (path.length < stopping_dist) {
       path.length = 0;
     }
-    
+    // printf("%6.2f : %6.2f\n", path.length, path.clearance);
     return;
   }
+
   const float path_radius = 1.0 / path.curvature;
   const Vector2f c(0, path_radius );
   const float s = ((path_radius > 0.0) ? 1.0 : -1.0);
@@ -167,10 +167,10 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   const float r3_sq = (outer_front_corner - c).squaredNorm();
   float angle_min = M_PI;
   path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
-  // printf("%7.3f %7.3f %7.3f %7.3f\n", 
+  // printf("%7.3f %7.3f %7.3f %7.3f\n",
   //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
   // The x-coordinate of the rear margin.
-  const float x_min = -0.5 * nav_params.robot_length + 
+  const float x_min = -0.5 * nav_params.robot_length +
       nav_params.base_link_offset - nav_params.obstacle_margin;
   using std::isfinite;
   for (const Vector2f& p : point_cloud) {
@@ -220,13 +220,13 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       angle_min = theta;
     }
   }
-  const float stopping_dist = 
-      vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
-  if (path.length < stopping_dist) path.length = 0;
   path.length = max(0.0f, path.length);
+  if (path.length < stopping_dist) {
+    // printf("Stopping dist: %6.2f\n", stopping_dist);
+    path.length = 0;
+  }
   angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
   path.clearance = nav_params.max_clearance;
-
 
   for (const Vector2f& p : point_cloud) {
     const float theta = ((path.curvature > 0.0f) ?
@@ -241,7 +241,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     }
   }
   path.clearance = max(0.0f, path.clearance);
-  // printf("%7.3f %7.3f %7.3f \n", 
+  // printf("%7.3f %7.3f %7.3f \n",
   //     path.curvature, path.length, path.clearance);
 }
 

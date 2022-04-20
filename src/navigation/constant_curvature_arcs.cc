@@ -43,16 +43,12 @@ float ConstantCurvatureArc::Length() const {
   return length;
 }
 
-float ConstantCurvatureArc::FPL() const {
-  return fpl;
+float ConstantCurvatureArc::Clearance() const {
+  return clearance;
 }
 
 float ConstantCurvatureArc::AngularLength() const {
-  return angular_length;
-}
-
-float ConstantCurvatureArc::Clearance() const {
-  return clearance;
+  return fabs(curvature) * length;
 }
 
 void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
@@ -69,28 +65,31 @@ void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
 }
 
 Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
-  const float a = Sign(curvature) * angular_length * f;
-  if (length == 0) {
-    // Pure rotational motion
-    return Pose2Df(a, Vector2f(0, 0));
-  }
   if (fabs(curvature) < FLT_MIN) {
     // Straight-line motion
-    return Pose2Df(0, Vector2f(length, 0));
+    return Pose2Df(0, Vector2f(f * length, 0));
+  }
+
+  const float angular_length = fabs(curvature) * length;
+  const float a = Sign(curvature) * angular_length * f;
+  if (fabs(curvature) > 1e3) {
+    // Pure rotational motion
+    return Pose2Df(a, Vector2f(0, 0));
   }
   const float r = 1.0 / curvature;
   return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
 }
 
 Pose2Df ConstantCurvatureArc::EndPoint() const {
-  const float a = Sign(curvature) * angular_length;
-  if (length == 0) {
-    // Pure rotational motion.
-    return Pose2Df(a, Vector2f(0, 0));
-  }
   if (fabs(curvature) < FLT_MIN) {
     // Straight-line motion
     return Pose2Df(0, Vector2f(length, 0));
+  }
+  const float angular_length = fabs(curvature) * length;
+  const float a = Sign(curvature) * angular_length;
+  if (fabs(curvature) > 1e3) {
+    // Pure rotational motion.
+    return Pose2Df(a, Vector2f(0, 0));
   }
   const float r = 1.0 / curvature;
   return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));

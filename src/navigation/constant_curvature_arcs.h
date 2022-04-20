@@ -37,9 +37,6 @@ struct ConstantCurvatureArc : PathRolloutBase {
   // Length of the path rollout.
   float Length() const override;
 
-  // FPL
-  float FPL() const override;
-
   // Angular distance traversed.
   float AngularLength() const override;
 
@@ -47,11 +44,11 @@ struct ConstantCurvatureArc : PathRolloutBase {
   float Clearance() const override;
 
   // Default constructor.
-  ConstantCurvatureArc() : curvature(0), length(0), angular_length(0) {}
+  ConstantCurvatureArc() : curvature(0), length(0) {}
 
   // Explicit constructor from curvature.
-  explicit ConstantCurvatureArc(float curvature) : 
-      curvature(curvature), length(0), angular_length(0) {}
+  explicit ConstantCurvatureArc(float curvature) :
+      curvature(curvature), length(0) {}
 
   // The pose of the robot at the end of the path rollout.
   pose_2d::Pose2Df EndPoint() const override;
@@ -69,8 +66,6 @@ struct ConstantCurvatureArc : PathRolloutBase {
 
   float curvature;
   float length;
-  float fpl;
-  float angular_length;
   float clearance;
   Eigen::Vector2f obstruction;
 };

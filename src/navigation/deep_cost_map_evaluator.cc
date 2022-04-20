@@ -109,7 +109,7 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
     #endif
     cv::Mat warped = GetWarpedImage();
     cv::cvtColor(warped, warped, cv::COLOR_BGR2RGB); // BGR -> RGB
-    
+
     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
 
     std::vector<size_t> patch_location_indices;
@@ -131,7 +131,7 @@ void DeepCostMapEvaluator::UpdateLocalCostMap() {
         patch_tensors.push_back(tensor_patch);
         patch_location_indices.emplace_back(i);
       } else {
-        
+
       }
     }
 
@@ -184,7 +184,7 @@ void DeepCostMapEvaluator::UpdateMapToLocalFrame(cv::Mat& cost_map, const Eigen:
   cv::flip(cost_map, flipped_cost_map, 0);
 
   Eigen::Affine2f delta_trans = prev_trans.inverse() * curr_trans;
-  
+
   cv::Mat translationMat;
   Eigen::Matrix2f eigenRotation = Eigen::Rotation2Df(-M_PI_2) * delta_trans.rotation().matrix().inverse() * Eigen::Rotation2Df(M_PI_2);
   Eigen::Vector2f eigenTranslation = -eigenRotation * Eigen::Rotation2Df(-M_PI_2) * delta_trans.translation().matrix();
@@ -304,8 +304,8 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
 
   // Now try to find better paths.
   float best_cost = DISTANCE_WEIGHT * best_path_progress +
-      FPL_WEIGHT * paths[best_idx]->FPL() +
-      CLEARANCE_WEIGHT * paths[best_idx]->Clearance() + 
+      FPL_WEIGHT * paths[best_idx]->Length() +
+      CLEARANCE_WEIGHT * paths[best_idx]->Clearance() +
       COST_WEIGHT * normalized_path_costs.at<float>(best_idx, 0);
 
   latest_cost_components_.clear();
@@ -314,19 +314,19 @@ shared_ptr<PathRolloutBase> DeepCostMapEvaluator::FindBest(
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_progress = curr_goal_dist - dist_to_goal[i];
     const float cost = DISTANCE_WEIGHT * path_progress +
-      FPL_WEIGHT * paths[i]->FPL() +
-      CLEARANCE_WEIGHT * paths[i]->Clearance() + 
+      FPL_WEIGHT * paths[i]->Length() +
+      CLEARANCE_WEIGHT * paths[i]->Clearance() +
       COST_WEIGHT * normalized_path_costs.at<float>(i, 0);
 
     latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->curvature);
     latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->length);
     latest_cost_components_.push_back(DISTANCE_WEIGHT * path_progress);
-    latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->FPL());
+    latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->Length());
     latest_cost_components_.push_back(CLEARANCE_WEIGHT * paths[i]->Clearance());
     latest_cost_components_.push_back(COST_WEIGHT * normalized_path_costs.at<float>(i, 0));
     latest_cost_components_.push_back(cost);
     // std::cout << "COST" << latest_cost_components_ << std::endl;
-    
+
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;

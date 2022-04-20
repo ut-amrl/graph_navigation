@@ -33,7 +33,7 @@
 
 namespace motion_primitives {
 
-// Path rollout sampler. 
+// Path rollout sampler.
 struct AckermannSampler : PathRolloutSamplerBase {
   // Given the robot's current dynamic state and an obstacle point cloud, return
   // a set of valid path rollout options that are collision-free.
@@ -42,8 +42,7 @@ struct AckermannSampler : PathRolloutSamplerBase {
   AckermannSampler();
 
   // Compute free path lengths and clearances.
-  void CheckObstacles(
-      std::vector<std::shared_ptr<PathRolloutBase>>& samples);
+  void CheckObstacles(std::vector<std::shared_ptr<PathRolloutBase>>& samples);
 
   // Limit the maximum path length to the closest point of approach to the local
   // target.
