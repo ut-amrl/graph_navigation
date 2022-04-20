@@ -145,6 +145,7 @@ class Navigation {
   float GetObstacleMargin();
   float GetRobotWidth();
   float GetRobotLength();
+  float GetBaseLinkOffset();
   const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
@@ -208,7 +209,7 @@ class Navigation {
 
 
   NavigationState nav_state_;
-  
+
   // Navigation goal location.
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.

@@ -136,7 +136,7 @@ void DrawPathOption(const float curvature,
       DrawLine(
           Vector2f(0, clearance), Vector2f(distance, clearance), color, msg);
       DrawLine(
-          Vector2f(0, clearance), Vector2f(distance, clearance), color, msg);
+          Vector2f(0, -clearance), Vector2f(distance, -clearance), color, msg);
     }
   } else {
     const float r = 1.0f / curvature;

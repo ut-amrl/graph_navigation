@@ -601,8 +601,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     for (auto p : paths) {
       ConstantCurvatureArc arc =
           *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f\n",
-          i++, arc.curvature, arc.length, arc.curvature);
+      printf("%3d: %7.3f %7.3f %7.3f\n",
+          i++, arc.curvature, arc.length, arc.clearance);
     }
   }
   if (paths.size() == 0) {
@@ -674,7 +674,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   }
   if (kDebug) printf("dTheta: %f robot_angle: %f\n", RadToDeg(dTheta), RadToDeg(robot_angle_));
 
-  
+
   const float s = Sign(dTheta);
   if (robot_omega_ * dTheta < 0.0f) {
     if (kDebug) printf("Wrong way\n");
@@ -801,6 +801,10 @@ float Navigation::GetRobotLength() {
   return params_.robot_length;
 }
 
+float Navigation::GetBaseLinkOffset() {
+  return params_.base_link_offset;
+}
+
 vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
@@ -822,9 +826,12 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
+
 bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
+  static RateChecker rate_checker("Navigation::Run");
+  RateChecker::Invocation invoke(&rate_checker);
   const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
     if (kDebug) printf("Parameters and maps not initialized\n");
@@ -883,13 +890,13 @@ bool Navigation::Run(const double& time,
         robot_vel_.squaredNorm() < Sq(params_.target_dist_tolerance)) {
       nav_state_ = NavigationState::kTurnInPlace;
     } else if (nav_state_ == NavigationState::kTurnInPlace &&
-          AngleDist(robot_angle_, nav_goal_angle_) < 
+          AngleDist(robot_angle_, nav_goal_angle_) <
           params_.target_angle_tolerance) {
       nav_state_ = NavigationState::kStopped;
     }
   } while (prev_state != nav_state_);
 
-  
+
   switch (nav_state_) {
     case NavigationState::kStopped: {
       if (kDebug) printf("\nNav complete\n");
@@ -907,7 +914,7 @@ bool Navigation::Run(const double& time,
       if (kDebug) printf("\nNav override\n");
     } break;
     default: {
-      fprintf(stderr, "ERROR: Unknown nav state %d\n", 
+      fprintf(stderr, "ERROR: Unknown nav state %d\n",
           static_cast<int>(nav_state_));
     }
   }

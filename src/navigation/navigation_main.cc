@@ -447,7 +447,7 @@ void PublishPath() {
       path_pub_.publish(path_msg);
     }
     for (size_t i = 1; i < path.size(); i++) {
-      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0xFF007F00, 
+      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0xFF007F00,
           global_viz_msg_);
     }
     Vector2f carrot;
@@ -465,20 +465,20 @@ void DrawTarget() {
   visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
-  viz_pub_.publish(msg_copy);
+  // viz_pub_.publish(msg_copy);
   visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 }
 
 void DrawRobot() {
   const float kRobotLength = navigation_.GetRobotLength();
   const float kRobotWidth = navigation_.GetRobotWidth();
-  const float kRearAxleOffset = 0.0;
+  const float kBaseLinkOffset = navigation_.GetBaseLinkOffset();
   const float kObstacleMargin = navigation_.GetObstacleMargin();
   {
     // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * kRobotLength - kRearAxleOffset - kObstacleMargin;
+    const float l1 = -0.5 * kRobotLength - kBaseLinkOffset - kObstacleMargin;
     // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * kRobotLength - kRearAxleOffset + kObstacleMargin;
+    const float l2 = 0.5 * kRobotLength - kBaseLinkOffset + kObstacleMargin;
     const float w = 0.5 * kRobotWidth + kObstacleMargin;
     visualization::DrawLine(
         Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
@@ -492,9 +492,9 @@ void DrawRobot() {
 
   {
     // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
+    const float l1 = -0.5 * kRobotLength - kBaseLinkOffset;
     // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
+    const float l2 = 0.5 * kRobotLength - kBaseLinkOffset;
     const float w = 0.5 * kRobotWidth;
     visualization::DrawLine(
         Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);
@@ -875,7 +875,7 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =
       n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
-  ros::Subscriber img_sub = 
+  ros::Subscriber img_sub =
       n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
       n.subscribe("move_base_simple/localgoal", 1, &GoToCallback);
@@ -894,11 +894,11 @@ int main(int argc, char** argv) {
   if (params.evaluator_type == "cost_map") {
     viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
   }
-  
-  CumulativeFunctionTimer run_loop_timer("Nav Loop");
   RateLoop loop(1.0 / params.dt);
+
+  RateChecker rate_checker("Navigation main loop");
   while (run_ && ros::ok()) {
-    CumulativeFunctionTimer::Invocation invoke(&run_loop_timer);
+    RateChecker::Invocation rc_iteration(&rate_checker);
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
@@ -906,31 +906,29 @@ int main(int argc, char** argv) {
     // Run Navigation to get commands
     Vector2f cmd_vel(0, 0);
     float cmd_angle_vel(0);
-    bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
+    navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status
     PublishNavStatus();
 
-    if(nav_succeeded) {
-      // Publish Visualizations
-      PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
-      DrawRobot();
-      DrawTarget();
-      DrawPathOptions();
-      PublishVisualizationMarkers();
-      PublishPath();
-      local_viz_msg_.header.stamp = ros::Time::now();
-      global_viz_msg_.header.stamp = ros::Time::now();
-      viz_pub_.publish(local_viz_msg_);
-      viz_pub_.publish(global_viz_msg_);
-      if (params.evaluator_type == "cost_map") {
-        viz_img.image = navigation_.GetVisualizationImage();
-        viz_img_pub_.publish(viz_img.toImageMsg());
-      }
-
-      // Publish Commands
-      SendCommand(cmd_vel, cmd_angle_vel);
+    // Publish Visualizations
+    PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
+    DrawRobot();
+    DrawTarget();
+    DrawPathOptions();
+    PublishVisualizationMarkers();
+    PublishPath();
+    local_viz_msg_.header.stamp = ros::Time::now();
+    global_viz_msg_.header.stamp = ros::Time::now();
+    viz_pub_.publish(local_viz_msg_);
+    // viz_pub_.publish(global_viz_msg_);
+    if (params.evaluator_type == "cost_map") {
+      viz_img.image = navigation_.GetVisualizationImage();
+      viz_img_pub_.publish(viz_img.toImageMsg());
     }
+    // Publish Commands
+    SendCommand(cmd_vel, cmd_angle_vel);
+
     loop.Sleep();
   }
   return 0;

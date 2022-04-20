@@ -47,10 +47,10 @@ using namespace geometry;
 
 namespace motion_primitives {
 
-float Run1DTimeOptimalControl(const MotionLimits& limits, 
-                              const float x_now, 
-                              const float v_now, 
-                              const float x_final, 
+float Run1DTimeOptimalControl(const MotionLimits& limits,
+                              const float x_now,
+                              const float v_now,
+                              const float x_final,
                               const float v_final,
                               const float dt) {
   // Non-zero final vel not yet implemented.
@@ -119,7 +119,7 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
 }
 
 
-float StraightLineClearance(const Line2f& l, 
+float StraightLineClearance(const Line2f& l,
                             const vector<Vector2f>& points) {
   const Vector2f d = l.Dir();
   const float len = l.Length();

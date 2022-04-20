@@ -73,14 +73,21 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
       path_to_goal_exists = true;
     }
   }
+  // If there is no path with an obstacle-free path from the end to the local target,
+  // then reset all distance to goals.
+  if (!path_to_goal_exists) {
+    for (size_t i = 0; i < paths.size(); ++i) {
+      const auto endpoint = paths[i]->EndPoint().translation;
+      dist_to_goal[i] = (endpoint - local_target).norm();
+    }
+  }
 
   // First find the shortest path.
   shared_ptr<PathRolloutBase> best = nullptr;
   float best_path_length = FLT_MAX;
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
-    const float path_length = (path_to_goal_exists ?
-        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+    const float path_length = paths[i]->Length() + dist_to_goal[i];
     if (path_length < best_path_length) {
       best_path_length = path_length;
       best = paths[i];
@@ -88,7 +95,6 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   if (best == nullptr) {
-    printf("No valid path found\n");
     // No valid paths!
     return nullptr;
   }
@@ -99,8 +105,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
       FLAGS_cw * best->Clearance();
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
-    const float path_length = (path_to_goal_exists ?
-        (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+    const float path_length = paths[i]->Length() + dist_to_goal[i];
     const float cost = FLAGS_dw * path_length +
       FLAGS_fw * paths[i]->Length() +
       FLAGS_cw * paths[i]->Clearance();

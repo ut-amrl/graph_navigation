@@ -44,39 +44,25 @@ SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 SET(libs roslib roscpp rosbag glog gflags amrl_shared_lib boost_system lua5.1
     pthread)
 
-ADD_LIBRARY(shared_library
-            src/visualization/visualization.cc
-            src/vector_map/vector_map.cc)
-
-ADD_SUBDIRECTORY(src/shared)
+ADD_SUBDIRECTORY(src)
 INCLUDE_DIRECTORIES(src/shared)
 INCLUDE_DIRECTORIES(src/config_reader/include)
 INCLUDE_DIRECTORIES(src/third_party)
 INCLUDE_DIRECTORIES(src)
-INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
-ROSBUILD_GENMSG()
 ROSBUILD_GENSRV()
 
 MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
-                        src/navigation/navigation.cc
-                        src/navigation/motion_primitives.cc
-                        src/navigation/ackermann_motion_primitives.cc
-                        src/navigation/constant_curvature_arcs.cc
-                        src/navigation/linear_evaluator.cc
-                        src/navigation/image_tiler.cc
-                        src/navigation/deep_cost_map_evaluator.cc
-                        src/navigation/image_based_evaluator.cc
-                        )
-TARGET_LINK_LIBRARIES(navigation 
-    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+                        src/visualization/visualization.cc)
+TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation)
 
+ROSBUILD_ADD_EXECUTABLE(social_nav
+                        src/navigation/social_main.cc
+                        src/visualization/visualization.cc)
+TARGET_LINK_LIBRARIES(social_nav ut_amrl_social_navigation)
 
-
-
-
-
-add_dependencies(navigation ${catkin_EXPORTED_TARGETS})
+ADD_DEPENDENCIES(navigation ${catkin_EXPORTED_TARGETS})
+ADD_DEPENDENCIES(social_nav ${catkin_EXPORTED_TARGETS})
