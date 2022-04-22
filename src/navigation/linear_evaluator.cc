@@ -48,10 +48,14 @@ using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
 
-DEFINE_double(dw, 1, "Distance weight");
-DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
+DEFINE_double(dw, 0.5, "Distance weight");
+DEFINE_double(cw, -1, "Clearance weight");
+DEFINE_double(fw, 0.0, "Free path weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
+DEFINE_double(fpl_avg_window,
+             0.2,
+             "The fraction of the total samples that are used to compute the "
+             "moving average local free path length");
 
 namespace motion_primitives {
 
@@ -94,6 +98,38 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
     }
   }
 
+  // Recompute clearance as the local weighted mean of the fpl around and
+  // including the current option.
+  vector<float> clearance(paths.size());
+  const int n = ceil(static_cast<float>(paths.size()) * FLAGS_fpl_avg_window);
+  // const int n = 2;
+  const float w = 1.0f / static_cast<float>(n);
+  if (FLAGS_v > 2) printf("\nPath options:\n");
+  for (size_t i = 0; i < paths.size(); ++i) {
+    clearance[i] = w * paths[i]->Length();
+    bool lower_bound = false;
+    bool upper_bound = false;
+    for (int j = 1; j < n; ++j) {
+      if (i + j >= paths.size() || static_cast<int>(i) < j) continue;
+      if (paths[i - j]->Length() <= 0.0f ||
+          paths[i + j]->Length() <= 0.0f) break;
+      if (paths[i - j]->Length() <= 0.0f) lower_bound = true;
+      if (paths[i + j]->Length() <= 0.0f) upper_bound = true;
+      if (!lower_bound) clearance[i] += w * paths[i - j]->Length();
+      if (!upper_bound) clearance[i] += w * paths[i + j]->Length();
+    }
+    if (FLAGS_v > 2) {
+      printf("%3d: curvature=%7.3f, fpl=%7.3f, avg_fpl=%7.3f, clearance=%7.3f, "
+             "dist_to_goal=%7.3f\n",
+             static_cast<int>(i),
+             reinterpret_cast<const ConstantCurvatureArc*>(paths[i].get())->curvature,
+             paths[i]->Length(),
+             clearance[i],
+             paths[i]->Clearance(),
+             dist_to_goal[i] < FLT_MAX ? dist_to_goal[i] : 1.0 /0.0f);
+    }
+  }
+
   if (best == nullptr) {
     // No valid paths!
     return nullptr;
@@ -104,11 +140,15 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
   for (size_t i = 0; i < paths.size(); ++i) {
+    
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = paths[i]->Length() + dist_to_goal[i];
+    // const float cost = FLAGS_dw * path_length +
+    //   FLAGS_fw * paths[i]->Length() +
+    //   FLAGS_cw * paths[i]->Clearance();
     const float cost = FLAGS_dw * path_length +
       FLAGS_fw * paths[i]->Length() +
-      FLAGS_cw * paths[i]->Clearance();
+      FLAGS_cw * clearance[i];
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;

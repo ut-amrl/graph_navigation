@@ -14,16 +14,16 @@ NavigationParameters = {
     y = 0;
   };
   dt = 0.025;
-  max_linear_accel = 0.5;
-  max_linear_decel = 0.5;
-  max_linear_speed = 2.0;
+  max_linear_accel = 3;
+  max_linear_decel = 3;
+  max_linear_speed = 1.0;
   max_angular_accel = 5;
   max_angular_decel = 5;
   max_angular_speed = 5.0;
   carrot_dist = 1;
   system_latency = 0.24;
   obstacle_margin = 0.05;
-  num_options = 31;
+  num_options = 71;
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
@@ -43,6 +43,6 @@ NavigationParameters = {
 };
 
 AckermannSampler = {
-  max_curvature = 2.5;
+  max_curvature = 10;
   clearance_path_clip_fraction = 0.8;
 };

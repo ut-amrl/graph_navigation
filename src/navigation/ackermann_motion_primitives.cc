@@ -59,7 +59,7 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   const float stopping_dist =
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
   if (fabs(path.curvature) < kEpsilon) {
-    printf("max_fpl:%f local_target.x:%f\n", nav_params.max_free_path_length, local_target.x());
+    // printf("max_fpl:%f local_target.x:%f\n", nav_params.max_free_path_length, local_target.x());
     path.length = min(nav_params.max_free_path_length, local_target.x());
     path.length = max(path.length, stopping_dist);
     return;
@@ -113,9 +113,18 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       CheckObstacles(sample);
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
-  } else {
+  } else if(false){
     const float dc = (2.0f * CONFIG_max_curvature) / static_cast<float>(n - 1);
     for (float c = -CONFIG_max_curvature; c <= CONFIG_max_curvature; c+= dc) {
+      auto sample = new ConstantCurvatureArc(c);
+      SetMaxPathLength(sample);
+      CheckObstacles(sample);
+      samples.push_back(shared_ptr<PathRolloutBase>(sample));
+    }
+  } else {
+    const float dx = 2.0 / static_cast<float>(n - 1);
+    for (float x = -1.0; x <= 1.0; x += dx) {
+      const float c = Sign(x) * x * x * CONFIG_max_curvature;
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
@@ -128,6 +137,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
 
 void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
+  path.clearance = nav_params.max_clearance;
   // How much the robot's body extends in front of its base link frame.
   const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
   // How much the robot's body extends behind its base link frame.
@@ -141,7 +151,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       if (fabs(p.y()) > w || p.x() < -l_back) continue;
       path.length = min(path.length, p.x() - l);
     }
-    path.clearance = nav_params.max_clearance;
     // return;
     for (const Vector2f& p : point_cloud) {
       if (p.x() > CONFIG_clearance_clip * path.length + l ||
@@ -156,7 +165,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     // printf("%6.2f : %6.2f\n", path.length, path.clearance);
     return;
   }
-
+  // return;
   const float path_radius = 1.0 / path.curvature;
   const Vector2f c(0, path_radius );
   const float s = ((path_radius > 0.0) ? 1.0 : -1.0);
@@ -220,6 +229,12 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       path.obstruction = p;
       angle_min = theta;
     }
+    if (path_length == 0.0) {
+      // printf("curvature: %f limiting point:%f, %f\n", 
+      //        path.curvature,
+      //        p.x(), p.y());
+      break;
+    }
   }
   path.length = max(0.0f, path.length);
   if (path.length < stopping_dist) {
@@ -227,7 +242,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     path.length = 0;
   }
   angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
-  path.clearance = nav_params.max_clearance;
 
   for (const Vector2f& p : point_cloud) {
     const float theta = ((path.curvature > 0.0f) ?

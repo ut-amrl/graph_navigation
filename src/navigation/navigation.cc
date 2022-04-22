@@ -595,7 +595,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
   evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
-  if (debug) {
+  if (false && debug) {
     printf("%lu options\n", paths.size());
     int i = 0;
     for (auto p : paths) {
@@ -605,6 +605,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
           i++, arc.curvature, arc.length, arc.clearance);
     }
   }
+  last_options_ = paths;
   if (paths.size() == 0) {
     // No options, just stop.
     Halt(vel_cmd, ang_vel_cmd);
@@ -632,7 +633,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          robot_omega_,
                          vel_cmd,
                          ang_vel_cmd);
-  last_options_ = paths;
   best_option_ = best_path;
 }
 

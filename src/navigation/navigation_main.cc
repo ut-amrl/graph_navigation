@@ -91,6 +91,7 @@ using std::vector;
 using sensor_msgs::PointCloud;
 using Eigen::Vector2f;
 using graph_navigation::graphNavSrv;
+using geometry_msgs::PoseStamped;
 using geometry_msgs::TwistStamped;
 using geometry::kEpsilon;
 using navigation::MotionLimits;
@@ -160,7 +161,7 @@ void EnablerCallback(const std_msgs::Bool& msg) {
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
-  if (FLAGS_v > 2) {
+  if (FLAGS_v > 3) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
   navigation::Odom odom;
@@ -182,7 +183,7 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
 }
 
 void LaserHandler(const sensor_msgs::LaserScan& msg) {
-  if (FLAGS_v > 2) {
+  if (FLAGS_v > 3) {
     printf("Laser t=%f, dt=%f\n",
            msg.header.stamp.toSec(),
            GetWallTime() - msg.header.stamp.toSec());
@@ -289,7 +290,7 @@ void SignalHandler(int) {
 
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   static string map  = "";
-  if (FLAGS_v > 2) {
+  if (FLAGS_v > 3) {
     printf("Localization t=%f\n", GetWallTime());
   }
   navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
@@ -516,6 +517,7 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
     option.curvature = arc.curvature;
     option.free_path_length = arc.Length();
     option.clearance = arc.Clearance();
+    option.closest_point = arc.obstruction;
     options.push_back(option);
   }
   return options;
@@ -534,7 +536,11 @@ void DrawPathOptions() {
         0x0000FF,
         false,
         local_viz_msg_);
+    visualization::DrawPoint(o.closest_point, 0xFF0000, local_viz_msg_);
   }
+  // for (const auto& p : point_cloud_) {
+  //   visualization::DrawPoint(p, 0xFF0000, local_viz_msg_);
+  // }
   if (best_option != nullptr) {
     const ConstantCurvatureArc best_arc =
       *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
@@ -878,7 +884,7 @@ int main(int argc, char** argv) {
   ros::Subscriber img_sub =
       n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
-      n.subscribe("move_base_simple/localgoal", 1, &GoToCallback);
+      n.subscribe("move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
       n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
   ros::Subscriber enabler_sub =
