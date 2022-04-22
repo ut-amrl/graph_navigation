@@ -182,6 +182,11 @@ class Navigation {
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
 
+  // Run gap following algorithm for navigation
+  void GapFollow(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  Eigen::Vector2f FindGapFollowTarget();
+  std::pair<size_t, size_t> FindWidestGap(const std::vector<float>& ranges);
+
   // Current robot location.
   Eigen::Vector2f robot_loc_;
   // Current robot orientation.

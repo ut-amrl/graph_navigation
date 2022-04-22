@@ -68,6 +68,7 @@ DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
 DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
+DEFINE_bool(test_gapfollow, false, "Run gap following algorithm test");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
@@ -359,6 +360,79 @@ void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
       params_.dt);
   cmd_vel = {velocity_cmd, 0};
   cmd_angle_vel = 0;
+}
+
+void Navigation::GapFollow(Vector2f& cmd_vel, float& cmd_angle_vel) {
+  local_target_ = FindGapFollowTarget();
+  RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+}
+
+Vector2f Navigation::FindGapFollowTarget() {
+  const float safety_margin = 0.6;  // size of bubble to draw around closest point, roughly length of the car
+
+  /* find largest gap in lidar points */
+  // create ranges array and find the closest lidar point
+  vector<float> ranges(fp_point_cloud_.size());
+  size_t closest_idx = 0;
+  float closest = fp_point_cloud_[0].norm();
+  for (size_t i = 0; i < ranges.size(); i++) {
+    ranges[i] = fp_point_cloud_[i].norm();
+    if (ranges[i] < closest) {
+      closest = ranges[i];
+      closest_idx = i;
+    }
+  }
+
+  // zero out things within safety margin
+  for (size_t i = 0; i < ranges.size(); i++) {
+    if ((fp_point_cloud_[i] - fp_point_cloud_[closest_idx]).norm() < safety_margin) {
+      ranges[i] = 0;
+    }
+  }
+
+  auto gap = FindWidestGap(ranges);
+
+  // return furthest point in widest gap as target
+  size_t furthest_idx = 0;
+  size_t furthest = 0;
+  for (size_t i = gap.first; i <= gap.second; i++) {
+    if (ranges[i] > furthest) {
+      furthest = ranges[i];
+      furthest_idx = i;
+    }
+  }
+
+  return fp_point_cloud_[furthest_idx];
+}
+
+std::pair<size_t, size_t> Navigation::FindWidestGap(const vector<float>& ranges) {
+  size_t c_start = 0;
+  size_t c_size = 0;
+  size_t max_start = 0;
+  size_t max_size = 0;
+
+  size_t c_idx = 0;
+
+  while (c_idx < ranges.size()) {
+    c_start = c_idx;
+    c_size = 0;
+    while (c_idx < ranges.size() && ranges[c_idx] >= 0.01) {
+      c_size++;
+      c_idx++;
+    }
+    if (c_size > max_size) {
+      max_start = c_start;
+      max_size = c_size;
+      c_size = 0;
+    }
+    c_idx++;
+  }
+  if (c_size > max_size) {
+    max_start = c_start;
+    max_size = c_size;
+  }
+
+  return {max_start, max_start + max_size - 1};
 }
 
 Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
@@ -848,6 +922,9 @@ bool Navigation::Run(const double& time,
     return true;
   } else if (FLAGS_test_latency) {
     LatencyTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } else if (FLAGS_test_gapfollow) {
+    GapFollow(cmd_vel, cmd_angle_vel);
     return true;
   }
 

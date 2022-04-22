@@ -6,6 +6,7 @@ build/*
 lib/*
 bin/*
 .clangd/*
+.cache/*
 srv_gen/*
 src/graph_navigation/srv/*
 src/graph_navigation/__init__.py
@@ -46,3 +47,5 @@ src/graph_navigation/__init__.py
 # Editors
 .vscode/
 compile_commands.json
+*.swp
+
