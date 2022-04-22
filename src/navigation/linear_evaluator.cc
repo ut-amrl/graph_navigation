@@ -89,12 +89,14 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   // First find the shortest path.
   shared_ptr<PathRolloutBase> best = nullptr;
   float best_path_length = FLT_MAX;
+  int best_i = 0;
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = paths[i]->Length() + dist_to_goal[i];
     if (path_length < best_path_length) {
       best_path_length = path_length;
       best = paths[i];
+      best_i = i;
     }
   }
 
@@ -138,7 +140,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   // Next try to find better paths.
   float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
-      FLAGS_cw * clearance[i];
+      FLAGS_cw * clearance[best_i];
   for (size_t i = 0; i < paths.size(); ++i) {
     
     if (paths[i]->Length() <= 0.0f) continue;
