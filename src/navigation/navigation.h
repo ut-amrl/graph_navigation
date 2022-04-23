@@ -142,6 +142,7 @@ class Navigation {
   const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
+  std::pair<size_t, size_t> GetGap();
 
  private:
 
@@ -228,6 +229,7 @@ class Navigation {
   double t_point_cloud_;
   // Time stamp of latest odometry message.
   double t_odometry_;
+  std::pair<size_t, size_t> gap;
 
   const std::string maps_dir_;
 

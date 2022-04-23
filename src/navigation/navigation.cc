@@ -390,7 +390,7 @@ Vector2f Navigation::FindGapFollowTarget() {
     }
   }
 
-  auto gap = FindWidestGap(ranges);
+  gap = FindWidestGap(ranges);
 
   // return furthest point in widest gap as target
   size_t furthest_idx = 0;
@@ -476,6 +476,10 @@ Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
 float GetClosestDistance(const PathOption& o, const Vector2f& target) {
   const Vector2f closest_point = GetClosestApproach(o, target);
   return (target - closest_point).norm();
+}
+
+std::pair<size_t, size_t> Navigation::GetGap() {
+  return gap;
 }
 
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,

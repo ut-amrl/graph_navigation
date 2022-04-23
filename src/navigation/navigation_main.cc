@@ -426,6 +426,17 @@ void DrawTarget() {
   visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 }
 
+void DrawGapAndTarget() {
+  const Eigen::Vector2f target = navigation_.GetTarget();
+  const std::pair<size_t, size_t> gap = navigation_.GetGap();
+  const vector<Eigen::Vector2f> pc = navigation_.GetPredictedCloud();
+
+  visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
+  for (auto i = gap.first; i < gap.second; i++) {
+    visualization::DrawPoint(pc[i], 0x0000FF, local_viz_msg_);
+  }
+}
+
 void DrawRobot() {
   const float kRobotLength = navigation_.GetRobotLength();
   const float kRobotWidth = navigation_.GetRobotWidth();
@@ -870,8 +881,7 @@ int main(int argc, char** argv) {
       // Publish Visualizations
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
-      DrawTarget();
-      DrawPathOptions();
+      DrawGapAndTarget();
       PublishVisualizationMarkers();
       PublishPath();
       local_viz_msg_.header.stamp = ros::Time::now();
