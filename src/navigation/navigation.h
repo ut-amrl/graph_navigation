@@ -54,6 +54,7 @@ struct PathOption {
   float free_path_length;
   float clearance_to_goal;
   float dist_to_goal;
+  bool obstacle_constrained;
   explicit PathOption(float c) : curvature(c) {}
   PathOption() {}
   Eigen::Vector2f obstruction;

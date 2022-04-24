@@ -134,6 +134,7 @@ vector<Vector2f> point_cloud_;
 sensor_msgs::LaserScan last_laser_msg_;
 cv::Mat last_image_;
 Navigation navigation_;
+vector<Vector2f> executed_trajectory_;
 
 // Publishers
 ros::Publisher ackermann_drive_pub_;
@@ -289,6 +290,7 @@ void SignalHandler(int) {
 // }
 
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
+  const size_t kMaxTrajectoryLength = 1000;
   static string map  = "";
   if (FLAGS_v > 3) {
     printf("Localization t=%f\n", GetWallTime());
@@ -298,6 +300,10 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
     map = msg.map;
     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
   }
+  if (executed_trajectory_.size() > kMaxTrajectoryLength) {
+    executed_trajectory_.erase(executed_trajectory_.begin());
+  }
+  executed_trajectory_.push_back(Vector2f(msg.pose.x, msg.pose.y));
 }
 
 void LocalizationSpoofedCallback(const nav_msgs::Odometry& msg) {
@@ -506,6 +512,12 @@ void DrawRobot() {
     visualization::DrawLine(
         Vector2f(l1, -w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
   }
+
+  for (size_t i = 0; i + 1 < executed_trajectory_.size(); ++i) {
+    const auto& p1 = executed_trajectory_[i];
+    const auto& p2 = executed_trajectory_[i + 1];
+    visualization::DrawLine(p1, p2, 0xC0C0C0, global_viz_msg_);
+  }
 }
 
 vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
@@ -518,6 +530,7 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
     option.free_path_length = arc.Length();
     option.clearance = arc.Clearance();
     option.closest_point = arc.obstruction;
+    option.obstacle_constrained = arc.obstacle_constrained;
     options.push_back(option);
   }
   return options;
@@ -530,10 +543,11 @@ void DrawPathOptions() {
   std::shared_ptr<PathRolloutBase> best_option =
       navigation_.GetOption();
   for (const auto& o : path_options) {
+    const uint32_t color = (o.obstacle_constrained ? 0x0000FF : 0x00FF00);
     visualization::DrawPathOption(o.curvature,
         o.free_path_length,
         o.clearance,
-        0x0000FF,
+        color,
         false,
         local_viz_msg_);
     visualization::DrawPoint(o.closest_point, 0xFF0000, local_viz_msg_);
@@ -848,10 +862,6 @@ int main(int argc, char** argv) {
   navigation_.Initialize(params, map_path);
 
   // Publishers
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
   ackermann_drive_pub_ = n.advertise<AckermannCurvatureDriveMsg>(
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
@@ -927,7 +937,7 @@ int main(int argc, char** argv) {
     local_viz_msg_.header.stamp = ros::Time::now();
     global_viz_msg_.header.stamp = ros::Time::now();
     viz_pub_.publish(local_viz_msg_);
-    // viz_pub_.publish(global_viz_msg_);
+    viz_pub_.publish(global_viz_msg_);
     if (params.evaluator_type == "cost_map") {
       viz_img.image = navigation_.GetVisualizationImage();
       viz_img_pub_.publish(viz_img.toImageMsg());

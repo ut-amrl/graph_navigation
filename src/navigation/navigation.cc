@@ -339,7 +339,7 @@ void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
 }
 
 void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-  const Vector2f kTarget(4, 0);
+  const Vector2f kTarget(10, 0);
   local_target_ = kTarget;
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
 }
@@ -585,6 +585,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   const bool debug = FLAGS_v > 1;
+  static float last_curvature_cmd_ = 0.0f;
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
@@ -606,10 +607,18 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     }
   }
   last_options_ = paths;
+  auto RecycleLastCurvature = [&]() {
+    if (fabs(last_curvature_cmd_) < 1000.0) {
+      ang_vel_cmd = last_curvature_cmd_ * vel_cmd.x();
+    } else {
+      ang_vel_cmd = 0.0f;
+    }
+  };
   if (paths.size() == 0) {
     // No options, just stop.
-    Halt(vel_cmd, ang_vel_cmd);
     if (debug) printf("No paths found\n");
+    Halt(vel_cmd, ang_vel_cmd);
+    RecycleLastCurvature();
     return;
   }
   auto best_path = evaluator_->FindBest(paths);
@@ -617,6 +626,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     if (debug) printf("No best path found\n");
     // No valid path found!
     Halt(vel_cmd, ang_vel_cmd);
+    RecycleLastCurvature();
     return;
   }
   ang_vel_cmd = 0;
@@ -634,6 +644,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          vel_cmd,
                          ang_vel_cmd);
   best_option_ = best_path;
+  last_curvature_cmd_ = ang_vel_cmd / vel_cmd.x();
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {

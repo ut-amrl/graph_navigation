@@ -66,6 +66,9 @@ struct PathRolloutBase {
                            const float angular_vel,
                            Eigen::Vector2f& vel_cmd,
                            float& ang_vel_cmd) const = 0;
+
+  // Indicates whether the path rollout terminates at an obstacle.
+  virtual bool IsObstacleConstrained() const = 0;
 };
 
 // Path rollout sampler.

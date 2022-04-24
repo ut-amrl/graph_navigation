@@ -43,6 +43,7 @@ using namespace math_util;
 
 CONFIG_FLOAT(max_curvature, "AckermannSampler.max_curvature");
 CONFIG_FLOAT(clearance_clip, "AckermannSampler.clearance_path_clip_fraction");
+CONFIG_BOOL(clip_cpoa, "AckermannSampler.clip_cpoa");
 
 namespace {
 // Epsilon value for handling limited numerical precision.
@@ -58,6 +59,14 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   const float stopping_dist =
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
+  if (!CONFIG_clip_cpoa) {
+    path.length = max(stopping_dist, nav_params.max_free_path_length);
+    if (fabs(path.curvature) > kEpsilon) {
+      path.length = min<float>(path.length, 1.5 * M_PI / fabs(path.curvature));
+    }
+    return;
+  }
+
   if (fabs(path.curvature) < kEpsilon) {
     // printf("max_fpl:%f local_target.x:%f\n", nav_params.max_free_path_length, local_target.x());
     path.length = min(nav_params.max_free_path_length, local_target.x());
@@ -137,6 +146,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
 
 void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
+  path.obstacle_constrained = false;
   path.clearance = nav_params.max_clearance;
   // How much the robot's body extends in front of its base link frame.
   const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
@@ -149,9 +159,12 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   if (fabs(path.curvature) < kEpsilon) {
     for (const Vector2f& p : point_cloud) {
       if (fabs(p.y()) > w || p.x() < -l_back) continue;
-      path.length = min(path.length, p.x() - l);
+      if (path.length > p.x() - l) {
+        path.obstacle_constrained = true;
+        path.length = p.x() - l;
+        path.obstruction = p;
+      }
     }
-    // return;
     for (const Vector2f& p : point_cloud) {
       if (p.x() > CONFIG_clearance_clip * path.length + l ||
           p.x() < -l_back) continue;
@@ -162,7 +175,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     if (path.length < stopping_dist) {
       path.length = 0;
     }
-    // printf("%6.2f : %6.2f\n", path.length, path.clearance);
     return;
   }
   // return;
@@ -177,8 +189,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
   const float r3_sq = (outer_front_corner - c).squaredNorm();
   float angle_min = M_PI;
   path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
-  // printf("%7.3f %7.3f %7.3f %7.3f\n",
-  //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
   // The x-coordinate of the rear margin.
   const float x_min = -0.5 * nav_params.robot_length +
       nav_params.base_link_offset - nav_params.obstacle_margin;
@@ -194,8 +204,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       break;
     }
     const float r_sq = (p - c).squaredNorm();
-    // printf("c:%.2f r:%.3f r1:%.3f r2:%.3f r3:%.3f\n",
-    //        path.curvature, sqrt(r_sq), r1, sqrt(r2_sq), sqrt(r3_sq));
     if (r_sq < r1_sq || r_sq > r3_sq) continue;
     const float r = sqrt(r_sq);
     const float theta = ((path.curvature > 0.0f) ?
@@ -228,17 +236,14 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
       path.length = path_length;
       path.obstruction = p;
       angle_min = theta;
+      path.obstacle_constrained = true;
     }
     if (path_length == 0.0) {
-      // printf("curvature: %f limiting point:%f, %f\n", 
-      //        path.curvature,
-      //        p.x(), p.y());
       break;
     }
   }
   path.length = max(0.0f, path.length);
   if (path.length < stopping_dist) {
-    // printf("Stopping dist: %6.2f\n", stopping_dist);
     path.length = 0;
   }
   angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
@@ -256,8 +261,6 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     }
   }
   path.clearance = max(0.0f, path.clearance);
-  // printf("%7.3f %7.3f %7.3f \n",
-  //     path.curvature, path.length, path.clearance);
 }
 
 }  // namespace motion_primitives

@@ -55,6 +55,9 @@ struct ConstantCurvatureArc : PathRolloutBase {
 
   pose_2d::Pose2Df GetIntermediateState(float f) const override;
 
+  // Indicates whether the path rollout terminates at an obstacle.
+  virtual bool IsObstacleConstrained() const { return obstacle_constrained; }
+
   // The pose of the robot at the end of the path rollout.
   void GetControls(const navigation::MotionLimits& linear_limits,
                    const navigation::MotionLimits& angular_limits,
@@ -68,6 +71,7 @@ struct ConstantCurvatureArc : PathRolloutBase {
   float length;
   float clearance;
   Eigen::Vector2f obstruction;
+  bool obstacle_constrained;
 };
 
 }  // namespace motion_primitives
