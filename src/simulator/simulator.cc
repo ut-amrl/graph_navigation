@@ -86,7 +86,6 @@ CONFIG_FLOAT(AngularErrorRate, "angular_error_rate");
 CONFIG_FLOAT(MaxLaserRange, "max_laser_range");
 CONFIG_FLOAT(LaserAngleIncrement, "laser_angle_increment");
 CONFIG_FLOAT(LaserFOV, "laser_fov");
-config_reader::ConfigReader reader({"config/simulator.lua"});
 
 string MapNameToFile(const string& map) {
   return kAmrlMapsDir + "/" + map + "/" + map + ".vectormap.txt";
@@ -115,6 +114,7 @@ void Simulator::ResetState() {
 }
 
 void Simulator::Init(ros::NodeHandle& n) {
+  config_reader::ConfigReader reader({"config/simulator.lua"});
   if (kAmrlMapsDir.empty()) {
     fprintf(stderr,
             "ERROR: AMRL maps directory not found. "

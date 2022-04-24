@@ -43,6 +43,12 @@ ros::NodeHandle* ros_nh_ = nullptr;
 
 namespace graph_nav_rl {
 
+extern "C" int Test(const char* str) {
+  printf("%s\n", str);
+  return 42;
+}
+
+extern "C"
 void Init() {
   int argc = 1;
   char argv0[] = "graph_nav_rl";
@@ -55,6 +61,7 @@ void Init() {
   }
 }
 
+extern "C"
 void Step() {
   CHECK(simulator_ptr_ != nullptr);
   amrl_msgs::AckermannCurvatureDriveMsg cmd;
@@ -64,6 +71,7 @@ void Step() {
   simulator_ptr_->Step(cmd, &odom_msg, &scan_msg, &localization_msg);
 }
 
+extern "C"
 void Reset() {
   CHECK(simulator_ptr_ != nullptr);
   simulator_ptr_->ResetState();

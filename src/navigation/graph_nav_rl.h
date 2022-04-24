@@ -24,11 +24,13 @@
 
 namespace graph_nav_rl {
 
-void Init();
+extern "C" int Test(const char* str);
 
-void Step();
+extern "C" void Init();
 
-void Reset();
+extern "C" void Step();
+
+extern "C" void Reset();
 
 }  // namespace graph_nav_rl
 #endif  // GRAPH_NAV_RL_H
