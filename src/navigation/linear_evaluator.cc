@@ -48,13 +48,13 @@ using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
 
-DEFINE_double(dw, 0.5, "Distance weight");
+DEFINE_double(dw, 0, "Distance weight");
 DEFINE_double(cw, -1, "Clearance weight");
 DEFINE_double(ow, 0.0, "Option clearance weight");
 DEFINE_double(fw, 0.0, "Free path weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 DEFINE_double(fpl_avg_window,
-             0.2,
+             0.1,
              "The fraction of the total samples that are used to compute the "
              "moving average local free path length");
 
