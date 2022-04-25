@@ -28,7 +28,8 @@ extern "C" int Test(const char* str);
 
 extern "C" void Init();
 
-extern "C" void Step();
+extern "C" bool Step(int action_size, double* action,
+                     int observation_size, double* observation);
 
 extern "C" void Reset();
 

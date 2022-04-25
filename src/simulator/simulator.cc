@@ -159,9 +159,9 @@ void Simulator::Init(ros::NodeHandle& n) {
   if (FLAGS_localize) {
     localization_publisher_ = n.advertise<amrl_msgs::Localization2DMsg>(
         "/localization", 1);
-    localization_msg_.header.seq = 0;
-    localization_msg_.header.frame_id = "map";
   }
+  localization_msg_.header.seq = 0;
+  localization_msg_.header.frame_id = "map";
   tf_broadcaster_ = new tf::TransformBroadcaster();
 }
 
@@ -394,6 +394,10 @@ void Simulator::DriveCallback(const AckermannCurvatureDriveMsg& msg) {
   t_last_cmd_ = GetMonotonicTime();
 }
 
+double Simulator::GetStepInterval() const {
+  return (CONFIG_SubSampleRate / CONFIG_PublishRate);
+}
+
 void Simulator::Update() {
   static const double kMaxCommandAge = 0.1;
   if (!step_mode_ && GetMonotonicTime() > t_last_cmd_ + kMaxCommandAge) {
@@ -428,6 +432,14 @@ void Simulator::Update() {
     dtheta = dist * desired_curvature;
     dLoc = r * Vector2f(sin(dtheta), 1.0 - cos(dtheta));
   }
+
+  // printf("%f %f %f %f %f %f\n",
+  //        robot_vel_,
+  //        desired_vel,
+  //        dv_max,
+  //        bounded_dv,
+  //        dist,
+  //        dtheta);
 
   odom_loc_ += Rotation2Df(odom_angle_) * dLoc;
   odom_angle_ = AngleMod(odom_angle_ + dtheta);
@@ -464,12 +476,12 @@ void Simulator::RunIteration() {
     last_publish_time_ = GetMonotonicTime();
   }
 
+  localization_msg_.pose.x = true_robot_loc_.x();
+  localization_msg_.pose.y = true_robot_loc_.y();
+  localization_msg_.pose.theta = true_robot_angle_;
+  localization_msg_.map = map_name_;
+  localization_msg_.header.stamp = ros::Time::now();
   if (FLAGS_localize) {
-    localization_msg_.pose.x = true_robot_loc_.x();
-    localization_msg_.pose.y = true_robot_loc_.y();
-    localization_msg_.pose.theta = true_robot_angle_;
-    localization_msg_.map = map_name_;
-    localization_msg_.header.stamp = ros::Time::now();
     localization_publisher_.publish(localization_msg_);
   }
 }

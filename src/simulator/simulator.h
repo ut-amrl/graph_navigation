@@ -151,6 +151,7 @@ public:
   void Run();
   void RunIteration();
   void SetStepMode(bool step_mode);
+  double GetStepInterval() const;
 
   void Step(const amrl_msgs::AckermannCurvatureDriveMsg& cmd,
             nav_msgs::Odometry* odom_msg,

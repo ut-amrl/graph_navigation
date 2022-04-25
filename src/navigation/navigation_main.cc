@@ -122,8 +122,6 @@ DEFINE_bool(debug_images, false, "Show debug images");
 bool run_ = true;
 bool simulate_ = false;
 bool enabled_ = false;
-bool received_odom_ = false;
-bool received_laser_ = false;
 Vector2f goal_ = {0, 0};
 Vector2f current_loc_ = {0, 0};
 Vector2f current_vel_ = {0, 0};
@@ -138,7 +136,6 @@ vector<Vector2f> executed_trajectory_;
 
 // Publishers
 ros::Publisher ackermann_drive_pub_;
-ros::Publisher vis_pub_;
 ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher map_lines_publisher_;
@@ -161,7 +158,7 @@ void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
 }
 
-navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
+void OdometryCallback(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 3) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
@@ -174,16 +171,10 @@ navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
   odom.position = {static_cast<float>(msg.pose.pose.position.x),
                    static_cast<float>(msg.pose.pose.position.y),
                    static_cast<float>(msg.pose.pose.position.z)};
-  return odom;
+  navigation_.UpdateOdometry(odom);
 }
 
-void OdometryCallback(const nav_msgs::Odometry& msg) {
-  received_odom_ = true;
-  odom_ = OdomHandler(msg);
-  navigation_.UpdateOdometry(odom_);
-}
-
-void LaserHandler(const sensor_msgs::LaserScan& msg) {
+void LaserCallback(const sensor_msgs::LaserScan& msg) {
   if (FLAGS_v > 3) {
     printf("Laser t=%f, dt=%f\n",
            msg.header.stamp.toSec(),
@@ -216,11 +207,6 @@ void LaserHandler(const sensor_msgs::LaserScan& msg) {
       msg.ranges[i] : msg.range_max);
     point_cloud_[i] = r * cached_rays_[i] + kLaserLoc;
   }
-}
-
-void LaserCallback(const sensor_msgs::LaserScan& msg) {
-  received_laser_ = true;
-  LaserHandler(msg);
   navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
 }
 

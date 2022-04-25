@@ -274,6 +274,10 @@ void Navigation::ForwardPredict(double t) {
                        latest_odom_msg_.position.y());
   odom_angle_ = 2.0f * atan2f(latest_odom_msg_.orientation.z(),
                               latest_odom_msg_.orientation.w());
+  if (true) {
+    fp_point_cloud_ = point_cloud_;
+    return;
+  }
   using Eigen::Affine2f;
   using Eigen::Rotation2Df;
   using Eigen::Translation2f;

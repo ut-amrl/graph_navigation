@@ -1,5 +1,6 @@
 import cffi
 import time
+import numpy as np
 
 ffi = cffi.FFI()
 with open("scripts/graph_nav_rl_export.h") as h_file:
@@ -7,17 +8,18 @@ with open("scripts/graph_nav_rl_export.h") as h_file:
 
 C = ffi.dlopen("./lib/libgraph_nav_rl.so")
 
-def hello(name):
-    C.Init()
-    p = ffi.new("char[]", b"hello world!")
-    x = C.Test(p)
-    print(x)
-
 
 if __name__ == "__main__":
-    hello("hello cffi")
-    for i in range(100):
-        # Sleep for 0.1 seconds
-        time.sleep(0.1)
-        print(i)
-        C.Step()
+  print("Initializing simulator...")
+  C.Init()
+  print("Simulator initialized!")
+  for i in range(800):
+    time.sleep(0.025)
+    action_size = 2
+    action = 42 * np.ones(action_size, dtype = np.float64)
+    action_ptr = ffi.cast("double *", action.ctypes.data)
+    observation_size = 41
+    observation = np.zeros(observation_size, dtype = np.float64)
+    observation_ptr = ffi.cast("double *", observation.ctypes.data)
+    success = C.Step(action_size, action_ptr, observation_size, observation_ptr)
+    print('Simulator step: {} success: {}'.format(i, success))
