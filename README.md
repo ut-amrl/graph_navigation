@@ -51,9 +51,9 @@ sudo apt install libgoogle-glog-dev libgflags-dev liblua5.1-0-dev
       ```
 3. Edit the `__init__.py` file from the Gym environments directory (e.g. `$HOME/anaconda3/envs/spinningup/lib/python3.6/site-packages/gym/envs/__init__.py`) to include the following lines:
       ```
-      from ut_automata_gym_env.py import UTAUTOmata
+      from ut_automata_gym_env import UTAUTOmata
       register(
-          id='UTAUTOmata',
+          id='UTAUTOmata-v0',
           entry_point='gym.envs:UTAUTOmata',
           max_episode_steps=200,
           reward_threshold=25.0,
