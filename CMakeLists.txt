@@ -25,7 +25,7 @@ ROSBUILD_INIT()
 SET(ROS_BUILD_STATIC_LIBS true)
 SET(ROS_BUILD_SHARED_LIBS true)
 
-LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
+LIST(APPEND CMAKE_PREFIX_PATH "/home/amrl_user/.local/lib/python3.6/site-packages/torch")
 FIND_PACKAGE(Torch REQUIRED)
 FIND_PACKAGE(OpenCV REQUIRED)
 
@@ -57,18 +57,18 @@ MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
                         src/visualization/visualization.cc)
-TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation)
+TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation ${libs})
 
-ROSBUILD_ADD_EXECUTABLE(social_nav
-                        src/navigation/social_main.cc
-                        src/visualization/visualization.cc)
-TARGET_LINK_LIBRARIES(social_nav ut_amrl_social_navigation)
+# ROSBUILD_ADD_EXECUTABLE(social_nav
+#                         src/navigation/social_main.cc
+#                         src/visualization/visualization.cc)
+# TARGET_LINK_LIBRARIES(social_nav ut_amrl_social_navigation libs)
 
 ADD_DEPENDENCIES(navigation ${catkin_EXPORTED_TARGETS})
-ADD_DEPENDENCIES(social_nav ${catkin_EXPORTED_TARGETS})
+# ADD_DEPENDENCIES(social_nav ${catkin_EXPORTED_TARGETS})
 
-ROSBUILD_ADD_LIBRARY(graph_nav_rl
-                     src/navigation/graph_nav_rl.cc
-                     src/visualization/visualization.cc
-                     src/simulator/simulator.cc)
-TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
+# ROSBUILD_ADD_LIBRARY(graph_nav_rl
+#                      src/navigation/graph_nav_rl.cc
+#                      src/visualization/visualization.cc
+#                      src/simulator/simulator.cc)
+# TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
