@@ -45,21 +45,7 @@ sudo apt install libgoogle-glog-dev libgflags-dev liblua5.1-0-dev
 
 1. Build the project as above.
 2. Install [Spinning Up](https://spinningup.openai.com/en/latest/user/installation.html)
-3. Create a symlink to `scripts/ut_automata_gym_env.py` from your anaconda AI Gym install path, for example:
-      ```
-      ln -s `rospack find graph_navigation`/scripts/ut_automata_gym_env.py $HOME/anaconda3/envs/spinningup/lib/python3.6/site-packages/gym/envs/ut_automata_gym_env.py
-      ```
-3. Edit the `__init__.py` file from the Gym environments directory (e.g. `$HOME/anaconda3/envs/spinningup/lib/python3.6/site-packages/gym/envs/__init__.py`) to include the following lines:
-      ```
-      from ut_automata_gym_env import UTAUTOmata
-      register(
-          id='UTAUTOmata-v0',
-          entry_point='gym.envs:UTAUTOmata',
-          max_episode_steps=200,
-          reward_threshold=25.0,
-      )
-      ```
-4. Once set up, you should be able to run the example RL agent in the Gym environment as follows:
+3. You should be able to run the UT AUTOmata + GraphNavigation RL agent in the Gym environment as follows:
       ```
       # Activate the conda environment with Spinning Up
       conda activate spinningup
