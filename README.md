@@ -51,6 +51,7 @@ sudo apt install libgoogle-glog-dev libgflags-dev liblua5.1-0-dev
       conda activate spinningup
       python scripts/test_ut_automata_gym.py
       ```
+4. You can visualize what the RL agent is doing using websocket and web_rviz.html.
 
 
 ## Run
