@@ -42,7 +42,7 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
-#include "deep_cost_map_evaluator.h"
+// #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
 
 using Eigen::Rotation2Df;
@@ -164,9 +164,10 @@ void Navigation::Initialize(const NavigationParameters& params,
 
   PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
-    auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
-    cost_map_evaluator->LoadModel();
-    evaluator = (PathEvaluatorBase*) cost_map_evaluator;
+    // auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
+    // cost_map_evaluator->LoadModel();
+    // evaluator = (PathEvaluatorBase*) cost_map_evaluator;
+    CHECK(false) << "Deep Cost map evaluator disabled on this branch!";
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*) new LinearEvaluator();
   } else {
@@ -417,10 +418,10 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
   PruneLatencyQueue();
 }
 
-void Navigation::ObserveImage(cv::Mat image, double time) {
-  latest_image_ = image;
-  t_image_ = time;
-}
+// void Navigation::ObserveImage(cv::Mat image, double time) {
+//   latest_image_ = image;
+//   t_image_ = time;
+// }
 
 vector<int> Navigation::GlobalPlan(const Vector2f& initial,
                                    const Vector2f& end) {
@@ -822,15 +823,6 @@ float Navigation::GetBaseLinkOffset() {
 
 vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
-}
-
-const cv::Mat& Navigation::GetVisualizationImage() {
-  if (params_.evaluator_type == "cost_map") {
-    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_vis_image_;
-  } else {
-    std::cerr << "No visualization image for linear evaluator" << std::endl;
-    exit(1);
-  }
 }
 
 std::shared_ptr<PathRolloutBase> Navigation::GetOption() {

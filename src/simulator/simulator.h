@@ -107,7 +107,7 @@ class Simulator{
   Eigen::Vector2f true_robot_loc_;
   float true_robot_angle_;
 
-  double t_last_cmd_;
+  double t_last_cmd_ = 0.0;
 
   geometry_msgs::PoseStamped truePoseMsg;
 
@@ -123,6 +123,7 @@ class Simulator{
   Eigen::Vector2f odom_loc_;
   float odom_angle_;
   bool step_mode_ = false;
+  double sim_time_ = 0.0;
 
 private:
   void InitVizMarker(visualization_msgs::Marker& vizMarker,

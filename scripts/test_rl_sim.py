@@ -13,8 +13,8 @@ if __name__ == "__main__":
   print("Initializing simulator...")
   C.Init()
   print("Simulator initialized!")
-  for i in range(800):
-    time.sleep(0.025)
+  for i in range(1000):
+    # time.sleep(0.002)
     action_size = 2
     action = 42 * np.ones(action_size, dtype = np.float64)
     action_ptr = ffi.cast("double *", action.ctypes.data)

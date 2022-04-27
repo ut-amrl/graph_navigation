@@ -46,3 +46,7 @@ src/graph_navigation/__init__.py
 # Editors
 .vscode/
 compile_commands.json
+
+ppo_logging_dir
+
+scripts/__pycache__/

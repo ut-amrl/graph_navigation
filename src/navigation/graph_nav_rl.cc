@@ -516,7 +516,7 @@ bool Step(int action_size, double* action,
   // Get the action from the RL agent.
   CHECK_EQ(action_size, 2);
   // Vector2f rl_action(action[0], action[1]);
-  printf("Action: %f, %f\n", action[0], action[1]);
+  // printf("Action: %f, %f\n", action[0], action[1]);
 
   // Run Navigation to get commands
   visualization::ClearVisualizationMsg(local_viz_msg_);
@@ -560,6 +560,7 @@ bool Step(int action_size, double* action,
   LaserCallback(scan_msg);
   LocalizationCallback(localization_msg);
   localization_pub_.publish(localization_msg);
+  ros::spinOnce();
   return success;
 }
 

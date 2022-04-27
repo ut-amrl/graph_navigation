@@ -96,7 +96,6 @@ Simulator::Simulator() :
     odom_loc_(random_.UniformRandom(-10, 10),
               random_.UniformRandom(-10, 10)),
     odom_angle_(random_.UniformRandom(-M_PI, M_PI)) {
-  t_last_cmd_ = GetMonotonicTime();
   truePoseMsg.header.seq = 0;
   truePoseMsg.header.frame_id = "map";
 }
@@ -111,6 +110,8 @@ void Simulator::ResetState() {
   true_robot_angle_ = CONFIG_StartAngle;
   map_name_ = CONFIG_MapName;
   map_.Load(MapNameToFile(CONFIG_MapName));
+  sim_time_ = 0;
+  last_publish_time_ = 0;
 }
 
 void Simulator::Init(ros::NodeHandle& n) {
@@ -391,7 +392,7 @@ void Simulator::DriveCallback(const AckermannCurvatureDriveMsg& msg) {
     return;
   }
   last_cmd_ = msg;
-  t_last_cmd_ = GetMonotonicTime();
+  t_last_cmd_ = sim_time_;
 }
 
 double Simulator::GetStepInterval() const {
@@ -400,7 +401,7 @@ double Simulator::GetStepInterval() const {
 
 void Simulator::Update() {
   static const double kMaxCommandAge = 0.1;
-  if (!step_mode_ && GetMonotonicTime() > t_last_cmd_ + kMaxCommandAge) {
+  if (!step_mode_ && sim_time_ > t_last_cmd_ + kMaxCommandAge) {
     last_cmd_.velocity = 0;
   }
   const float dt = CONFIG_SubSampleRate / CONFIG_PublishRate;
@@ -461,10 +462,11 @@ void Simulator::Update() {
 }
 
 void Simulator::RunIteration() {
+  sim_time_ += (1.0 / CONFIG_PublishRate) * CONFIG_SubSampleRate;
   // Simulate time-step.
   Update();
 
-  if (last_publish_time_ < GetMonotonicTime() - 1.0 / CONFIG_PublishRate) {
+  if (last_publish_time_ < sim_time_ - 1.0 / CONFIG_PublishRate) {
       //publish odometry and status
     PublishOdometry();
     //publish laser rangefinder messages
@@ -473,7 +475,7 @@ void Simulator::RunIteration() {
     PublishVisualizationMarkers();
     //publish tf
     PublishTransform();
-    last_publish_time_ = GetMonotonicTime();
+    last_publish_time_ = sim_time_;
   }
 
   localization_msg_.pose.x = true_robot_loc_.x();

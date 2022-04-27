@@ -56,7 +56,7 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
   // Non-zero final vel not yet implemented.
   CHECK_EQ(v_final, 0.0f) << "Non-zero final vel not yet implemented!";
   static FILE* fid = nullptr;
-  const bool kTest = true;
+  const bool kTest = false;
   const string kTestLogFile = "1DTOC.txt";
   if (kTest && fid == nullptr) {
     fid = fopen(kTestLogFile.c_str(), "w");

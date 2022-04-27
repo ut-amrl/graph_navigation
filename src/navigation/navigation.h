@@ -96,7 +96,7 @@ class Navigation {
   void UpdateCommandHistory(Twist twist);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                          double time);
-  void ObserveImage(cv::Mat image, double time);
+  // void ObserveImage(cv::Mat image, double time);
   bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
@@ -147,7 +147,7 @@ class Navigation {
   float GetRobotWidth();
   float GetRobotLength();
   float GetBaseLinkOffset();
-  const cv::Mat& GetVisualizationImage();
+  // const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 

@@ -14,9 +14,9 @@ INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 ADD_LIBRARY(ut_amrl_navigation
             navigation/ackermann_motion_primitives.cc
             navigation/constant_curvature_arcs.cc
-            navigation/deep_cost_map_evaluator.cc
-            navigation/image_based_evaluator.cc
-            navigation/image_tiler.cc
+            # navigation/deep_cost_map_evaluator.cc
+            # navigation/image_based_evaluator.cc
+            # navigation/image_tiler.cc
             navigation/linear_evaluator.cc
             navigation/motion_primitives.cc
             navigation/navigation.cc
@@ -29,19 +29,19 @@ TARGET_LINK_LIBRARIES(ut_amrl_navigation
                       lua5.1
                       ${OpenCV_LIBS}
                       pthread
-                      ${TORCH_LIBRARIES}
+                      # ${TORCH_LIBRARIES}
 )
 
-ADD_LIBRARY(ut_amrl_social_navigation navigation/social_nav.cc)
-TARGET_LINK_LIBRARIES(ut_amrl_social_navigation ut_amrl_navigation)
+# ADD_LIBRARY(ut_amrl_social_navigation navigation/social_nav.cc)
+# TARGET_LINK_LIBRARIES(ut_amrl_social_navigation ut_amrl_navigation)
 
-ADD_EXECUTABLE(navigation_tests
-    navigation/navigation_tests.cc
-    navigation/motion_primitives.cc
-)
-TARGET_LINK_LIBRARIES(navigation_tests
-    gtest
-    gtest_main
-    glog
-    gflags
-    pthread)
+# ADD_EXECUTABLE(navigation_tests
+#     navigation/navigation_tests.cc
+#     navigation/motion_primitives.cc
+# )
+# TARGET_LINK_LIBRARIES(navigation_tests
+#     gtest
+#     gtest_main
+#     glog
+#     gflags
+#     pthread)
