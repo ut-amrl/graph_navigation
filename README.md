@@ -41,6 +41,19 @@ sudo apt install libgoogle-glog-dev libgflags-dev liblua5.1-0-dev
     ```
 1. Do **not** run `cmake`, `catkin_make`, `rosbuild`.
 
+## [Optional] Setting Up AI Gym Environment
+
+1. Build the project as above.
+2. Install [Spinning Up](https://spinningup.openai.com/en/latest/user/installation.html)
+3. You should be able to run the UT AUTOmata + GraphNavigation RL agent in the Gym environment as follows:
+      ```
+      # Activate the conda environment with Spinning Up
+      conda activate spinningup
+      python scripts/test_ut_automata_gym.py
+      ```
+4. You can visualize what the RL agent is doing using websocket and web_rviz.html.
+
+
 ## Run
 
 Run `./bin/navigation`   

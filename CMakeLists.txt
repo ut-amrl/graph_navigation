@@ -57,7 +57,7 @@ MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
                         src/visualization/visualization.cc)
-TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation)
+TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation ${libs})
 
 # ROSBUILD_ADD_EXECUTABLE(social_nav
 #                         src/navigation/social_main.cc
@@ -67,8 +67,8 @@ TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation)
 ADD_DEPENDENCIES(navigation ${catkin_EXPORTED_TARGETS})
 # ADD_DEPENDENCIES(social_nav ${catkin_EXPORTED_TARGETS})
 
-ROSBUILD_ADD_LIBRARY(graph_nav_rl
-                     src/navigation/graph_nav_rl.cc
-                     src/visualization/visualization.cc
-                     src/simulator/simulator.cc)
-TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
+# ROSBUILD_ADD_LIBRARY(graph_nav_rl
+#                      src/navigation/graph_nav_rl.cc
+#                      src/visualization/visualization.cc
+#                      src/simulator/simulator.cc)
+# TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
