@@ -95,6 +95,7 @@ class Navigation {
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
   void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
+                         float laser_scan_increment,
                          double time);
   // void ObserveImage(cv::Mat image, double time);
   bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
@@ -159,6 +160,8 @@ class Navigation {
   void ObstacleTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test obstacle avoidance.
   void ObstAvTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  // Test disparity extender (f1/10).
+  void DisparityTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test planner.
   void PlannerTest();
   // Run obstacle avoidance local planner.
@@ -189,6 +192,8 @@ class Navigation {
   void DrawRobot();
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
+  // Get a carrot goal using the disparity extender algorithm
+  Eigen::Vector2f DisparityExtender();
 
   // Current robot location.
   Eigen::Vector2f robot_loc_;
@@ -227,6 +232,8 @@ class Navigation {
   std::vector<Eigen::Vector2f> point_cloud_;
   // Point cloud from last laser scan observed, forward predicted for latency compensation.
   std::vector<Eigen::Vector2f> fp_point_cloud_;
+  // Angle increment of last laser scan
+  float laser_scan_increment_;
   // Time stamp of observation of point cloud.
   double t_point_cloud_;
   // Time stamp of latest odometry message.

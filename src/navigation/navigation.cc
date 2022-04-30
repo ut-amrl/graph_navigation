@@ -70,6 +70,7 @@ DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
 DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
+DEFINE_bool(test_disp, false, "Run disparity extender");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
@@ -343,6 +344,13 @@ void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   cmd_angle_vel = 0.0;
 }
 
+void Navigation::DisparityTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
+
+  const Vector2f kTarget = DisparityExtender();
+  local_target_ = kTarget;
+  RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+}
+
 void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const Vector2f kTarget(10, 0);
   local_target_ = kTarget;
@@ -366,6 +374,38 @@ void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
       params_.dt);
   cmd_vel = {velocity_cmd, 0};
   cmd_angle_vel = 0;
+}
+
+Vector2f Navigation::DisparityExtender() {
+  float biggest_dist = 0;
+  size_t biggest_idx = 0;
+  for (size_t i = 1; i < fp_point_cloud_.size(); i++) {
+    float ri = fp_point_cloud_[i].norm();
+    float ri1 = fp_point_cloud_[i - 1].norm();
+    int num_points = 0;
+    if (ri - ri1 > 0.2) {
+      num_points = (int)ceil(atan(params_.robot_width / ri) / laser_scan_increment_);
+      for (size_t j = i-1; j > std::max((size_t)0, i - num_points); j--) {
+        fp_point_cloud_[j] = fp_point_cloud_[i];
+      }
+      if (ri > biggest_dist) {
+        biggest_dist = ri;
+        biggest_idx = i;
+      }
+    }
+    else if (ri1 - ri > 0.2) {
+      num_points = (int)ceil(atan(params_.robot_width / ri1) / laser_scan_increment_);
+      for (size_t j = i; j < std::min(fp_point_cloud_.size(), i + num_points) ; j++) {
+        fp_point_cloud_[j] = fp_point_cloud_[i];
+      }
+      if (ri1 > biggest_dist) {
+        biggest_dist = ri1;
+        biggest_idx = i-1;
+      }
+    }
+  }
+
+  return fp_point_cloud_[biggest_idx];
 }
 
 Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
@@ -412,9 +452,11 @@ float GetClosestDistance(const PathOption& o, const Vector2f& target) {
 }
 
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
+                                   float laser_scan_increment,
                                    double time) {
   point_cloud_ = cloud;
   t_point_cloud_ = time;
+  laser_scan_increment_ = laser_scan_increment;
   PruneLatencyQueue();
 }
 
@@ -864,6 +906,9 @@ bool Navigation::Run(const double& time,
     return true;
   } else if (FLAGS_test_latency) {
     LatencyTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } else if (FLAGS_test_disp) {
+    DisparityTest(cmd_vel, cmd_angle_vel);
     return true;
   }
 

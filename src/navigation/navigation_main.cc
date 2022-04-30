@@ -207,7 +207,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
       msg.ranges[i] : msg.range_max);
     point_cloud_[i] = r * cached_rays_[i] + kLaserLoc;
   }
-  navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
+  navigation_.ObservePointCloud(point_cloud_, cached_dtheta_, msg.header.stamp.toSec());
 }
 
 void GoToCallback(const geometry_msgs::PoseStamped& msg) {
