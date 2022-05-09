@@ -345,7 +345,6 @@ void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
 }
 
 void Navigation::DisparityTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-
   const Vector2f kTarget = DisparityExtender();
   local_target_ = kTarget;
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
@@ -377,35 +376,68 @@ void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
 }
 
 Vector2f Navigation::DisparityExtender() {
-  float biggest_dist = 0;
-  size_t biggest_idx = 0;
-  for (size_t i = 1; i < fp_point_cloud_.size(); i++) {
-    float ri = fp_point_cloud_[i].norm();
-    float ri1 = fp_point_cloud_[i - 1].norm();
-    int num_points = 0;
-    if (ri - ri1 > 0.2) {
-      num_points = (int)ceil(atan(params_.robot_width / ri) / laser_scan_increment_);
-      for (size_t j = i-1; j > std::max((size_t)0, i - num_points); j--) {
-        fp_point_cloud_[j] = fp_point_cloud_[i];
-      }
-      if (ri > biggest_dist) {
-        biggest_dist = ri;
-        biggest_idx = i;
-      }
+  static const float threshold = 0.1;
+  static const float safety_margin = params_.robot_width + 0.1;
+
+  // calculate predicted ranges and ignore things behind the car
+  vector<float> ranges(fp_point_cloud_.size());
+  for (size_t i = 0; i < ranges.size(); i++) {
+    if (i < 180 || i > 900) {
+      ranges[i] = 0;
+    } else {
+      ranges[i] = fp_point_cloud_[i].norm();
     }
-    else if (ri1 - ri > 0.2) {
-      num_points = (int)ceil(atan(params_.robot_width / ri1) / laser_scan_increment_);
-      for (size_t j = i; j < std::min(fp_point_cloud_.size(), i + num_points) ; j++) {
-        fp_point_cloud_[j] = fp_point_cloud_[i];
-      }
-      if (ri1 > biggest_dist) {
-        biggest_dist = ri1;
-        biggest_idx = i-1;
-      }
+  }
+  ranges[901] = ranges[900]; // so that we don't always get a disparity on the last point
+
+  vector<size_t> disparities;
+  for (size_t i = 180; i < 901; i++) {
+    if (abs(ranges[i] - ranges[i + 1]) >= threshold) {
+      disparities.push_back(i);
     }
   }
 
-  return fp_point_cloud_[biggest_idx];
+  for (auto i : disparities) {
+    float r1 = ranges[i];
+    float r2 = ranges[i+1];
+    bool left = r1 < r2;
+    float closer = left ? r1 : r2;
+    size_t closer_idx = left ? i : i + 1;
+
+    float arc_len = laser_scan_increment_ * closer;
+    size_t num_expansions = (size_t)(ceil(safety_margin / arc_len));
+    size_t curr = closer_idx;
+    for (size_t k = 0; k < num_expansions; k++) {
+      if (curr < 180 || curr > 900)
+        break;
+
+      // only extend if it would make the scan appear closer
+      if (ranges[curr] > closer)
+        ranges[curr] = closer;
+
+      if (left)
+        curr++;
+      else
+        curr--;
+    }
+  }
+  filtered_laser_scans_ = ranges;
+
+  // set the farthest point as the carrot
+  float farthest = 0;
+  size_t farthest_idx = 0;
+  for (size_t i = 0; i < ranges.size(); i++) {
+    if (ranges[i] > farthest) {
+      farthest = ranges[i];
+      farthest_idx = i;
+    }
+  }
+
+  return fp_point_cloud_[farthest_idx];
+}
+
+vector<float> Navigation::GetFilteredLaserScans() {
+  return filtered_laser_scans_;
 }
 
 Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {

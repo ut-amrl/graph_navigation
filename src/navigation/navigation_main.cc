@@ -506,6 +506,15 @@ void DrawRobot() {
   }
 }
 
+void DrawDisparityExtension() {
+  auto cloud = navigation_.GetPredictedCloud();
+  auto scans = navigation_.GetFilteredLaserScans();
+  for (size_t i = 0; i < scans.size(); i++) {
+    auto scaled = (cloud[i] / cloud[i].norm()) * scans[i];
+    visualization::DrawPoint(scaled, 0xFF00FF, local_viz_msg_);
+  }
+}
+
 vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
   vector<PathOption> options;
   for (size_t i = 0; i < paths.size(); ++i) {
@@ -917,6 +926,7 @@ int main(int argc, char** argv) {
     PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
     DrawRobot();
     DrawTarget();
+    DrawDisparityExtension();
     DrawPathOptions();
     PublishVisualizationMarkers();
     PublishPath();

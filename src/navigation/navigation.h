@@ -148,6 +148,7 @@ class Navigation {
   float GetRobotWidth();
   float GetRobotLength();
   float GetBaseLinkOffset();
+  std::vector<float> GetFilteredLaserScans();
   // const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
@@ -232,6 +233,8 @@ class Navigation {
   std::vector<Eigen::Vector2f> point_cloud_;
   // Point cloud from last laser scan observed, forward predicted for latency compensation.
   std::vector<Eigen::Vector2f> fp_point_cloud_;
+  // Filtered laser scans
+  std::vector<float> filtered_laser_scans_;
   // Angle increment of last laser scan
   float laser_scan_increment_;
   // Time stamp of observation of point cloud.
