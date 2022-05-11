@@ -41,6 +41,7 @@ extern nav_msgs::Path global_path_move_base;
 namespace navigation {
 
 inline std::string GetMapPath(const std::string& dir, const std::string& name) {
+  cout << name << endl;
   return dir + "/" + name + "/" + name + ".navigation.json";
 }
 

@@ -462,7 +462,14 @@ struct GraphDomain {
     float closest_dist = FLT_MAX;
     if (!GetClosestEdge(p, &closest_edge, &closest_dist)) return;
     if (clearance) *clearance = closest_edge.max_clearance;
-    if (speed) *speed = closest_edge.max_speed;
+    printf("closest_edge.max_speed: %f\n", closest_edge.max_speed);
+    if (speed) {
+      *speed = closest_edge.max_speed;
+      if(p.y() < 2.0 || p.y() > 8) { // quick hard code for testing
+        *speed = 1.5;
+        printf("Altered max_map_speed to 1.5\n");
+      }
+    }
   }
 
   std::vector<State> states;
