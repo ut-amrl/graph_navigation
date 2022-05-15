@@ -515,6 +515,18 @@ void DrawDisparityExtension() {
   }
 }
 
+void DrawGraph() {
+  auto domain = navigation_.GetDomain();
+  auto edges = domain.edges;
+  for (auto edge : edges) {
+    auto s0 = domain.KeyToState(edge.s0_id);
+    auto s1 = domain.KeyToState(edge.s1_id);
+    visualization::DrawPoint(s0.loc, 0xFF0000, global_viz_msg_);
+    visualization::DrawPoint(s1.loc, 0xFF0000, global_viz_msg_);
+    visualization::DrawLine(s0.loc, s1.loc, 0xFF4444, global_viz_msg_);
+  }
+}
+
 vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
   vector<PathOption> options;
   for (size_t i = 0; i < paths.size(); ++i) {
@@ -924,6 +936,7 @@ int main(int argc, char** argv) {
 
     // Publish Visualizations
     PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
+    DrawGraph();
     DrawRobot();
     DrawTarget();
     DrawDisparityExtension();
