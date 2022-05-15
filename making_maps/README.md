@@ -65,3 +65,4 @@ You can then save the map to a file by running :
 ```
 rostopic pub /vector_map/save_to_file std_msgs/String "data: 'OUTPUT/PATH/TO/MAP'"
 ```
+You can convert the saved map file to `.json` by running this [script](https://github.com/ut-amrl/amrl_maps/blob/master/utility_scripts/txt_to_json.c).
