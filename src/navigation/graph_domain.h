@@ -462,13 +462,41 @@ struct GraphDomain {
     float closest_dist = FLT_MAX;
     if (!GetClosestEdge(p, &closest_edge, &closest_dist)) return;
     if (clearance) *clearance = closest_edge.max_clearance;
-    printf("closest_edge.max_speed: %f\n", closest_edge.max_speed);
+    // printf("closest_edge.max_speed: %f\n", closest_edge.max_speed);
     if (speed) {
       *speed = closest_edge.max_speed;
-      if(p.y() < 2.0 || p.y() > 8) { // quick hard code for testing
-        *speed = 1.5;
-        printf("Altered max_map_speed to 1.5\n");
+      // if(p.y() < 2.0 || p.y() > 8) { // quick hard code for testing
+      //   *speed = 1.5;
+      //   printf("Altered max_map_speed to 1.5\n");
+      // }
+    }
+  }
+
+  void GetClearanceAndSpeedFromLocAndCurvature(const Eigen::Vector2f& p,
+                                   float* clearance,
+                                   float* curvature,
+                                   float* speed) const {
+    if (edges.empty()) return;
+    NavigationEdge closest_edge;
+    float closest_dist = FLT_MAX;
+    if (!GetClosestEdge(p, &closest_edge, &closest_dist)) return;
+    if (clearance) *clearance = closest_edge.max_clearance;
+    // printf("closest_edge.max_speed: %f\n", closest_edge.max_speed);
+    if (speed) {
+      static float MAX_CURVATURE_MAX_SPEED = 1.0;
+      float MIN_CURVATURE_MAX_SPEED = *speed;
+      static float MIN_CURVATURE = 0.1;
+      static float MAX_CURVATURE = 2.5;
+      if(curvature && abs(*curvature) > MIN_CURVATURE) {
+        *speed = -abs((*curvature) * ((MAX_CURVATURE_MAX_SPEED - MIN_CURVATURE_MAX_SPEED) / (MAX_CURVATURE - MIN_CURVATURE))) + MIN_CURVATURE_MAX_SPEED;
+        // *speed = -((MAX_CURVATURE_MAX_SPEED - MIN_CURVATURE_MAX_SPEED) / (-(MAX_CURVATURE * MAX_CURVATURE))) * (*curvature * *curvature) + MIN_CURVATURE_MAX_SPEED;
+        printf("curvature calc speed: %f\n", *speed);
       }
+      else *speed = closest_edge.max_speed;
+      // if(p.y() < 2.0 || p.y() > 8) { // quick hard code for testing
+      //   *speed = 1.5;
+      //   printf("Altered max_map_speed to 1.5\n");
+      // }
     }
   }
 

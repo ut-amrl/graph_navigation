@@ -21,7 +21,7 @@ NavigationParameters = {
   -- Motion limits and dynamics constraints.
   max_linear_accel = 6;
   max_linear_decel = 6;
-  max_linear_speed = 3;
+  max_linear_speed = 4.2;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;

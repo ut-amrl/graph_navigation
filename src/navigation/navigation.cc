@@ -711,12 +711,15 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};
 
+  float best_path_curvature = reinterpret_cast<ConstantCurvatureArc*>(best_path.get())->curvature;
+  printf("best_path curvature: %f\n", best_path_curvature);
+
   float max_map_speed = params_.linear_limits.max_speed;
-  printf("robot_loc_: %f %f\n", robot_loc_.x(), robot_loc_.y());
-  planning_domain_.GetClearanceAndSpeedFromLoc(
-      robot_loc_, nullptr, &max_map_speed);
+  // printf("robot_loc_: %f %f\n", robot_loc_.x(), robot_loc_.y());
+  planning_domain_.GetClearanceAndSpeedFromLocAndCurvature(
+      robot_loc_, nullptr, &best_path_curvature, &max_map_speed);
   auto linear_limits = params_.linear_limits;
-  printf("max_map_speed, linear_limits.max_speed: %f %f\n", max_map_speed, params_.linear_limits.max_speed);
+  // printf("max_map_speed, linear_limits.max_speed: %f %f\n", max_map_speed, params_.linear_limits.max_speed);
   linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
   printf("linear_limits.max_speed: %f\n", linear_limits.max_speed);
   best_path->GetControls(linear_limits,
