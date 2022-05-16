@@ -44,6 +44,7 @@
 #include "ackermann_motion_primitives.h"
 // #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
+#include "racing_line.h"
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -71,7 +72,9 @@ DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_bool(test_disp, false, "Run disparity extender");
+DEFINE_bool(test_line, false, "Run racing line test");
 DEFINE_double(test_dist, 0.5, "Test distance");
+DEFINE_double(line_lookahead, 1, "Lookahead distance for racing line follower");
 DEFINE_string(test_log_file, "", "Log test results to file");
 
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
@@ -434,6 +437,13 @@ Vector2f Navigation::DisparityExtender() {
   }
 
   return fp_point_cloud_[farthest_idx];
+}
+
+void Navigation::RacingLineTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
+  static RacingLine racing_line{planning_domain_};
+  auto target = racing_line.GetLookahead(robot_loc_, FLAGS_line_lookahead);
+  local_target_ = Rotation2Df(-robot_angle_) * (target - robot_loc_);
+  RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
 }
 
 vector<float> Navigation::GetFilteredLaserScans() {
@@ -838,6 +848,10 @@ void Navigation::SetCarrotDist(const float carrot_dist) {
   return;
 }
 
+GraphDomain Navigation::GetDomain() {
+  return planning_domain_;
+}
+
 Eigen::Vector2f Navigation::GetTarget() {
   return local_target_;
 }
@@ -947,6 +961,9 @@ bool Navigation::Run(const double& time,
     return true;
   } else if (FLAGS_test_disp) {
     DisparityTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } else if (FLAGS_test_line) {
+    RacingLineTest(cmd_vel, cmd_angle_vel);
     return true;
   }
 

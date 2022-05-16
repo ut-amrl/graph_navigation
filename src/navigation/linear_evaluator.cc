@@ -109,7 +109,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   const float w = 1.0f / static_cast<float>(n);
   for (size_t i = 0; i < paths.size(); ++i) {
     clearance[i] = w * paths[i]->Length();
-    option_clearance[i] = 0.0;
+    option_clearance[i] = paths[i]->Clearance();
     for (int j = 1;
          j < n && i + j < paths.size() && static_cast<int>(i) >= j;
          ++j) {
@@ -117,7 +117,6 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
           paths[i + j]->Length() <= 0.0f) break;
       clearance[i] += w * paths[i - j]->Length();
       clearance[i] += w * paths[i + j]->Length();
-      option_clearance[i] =+ 2.0;
     }
     if (FLAGS_v > 2) {
       printf("%3d: curvature=%7.3f, fpl=%7.3f, avg_fpl=%7.3f, "
@@ -138,18 +137,18 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
+  float best_cost = FLAGS_dw * dist_to_goal[best_i] +
       FLAGS_fw * best->Length() +
       FLAGS_ow * option_clearance[best_i] +
       FLAGS_cw * clearance[best_i];
   for (size_t i = 0; i < paths.size(); ++i) {
 
     if (paths[i]->Length() <= 0.0f) continue;
-    const float path_length = paths[i]->Length() + dist_to_goal[i];
+    // const float path_length = paths[i]->Length() + dist_to_goal[i];
     // const float cost = FLAGS_dw * path_length +
     //   FLAGS_fw * paths[i]->Length() +
     //   FLAGS_cw * paths[i]->Clearance();
-    const float cost = FLAGS_dw * path_length +
+    const float cost = FLAGS_dw * dist_to_goal[i] +
       FLAGS_fw * paths[i]->Length() +
       FLAGS_ow * option_clearance[i] +
       FLAGS_cw * clearance[i];
