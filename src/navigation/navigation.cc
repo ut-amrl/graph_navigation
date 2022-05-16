@@ -347,6 +347,7 @@ void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
 void Navigation::DisparityTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const Vector2f kTarget = DisparityExtender();
   local_target_ = kTarget;
+  if (fp_point_cloud_.size() == 0) return;
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
 }
 
@@ -364,8 +365,11 @@ void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const float dist_left =
       max<float>(0.0f, free_path_length - params_.obstacle_margin);
   printf("%f\n", free_path_length);
+  auto copy_param = params_;
+  copy_param.linear_limits.max_deceleration *= 1.5;
+  // copy_param.linear_limits.max_acceleration *= 1.5;
   const float velocity_cmd = Run1DTimeOptimalControl(
-      params_.linear_limits,
+      copy_param.linear_limits,
       0,
       speed,
       dist_left,
@@ -722,7 +726,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   // printf("max_map_speed, linear_limits.max_speed: %f %f\n", max_map_speed, params_.linear_limits.max_speed);
   linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
   printf("linear_limits.max_speed: %f\n", linear_limits.max_speed);
-  best_path->GetControls(linear_limits,
+  auto best_path_cca = reinterpret_cast<ConstantCurvatureArc*>(best_path.get());
+  best_path_cca->length = fp_point_cloud_.at(fp_point_cloud_.size() / 2).norm();
+  printf("best_path_cca->length %f\n",best_path_cca->length);
+  best_path_cca->GetControls(linear_limits,
                          params_.angular_limits,
                          params_.dt, robot_vel_,
                          robot_omega_,
@@ -730,6 +737,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          ang_vel_cmd);
   best_option_ = best_path;
   last_curvature_cmd_ = ang_vel_cmd / vel_cmd.x();
+  printf("vel_cmd %f\n", vel_cmd.norm());
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {

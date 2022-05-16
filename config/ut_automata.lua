@@ -21,11 +21,11 @@ NavigationParameters = {
   -- Motion limits and dynamics constraints.
   max_linear_accel = 6;
   max_linear_decel = 6;
-  max_linear_speed = 4.2;
+  max_linear_speed = 6.0;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
-  system_latency = 0* 0.24;
+  system_latency = 0.24;
 
   -- Local planner parameters.
   evaluator_type = "linear";
