@@ -464,7 +464,7 @@ struct GraphDomain {
     if (clearance) *clearance = closest_edge.max_clearance;
     // printf("closest_edge.max_speed: %f\n", closest_edge.max_speed);
     if (speed) {
-      *speed = closest_edge.max_speed;
+      // *speed = closest_edge.max_speed;
       // if(p.y() < 2.0 || p.y() > 8) { // quick hard code for testing
       //   *speed = 1.5;
       //   printf("Altered max_map_speed to 1.5\n");
@@ -484,7 +484,7 @@ struct GraphDomain {
     // printf("closest_edge.max_speed: %f\n", closest_edge.max_speed);
     if (speed) {
       static float MAX_CURVATURE_MAX_SPEED = 1.0;
-      static float MIN_CURVATURE_MAX_SPEED = 3.5;
+      static float MIN_CURVATURE_MAX_SPEED = 3.05;
       static float MIN_CURVATURE = 0.1;
       static float MAX_CURVATURE = 2.5;
       if(curvature && abs(*curvature) > MIN_CURVATURE) {
