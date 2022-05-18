@@ -138,6 +138,7 @@ class Navigation {
   void SetClearanceWeight(const float weight);
 
   // Getter
+  GraphDomain GetDomain();
   Eigen::Vector2f GetTarget();
   Eigen::Vector2f GetOverrideTarget();
   Eigen::Vector2f GetVelocity();
@@ -170,6 +171,8 @@ class Navigation {
   void RunObstacleAvoidance(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Latency testing routine.
   void LatencyTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  // Racing line test
+  void RacingLineTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Remove commands older than latest real robot updates (odometry and LIDAR),
   // accounting for latency.
   void PruneLatencyQueue(); // Perform latency compensation by forward-predicting the commands within the latency interval.

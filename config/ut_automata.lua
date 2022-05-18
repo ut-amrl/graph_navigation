@@ -30,7 +30,7 @@ NavigationParameters = {
   -- Local planner parameters.
   evaluator_type = "linear";
   carrot_dist = 10;
-  max_free_path_length = 10.0;
+  max_free_path_length = 1;
   max_clearance = 1.0;
   num_options = 41;
 
