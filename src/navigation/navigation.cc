@@ -739,8 +739,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   //}
   printf("linear_limits.max_speed: %f\n", linear_limits.max_speed);
   auto best_path_cca = reinterpret_cast<ConstantCurvatureArc*>(best_path.get());
-  best_path_cca->length = fp_point_cloud_.at(fp_point_cloud_.size() / 2).norm();
-  printf("best_path_cca->length %f\n",best_path_cca->length);
+  // best_path_cca->length = fp_point_cloud_.at(fp_point_cloud_.size() / 2).norm();
+  // printf("best_path_cca->length %f\n",best_path_cca->length);
   best_path_cca->GetControls(linear_limits,
                          params_.angular_limits,
                          params_.dt, robot_vel_,

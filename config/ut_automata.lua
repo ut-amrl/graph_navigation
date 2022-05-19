@@ -20,7 +20,7 @@ NavigationParameters = {
 
   -- Motion limits and dynamics constraints.
   max_linear_accel = 6;
-  max_linear_decel = 6;
+  max_linear_decel = 12;
   max_linear_speed = 5.5;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
@@ -30,7 +30,7 @@ NavigationParameters = {
   -- Local planner parameters.
   evaluator_type = "linear";
   carrot_dist = 10;
-  max_free_path_length = 1;
+  max_free_path_length = 3.5;
   max_clearance = 1.0;
   num_options = 41;
 
