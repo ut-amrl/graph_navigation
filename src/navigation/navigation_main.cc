@@ -285,6 +285,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   if (map != msg.map) {
     map = msg.map;
     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
+    navigation_.UpdateRacingLine(navigation::GetRacingLinePath(FLAGS_maps_dir, msg.map));
   }
   if (executed_trajectory_.size() > kMaxTrajectoryLength) {
     executed_trajectory_.erase(executed_trajectory_.begin());
@@ -515,15 +516,12 @@ void DrawDisparityExtension() {
   }
 }
 
-void DrawGraph() {
-  auto domain = navigation_.GetDomain();
-  auto edges = domain.edges;
+void DrawRacingLine() {
+  auto edges = navigation_.GetRacingLine().edges;
   for (auto edge : edges) {
-    auto s0 = domain.KeyToState(edge.s0_id);
-    auto s1 = domain.KeyToState(edge.s1_id);
-    visualization::DrawPoint(s0.loc, 0xFF0000, global_viz_msg_);
-    visualization::DrawPoint(s1.loc, 0xFF0000, global_viz_msg_);
-    visualization::DrawLine(s0.loc, s1.loc, 0xFF4444, global_viz_msg_);
+    visualization::DrawPoint(edge.start, 0xFF0000, global_viz_msg_);
+    visualization::DrawPoint(edge.end, 0xFF0000, global_viz_msg_);
+    visualization::DrawLine(edge.start, edge.end, 0xFF4444, global_viz_msg_);
   }
 }
 
@@ -936,7 +934,7 @@ int main(int argc, char** argv) {
 
     // Publish Visualizations
     PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
-    DrawGraph();
+    DrawRacingLine();
     DrawRobot();
     DrawTarget();
     DrawDisparityExtension();

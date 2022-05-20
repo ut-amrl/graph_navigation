@@ -44,7 +44,6 @@
 #include "ackermann_motion_primitives.h"
 // #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
-#include "racing_line.h"
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -209,6 +208,10 @@ void Navigation::Resume() {
 void Navigation::UpdateMap(const string& map_path) {
   planning_domain_.Load(map_path);
   plan_path_.clear();
+}
+
+void Navigation::UpdateRacingLine(const string& map_path) {
+  racing_line_.Load(map_path);
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -444,10 +447,27 @@ Vector2f Navigation::DisparityExtender() {
 }
 
 void Navigation::RacingLineTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-  static RacingLine racing_line{planning_domain_};
-  auto target = racing_line.GetLookahead(robot_loc_, FLAGS_line_lookahead);
+  if (!racing_line_.loaded) {
+    printf("Racing line not loaded. Not doing anything.\n");
+    return;
+  }
+
+  float line_max_speed = 0;
+  float line_ang_vel_offset = 0;
+  float line_accel_offset = 0;
+  float line_decel_offset = 0;
+  auto target = racing_line_.GetLookahead(robot_loc_, FLAGS_line_lookahead, line_max_speed, line_ang_vel_offset, line_accel_offset, line_decel_offset);
+  if (target == robot_loc_)
+    return;
+
   local_target_ = Rotation2Df(-robot_angle_) * (target - robot_loc_);
+  static auto og_params = params_;
+  params_ = og_params;
+  params_.linear_limits.max_speed = line_max_speed;
+  params_.linear_limits.max_acceleration *= line_accel_offset;
+  params_.linear_limits.max_deceleration *= line_decel_offset;
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+  cmd_angle_vel *= line_ang_vel_offset;
 }
 
 vector<float> Navigation::GetFilteredLaserScans() {
@@ -726,7 +746,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   vel_cmd = {0, 0};
 
   float best_path_curvature = reinterpret_cast<ConstantCurvatureArc*>(best_path.get())->curvature;
-  printf("best_path curvature: %f\n", best_path_curvature);
+  // printf("best_path curvature: %f\n", best_path_curvature);
 
   float max_map_speed = params_.linear_limits.max_speed;
   // printf("robot_loc_: %f %f\n", robot_loc_.x(), robot_loc_.y());
@@ -734,10 +754,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
       robot_loc_, nullptr, &best_path_curvature, &max_map_speed);
   auto linear_limits = params_.linear_limits;
   //if(params_.use_map_speed) {
-	printf("max_map_speed, linear_limits.max_speed: %f %f\n", max_map_speed, params_.linear_limits.max_speed);
-  	linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
+	// printf("max_map_speed, linear_limits.max_speed: %f %f\n", max_map_speed, params_.linear_limits.max_speed);
+  linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
   //}
-  printf("linear_limits.max_speed: %f\n", linear_limits.max_speed);
+  // printf("linear_limits.max_speed: %f\n", linear_limits.max_speed);
   auto best_path_cca = reinterpret_cast<ConstantCurvatureArc*>(best_path.get());
   // best_path_cca->length = fp_point_cloud_.at(fp_point_cloud_.size() / 2).norm();
   // printf("best_path_cca->length %f\n",best_path_cca->length);
@@ -923,6 +943,10 @@ float Navigation::GetRobotLength() {
 
 float Navigation::GetBaseLinkOffset() {
   return params_.base_link_offset;
+}
+
+RacingLine Navigation::GetRacingLine() {
+  return racing_line_;
 }
 
 vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
