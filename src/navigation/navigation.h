@@ -31,6 +31,7 @@
 #include "graph_domain.h"
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
+#include "racing_line.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -47,6 +48,11 @@ inline std::string GetMapPath(const std::string& dir, const std::string& name) {
 
 inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
   return dir + "/" + name + "/" + name + ".navigation.txt";
+}
+
+inline std::string GetRacingLinePath(const std::string& dir, const std::string& name) {
+  cout << name << endl;
+  return dir + "/" + name + "/" + name + ".racingline";
 }
 
 struct PathOption {
@@ -92,6 +98,7 @@ class Navigation {
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
+  void UpdateRacingLine(const std::string& map_file);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
@@ -151,6 +158,7 @@ class Navigation {
   float GetRobotLength();
   float GetBaseLinkOffset();
   std::vector<float> GetFilteredLaserScans();
+  RacingLine GetRacingLine();
   // const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
@@ -250,6 +258,9 @@ class Navigation {
 
   // Planning domain for A* planner.
   GraphDomain planning_domain_;
+
+  // Racing line for racing.
+  RacingLine racing_line_;
 
   // Previously computed navigation plan.
   std::vector<GraphDomain::State> plan_path_;
