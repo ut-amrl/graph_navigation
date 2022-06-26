@@ -42,8 +42,9 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
-#include "deep_cost_map_evaluator.h"
+#include "rgb_cost_map_evaluator.h"
 #include "linear_evaluator.h"
+#include "vrl_cost_function.h"
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -162,8 +163,9 @@ void Navigation::Initialize(const NavigationParameters& params,
 
   PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
-    auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
-    cost_map_evaluator->LoadModel();
+    auto cost_function = std::make_shared<VRLCostFunction>(params_);
+    cost_function->LoadModel();
+    auto cost_map_evaluator = new RGBCostMapEvaluator(params_, cost_function);
     evaluator = (PathEvaluatorBase*) cost_map_evaluator;
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*) new LinearEvaluator();
@@ -805,7 +807,8 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
 
 const cv::Mat& Navigation::GetVisualizationImage() {
   if (params_.evaluator_type == "cost_map") {
-    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_vis_image_;
+    // TODO: have an actual vis image
+    return dynamic_cast<RGBCostMapEvaluator*>(evaluator_.get())->cost_map_;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);

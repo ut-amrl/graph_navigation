@@ -72,6 +72,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
                         src/navigation/rgb_cost_map_evaluator.cc
+                        src/navigation/vrl_cost_function.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
     shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
@@ -97,6 +98,7 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
                         src/navigation/rgb_cost_map_evaluator.cc
+                        src/navigation/vrl_cost_function.cc
                         src/navigation/navigation.cc)
 TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
