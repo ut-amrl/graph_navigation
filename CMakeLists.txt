@@ -6,6 +6,7 @@ MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
 MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
+SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 SET(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Werror")
 SET(LIBRARY_NAME "graph_nav_lib"
     CACHE STRING "Name of compiled library")
@@ -70,6 +71,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/image_tiler.cc
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
+                        src/navigation/rgb_cost_map_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
     shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
@@ -94,6 +96,7 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/linear_evaluator.cc
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
+                        src/navigation/rgb_cost_map_evaluator.cc
                         src/navigation/navigation.cc)
 TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
