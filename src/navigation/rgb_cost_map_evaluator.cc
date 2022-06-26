@@ -1,5 +1,7 @@
 #include "rgb_cost_map_evaluator.h"
 
+#include "math/line2d.h"
+
 namespace motion_primitives {
 
 void RGBCostMapEvaluator::Update(
@@ -18,20 +20,20 @@ void RGBCostMapEvaluator::Update(
 
   // TODO: move this to its own thread
   UpdateMapToLocalFrame();
-  rgb_map_loc_ = new_loc;
-  rgb_map_angle_ = new_ang;
-  (*cost_function)(local_rgb_map_, local_cost_map_);
+  map_loc_ = new_loc;
+  map_angle_ = new_ang;
+  (*cost_function)(rgb_map_, cost_map_);
 }
 
 void RGBCostMapEvaluator::UpdateMapToLocalFrame() {
   auto curr_trans =
-      Eigen::Translation2f(rgb_map_loc_) * Eigen::Rotation2Df(rgb_map_angle_);
+      Eigen::Translation2f(map_loc_) * Eigen::Rotation2Df(map_angle_);
   auto new_trans =
       Eigen::Translation2f(curr_loc) * Eigen::Rotation2Df(curr_ang);
   Eigen::Affine2f delta_trans = curr_trans.inverse() * new_trans;
 
   cv::Mat flipped_map;
-  cv::flip(local_rgb_map_, flipped_map, 0);
+  cv::flip(rgb_map_, flipped_map, 0);
 
   cv::Mat translation_mat;
   Eigen::Matrix2f eigen_rot = Eigen::Rotation2Df(-M_PI_2) *
@@ -45,6 +47,7 @@ void RGBCostMapEvaluator::UpdateMapToLocalFrame() {
   Eigen::Rotation2Df rot;
   rot.fromRotationMatrix(eigen_rot);
 
+  // TODO: make point a parameter
   auto transform_mat = cv::getRotationMatrix2D(
       cv::Point2f{640, 780}, -rot.angle() * (180 / M_PI), 1.0);
 
@@ -54,8 +57,124 @@ void RGBCostMapEvaluator::UpdateMapToLocalFrame() {
   flipped_map.setTo(0);
   cv::warpAffine(prev_map, flipped_map, transform_mat, flipped_map.size(),
                  cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0);
-  local_rgb_map_.setTo(0);
-  cv::flip(flipped_map, local_rgb_map_, 0);
+  rgb_map_.setTo(0);
+  cv::flip(flipped_map, rgb_map_, 0);
 }
 
-} // namespace motion_primitives
+std::shared_ptr<PathRolloutBase> RGBCostMapEvaluator::FindBest(
+    const std::vector<std::shared_ptr<PathRolloutBase>> &paths) {
+  // mostly lifted from DeepCostMapEvaluator except not using torch
+  if (paths.size() == 0) return nullptr;
+  std::shared_ptr<PathRolloutBase> best = nullptr;
+
+  // copy here for future threaded implementation
+  cv::Mat cost_map = cost_map_.clone();
+  // auto cm_loc = map_loc_;
+  // auto cm_ang = map_angle_;
+
+  std::vector<double> path_costs(paths.size(), 0);
+  for (size_t i = 0; i < paths.size(); i++) {
+    for (size_t j = 0; j <= ImageBasedEvaluator::ROLLOUT_DENSITY; j++) {
+      float f = 1.0f / ImageBasedEvaluator::ROLLOUT_DENSITY * j;
+      auto state = paths[i]->GetIntermediateState(f);
+      auto discount = (1 - state.translation.norm() * DISCOUNT_FACTOR);
+      // TODO: make sure this gets the right location
+      auto loc = GetImageLocation(state.translation);
+      auto cost = cost_map.at<float>(cv::Point((int)loc.x(), (int)loc.y()));
+      path_costs[i] += cost * discount / ImageBasedEvaluator::ROLLOUT_DENSITY;
+    }
+  }
+
+  std::vector<double> blurred_path_costs;
+  if (BLUR_FACTOR > 0) {
+    blurred_path_costs = std::vector<double>(paths.size(), 0);
+    for (size_t i = 0; i < paths.size(); i++) {
+      float remaining = 1.0;
+      if (i > 0) {
+        blurred_path_costs[i] += BLUR_FACTOR * path_costs[i - 1];
+        remaining -= BLUR_FACTOR;
+      }
+      if (i < paths.size() - 1) {
+        blurred_path_costs[i] += BLUR_FACTOR * path_costs[i + 1];
+        remaining -= BLUR_FACTOR;
+      }
+
+      blurred_path_costs[i] += remaining * path_costs[i];
+    }
+  } else {
+    blurred_path_costs = path_costs;
+  }
+
+  // Lifted from linear evaluator
+  // Check if there is any path with an obstacle-free path from the end to the
+  // local target.
+  float curr_goal_dist = local_target.norm();
+
+  std::vector<float> clearance_to_goal(paths.size(), 0.0);
+  std::vector<float> dist_to_goal(paths.size(), FLT_MAX);
+  // bool path_to_goal_exists = false;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const auto endpoint = paths[i]->EndPoint().translation;
+    clearance_to_goal[i] = StraightLineClearance(
+        geometry::Line2f(endpoint, local_target), point_cloud);
+    if (clearance_to_goal[i] > 0.0) {
+      dist_to_goal[i] = (endpoint - local_target).norm();
+      // path_to_goal_exists = true;
+    }
+  }
+
+  // First find the shortest path.
+  int best_idx = -1;
+  float best_path_progress = -FLT_MAX;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i]->Length() <= 0.0f) continue;
+    const float path_progress = curr_goal_dist - dist_to_goal[i];
+    if (path_progress > best_path_progress) {
+      best_path_progress = path_progress;
+      best_idx = i;
+      best = paths[i];
+    }
+  }
+
+  if (best_idx == -1) {
+    std::cout << "No Valid Paths" << std::endl;
+    // No valid paths!
+    return nullptr;
+  }
+
+  float best_cost = DISTANCE_WEIGHT * best_path_progress +
+                    FPL_WEIGHT * paths[best_idx]->FPL() +
+                    CLEARANCE_WEIGHT * paths[best_idx]->Clearance() +
+                    COST_WEIGHT * path_costs[best_idx];
+
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i]->Length() <= 0.0f) continue;
+    const float path_progress = curr_goal_dist - dist_to_goal[i];
+    const float cost = DISTANCE_WEIGHT * path_progress +
+                       FPL_WEIGHT * paths[i]->FPL() +
+                       CLEARANCE_WEIGHT * paths[i]->Clearance() +
+                       COST_WEIGHT * path_costs[best_idx];
+
+    // latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->curvature);
+    // latest_cost_components_.push_back(dynamic_cast<ConstantCurvatureArc*>(paths[i].get())->length);
+    // latest_cost_components_.push_back(DISTANCE_WEIGHT * path_progress);
+    // latest_cost_components_.push_back(FPL_WEIGHT * paths[i]->FPL());
+    // latest_cost_components_.push_back(CLEARANCE_WEIGHT *
+    // paths[i]->Clearance()); latest_cost_components_.push_back(COST_WEIGHT *
+    // normalized_path_costs.at<float>(i, 0));
+    // latest_cost_components_.push_back(cost);
+    // std::cout << "COST" << latest_cost_components_ << std::endl;
+
+    if (cost < best_cost) {
+      best = paths[i];
+      best_cost = cost;
+      best_idx = i;
+    }
+  }
+
+  // TODO: vis images
+
+  return best;
+}
+
+}  // namespace motion_primitives

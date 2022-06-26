@@ -25,10 +25,10 @@ struct RGBCostMapEvaluator : ImageBasedEvaluator {
     map_height = 8;
     pixels_per_meter_ = 100;
 
-    local_rgb_map_ = cv::Mat::zeros(map_width_ * pixels_per_meter_,
-                                    map_height * pixels_per_meter_, CV_8UC4);
-    local_cost_map_ = cv::Mat::zeros(map_width_ * pixels_per_meter_,
-                                     map_height * pixels_per_meter_, CV_8UC4);
+    rgb_map_ = cv::Mat::zeros(map_width_ * pixels_per_meter_,
+                              map_height * pixels_per_meter_, CV_8UC4);
+    cost_map_ = cv::Mat::zeros(map_width_ * pixels_per_meter_,
+                               map_height * pixels_per_meter_, CV_8UC1);
   }
 
   void Update(const Eigen::Vector2f &new_loc, const float new_ang,
@@ -39,6 +39,9 @@ struct RGBCostMapEvaluator : ImageBasedEvaluator {
 
   void UpdateMapToLocalFrame();
 
+  std::shared_ptr<PathRolloutBase> FindBest(
+      const std::vector<std::shared_ptr<PathRolloutBase>> &paths) override;
+
   // size in meters of the maps in the y axis of the robot frame
   size_t map_width_;
   // size in meters of the maps in the x axis of the robot frame
@@ -46,14 +49,21 @@ struct RGBCostMapEvaluator : ImageBasedEvaluator {
   // number of pixels per meter in the maps
   size_t pixels_per_meter_;
 
-  cv::Mat local_rgb_map_;
-  cv::Mat local_cost_map_;
-  Eigen::Vector2f rgb_map_loc_;
-  float rgb_map_angle_;
+  cv::Mat rgb_map_;
+  cv::Mat cost_map_;
+  Eigen::Vector2f map_loc_;
+  float map_angle_;
 
   std::shared_ptr<CostFunction> cost_function;
+
+  double DISCOUNT_FACTOR = 0.25;
+  double BLUR_FACTOR = 0.05;
+  double DISTANCE_WEIGHT = -3.5;
+  double FPL_WEIGHT = -0.75;
+  double CLEARANCE_WEIGHT = -0.25;
+  double COST_WEIGHT = 4.0;
 };
 
-} // namespace motion_primitives
+}  // namespace motion_primitives
 
 #endif
