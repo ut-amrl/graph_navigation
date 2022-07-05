@@ -38,7 +38,7 @@ NavigationParameters = {
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
-  evaluator_type = "linear";
+  evaluator_type = "cost_map";
 };
 
 AckermannSampler = {

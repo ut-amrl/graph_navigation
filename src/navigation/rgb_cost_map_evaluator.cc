@@ -1,5 +1,7 @@
 #include "rgb_cost_map_evaluator.h"
 
+#include <opencv2/core/eigen.hpp>
+
 #include "math/line2d.h"
 
 namespace motion_primitives {
@@ -10,6 +12,18 @@ void RGBCostMapEvaluator::Update(
     const Eigen::Vector2f &new_local_target,
     const std::vector<Eigen::Vector2f> &new_point_cloud,
     const cv::Mat &new_image) {
+  static const cv::Point2f image_offset = {1280 / 2, 720};
+  static const std::vector<cv::Point2f> src_pts = {
+      {358, 512}, {472, 383}, {743, 378}, {835, 503}};
+  static const std::vector<cv::Point2f> dst_pts = {
+      cv::Point2f{-0.5, -1.5} * pixels_per_meter_ + image_offset,
+      cv::Point2f{-0.5, -2.5} * pixels_per_meter_ + image_offset,
+      cv::Point2f{0.5, -2.5} * pixels_per_meter_ + image_offset,
+      cv::Point2f{0.5, -1.5} * pixels_per_meter_ + image_offset};
+  static const cv::Mat M = cv::getPerspectiveTransform(src_pts, dst_pts);
+  static float vals[] = {1.0, 0.0, -240, 0.0, 1.0, -320};
+  static const cv::Mat translation_matrix = cv::Mat(2, 3, CV_32F, vals);
+
   curr_loc = new_loc;
   curr_ang = new_ang;
   vel = new_vel;
@@ -22,6 +36,29 @@ void RGBCostMapEvaluator::Update(
   UpdateMapToLocalFrame();
   map_loc_ = new_loc;
   map_angle_ = new_ang;
+
+  auto img_copy = image.clone();
+  cv::cvtColor(img_copy, img_copy, cv::COLOR_BGR2BGRA);
+  cv::Mat trans_img = cv::Mat::zeros(800, 800, CV_8UC4);
+  cv::warpPerspective(img_copy, img_copy, M, img_copy.size());
+  cv::warpAffine(img_copy, trans_img, translation_matrix, trans_img.size());
+  for (int y = 0; y < rgb_map_.rows; y++) {
+    for (int x = 0; x < rgb_map_.cols; x++) {
+      auto img_pixel = trans_img.at<cv::Vec4b>(y, x);
+      if (img_pixel[3] > 0) {
+        rgb_map_.at<cv::Vec4b>(y, x) = img_pixel;
+      }
+    }
+  }
+  // rgb_map_ = trans_img;
+  std::cout << rgb_map_.type() << "\t" << trans_img.type() << std::endl;
+  cv::Mat vis;
+  cv::circle(rgb_map_, {400, 400}, 5, 0x0000FF);
+  // cv::hconcat(rgb_map_, trans_img, vis);
+  cv::imshow("map", rgb_map_);
+  cv::waitKey(1);
+
+  // TODO: only evaluate on new portions and then add to cost map?
   (*cost_function)(rgb_map_, cost_map_);
 }
 
@@ -43,6 +80,7 @@ void RGBCostMapEvaluator::UpdateMapToLocalFrame() {
                                 delta_trans.translation().matrix();
   eigen_trans = eigen_trans.cwiseProduct(
       Eigen::Vector2f{pixels_per_meter_, pixels_per_meter_});
+  cv::eigen2cv(eigen_trans, translation_mat);
 
   Eigen::Rotation2Df rot;
   rot.fromRotationMatrix(eigen_rot);

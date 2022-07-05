@@ -47,7 +47,7 @@ struct RGBCostMapEvaluator : ImageBasedEvaluator {
   // size in meters of the maps in the x axis of the robot frame
   size_t map_height;
   // number of pixels per meter in the maps
-  size_t pixels_per_meter_;
+  int pixels_per_meter_;
 
   cv::Mat rgb_map_;
   cv::Mat cost_map_;
