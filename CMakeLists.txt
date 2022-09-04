@@ -68,8 +68,8 @@ TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation ${libs})
 ADD_DEPENDENCIES(navigation ${catkin_EXPORTED_TARGETS})
 # ADD_DEPENDENCIES(social_nav ${catkin_EXPORTED_TARGETS})
 
-# ROSBUILD_ADD_LIBRARY(graph_nav_rl
-#                      src/navigation/graph_nav_rl.cc
-#                      src/visualization/visualization.cc
-#                      src/simulator/simulator.cc)
-# TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
+ROSBUILD_ADD_LIBRARY(graph_nav_rl
+                     src/navigation/graph_nav_rl.cc
+                     src/visualization/visualization.cc
+                     src/simulator/simulator.cc)
+TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
