@@ -133,19 +133,19 @@ bool r_loc_ = false;
 bool r_odom_ = false;
 bool r_humans_ = false;
 bool r_laser_ = false;
-SocialNav* navigation_ = nullptr;
+vector<SocialNav*> navigations_ = vector<SocialNav*>();
 vector<Vector2f> point_cloud_;
-Vector2f current_loc_(0, 0);
-float current_angle_(0);
-Vector2f current_vel_(0, 0);
-float current_angular_vel_(0);
-navigation::Odom odom_;
-Vector2f goal_(0, 0);
-float goal_angle_(0);
+vector<Vector2f> current_loc_({Vector2f(0, 0)});
+vector<float> current_angle_(0);
+vector<Vector2f> current_vel_({Vector2f(0, 0)});
+vector<float> current_angular_vel_(0);
+vector<navigation::Odom> odom_;
+vector<Vector2f> goal_({Vector2f(0., 0.)});
+vector<float> goal_angle_(0);
 vector<Human> humans_;
-bool goal_set_ = false;
-int current_action_ = 0;
-int follow_target_ = 0;
+vector<bool> goal_set_ = {false};
+vector<int> current_action_ = {0};
+vector<int> follow_target_ = {0};
 vector_map::VectorMap map_;
 
 // Publishers
@@ -167,6 +167,10 @@ visualization_msgs::Marker pose_marker_;
 visualization_msgs::Marker human_marker_;
 visualization_msgs::MarkerArray human_array_;
 visualization_msgs::Marker target_marker_;
+
+navigation::NavigationParameters params_;
+std::string map_path_;
+
 
 void SignalHandler(int) {
   if (!run_) {
@@ -276,27 +280,31 @@ bool PlanService(graphNavSrv::Request &req,
                  graphNavSrv::Response &res) {
   const Vector2f start(req.start.x, req.start.y);
   const Vector2f end(req.end.x, req.end.y);
-  const vector<int> plan = navigation_->GlobalPlan(start, end);
+  const vector<int> plan = navigations_.at(0)->GlobalPlan(start, end);
   res.plan = plan;
   return true;
 }
 
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
-  r_loc_ = true;
-  static string map  = "";
-  current_loc_ = {msg.pose.x, msg.pose.y};
-  current_angle_ = msg.pose.theta;
+  std::cout << "Localization Callback" << endl;
+//  r_loc_ = true;
+//  static string map  = "";
+//  current_loc_ = {msg.pose.x, msg.pose.y};
+//  current_angle_ = msg.pose.theta;
 }
 
 void GoalCallback(const amrl_msgs::Pose2Df& msg) {
-  goal_set_ = true;
-  goal_ = {msg.x, msg.y};
-  goal_angle_ = msg.theta;
+  std::cout << "Goal Callback" << endl;
+//
+//  goal_set_ = true;
+//  goal_ = {msg.x, msg.y};
+//  goal_angle_ = msg.theta;
 }
 
 void VelocityCb(const geometry_msgs::Twist& msg) {
-  current_vel_ = {msg.linear.x, msg.linear.y};
-  current_angular_vel_ = msg.angular.z;
+  std::cout << "Velocity Callback" << endl;
+//  current_vel_ = {msg.linear.x, msg.linear.y};
+//  current_angular_vel_ = msg.angular.z;
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
@@ -316,8 +324,9 @@ navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
 }
 
 void OdometryCallback(const nav_msgs::Odometry& msg) {
-  r_odom_ = true;
-  odom_ = OdomHandler(msg);
+  std::cout << "Odometry callback" << std::endl;
+//  r_odom_ = true;
+//  odom_ = OdomHandler(msg);
 }
 
 void LaserHandler(const sensor_msgs::LaserScan& msg) {
@@ -363,6 +372,10 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
 vector<Human> ToHumans(const vector<geometry_msgs::Pose2D>& poses,
                        const vector<geometry_msgs::Pose2D>& vels) {
   vector<Human> humans;
+  if (poses.size() <= 0 || vels.size() <= 0){
+    return humans;
+  }
+
   for (size_t i = 0; i < poses.size(); ++i) {
     Human human;
     const auto pose = poses[i];
@@ -403,9 +416,9 @@ geometry_msgs::TwistStamped GetTwistMsg(const Vector2f& vel,
   return drive_msg;
 }
 
-void SendCommand(const Vector2f& vel, const float& ang_vel) {
+void SendCommand(const size_t nav_idx, const Vector2f& vel, const float& ang_vel) {
   geometry_msgs::TwistStamped drive_msg;
-  InitRosHeader("base_link", &drive_msg.header);
+  InitRosHeader(std::to_string(int(nav_idx)) + "/base_link", &drive_msg.header);
   drive_msg.header.stamp = ros::Time::now();
 
   drive_msg.twist.angular.x = 0;
@@ -421,7 +434,7 @@ void SendCommand(const Vector2f& vel, const float& ang_vel) {
     ackermann_drive_pub_.publish(ackermann_msg);
     twist_drive_pub_.publish(drive_msg.twist);
   }
-  navigation_->UpdateCommandHistory(ToTwist(drive_msg));
+  navigations_.at(nav_idx)->UpdateCommandHistory(ToTwist(drive_msg));
 }
 
 vector<amrl_msgs::Pose2Df> HumanPoses(const vector<Human>& humans) {
@@ -447,41 +460,42 @@ vector<amrl_msgs::Pose2Df> HumanVels(const vector<Human>& humans) {
 }
 
 void FillRequest(SocialPipsSrv::Request* req) {
-  amrl_msgs::Pose2Df robot_pose, robot_vel, goal_pose, door_pose;
-  robot_pose.x = current_loc_.x();
-  robot_pose.y = current_loc_.y();
-  robot_pose.theta = current_angle_;
-  if (!FLAGS_bag_mode) {
-    current_vel_ = navigation_->GetGraphNav()->GetVelocity();
-    current_angular_vel_ = navigation_->GetGraphNav()->GetAngularVelocity();
-  }
-  robot_vel.x = current_vel_.x();
-  robot_vel.y = current_vel_.y();
-  robot_vel.theta = current_angular_vel_;
-  const Vector2f local_target = navigation_->GetLocalTarget();
-  req->local_target.x = local_target.x();
-  req->local_target.y = local_target.y();
-  req->robot_poses = {robot_pose};
-  req->robot_vels = {robot_vel};
-  req->human_poses = HumanPoses(humans_);
-  req->human_vels = HumanVels(humans_);
-
-  // TODO(jaholtz) integrate the door detector into navigation, or
-  // as a separate package that navigation can depend on, or make nav
-  // listen to those messages and handle them.
-  req->door_pose.x = 0;
-  req->door_pose.y = 0;
-  req->door_pose.theta = 0;
-  // TODO(jaholtz) make sure this is the 'open' door state
-  req->door_state = 0;
-  req->robot_state = current_action_;
-  req->follow_target = navigation_->GetTargetId();
+  std::cout << "Fill Request Call" << std::endl;
+//  amrl_msgs::Pose2Df robot_pose, robot_vel, goal_pose, door_pose;
+//  robot_pose.x = current_loc_.x();
+//  robot_pose.y = current_loc_.y();
+//  robot_pose.theta = current_angle_;
+//  if (!FLAGS_bag_mode) {
+//    current_vel_ = navigation_->GetGraphNav()->GetVelocity();
+//    current_angular_vel_ = navigation_->GetGraphNav()->GetAngularVelocity();
+//  }
+//  robot_vel.x = current_vel_.x();
+//  robot_vel.y = current_vel_.y();
+//  robot_vel.theta = current_angular_vel_;
+//  const Vector2f local_target = navigation_->GetLocalTarget();
+//  req->local_target.x = local_target.x();
+//  req->local_target.y = local_target.y();
+//  req->robot_poses = {robot_pose};
+//  req->robot_vels = {robot_vel};
+//  req->human_poses = HumanPoses(humans_);
+//  req->human_vels = HumanVels(humans_);
+//
+//  // TODO(jaholtz) integrate the door detector into navigation, or
+//  // as a separate package that navigation can depend on, or make nav
+//  // listen to those messages and handle them.
+//  req->door_pose.x = 0;
+//  req->door_pose.y = 0;
+//  req->door_pose.theta = 0;
+//  // TODO(jaholtz) make sure this is the 'open' door state
+//  req->door_state = 0;
+//  req->robot_state = current_action_;
+//  req->follow_target = navigations_->GetTargetId();
 }
 
-void DrawTarget() {
-  const float carrot_dist = navigation_->GetGraphNav()->GetCarrotDist();
-  const Eigen::Vector2f target = navigation_->GetGraphNav()->GetTarget();
-  const Eigen::Vector2f override = navigation_->GetGraphNav()->GetOverrideTarget();
+void DrawTarget(const size_t nav_idx) {
+  const float carrot_dist = navigations_.at(nav_idx)->GetGraphNav()->GetCarrotDist();
+  const Eigen::Vector2f target = navigations_.at(nav_idx)->GetGraphNav()->GetTarget();
+  const Eigen::Vector2f override = navigations_.at(nav_idx)->GetGraphNav()->GetOverrideTarget();
   auto msg_copy = global_viz_msg_;
   visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
@@ -489,9 +503,9 @@ void DrawTarget() {
   viz_pub_.publish(msg_copy);
   visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
   visualization::DrawCross(override, 0.2, 0x800080, local_viz_msg_);
-  const Eigen::Rotation2Df rot(current_angle_);
-  const Vector2f global_target = rot * target + current_loc_;
-  const Vector2f global_over = rot * override + current_loc_;
+  const Eigen::Rotation2Df rot(current_angle_.at(nav_idx));
+  const Vector2f global_target = rot * target + current_loc_.at(nav_idx);
+  const Vector2f global_over = rot * override + current_loc_.at(nav_idx);
   std_msgs::ColorRGBA color;
   color.a = 1.0;
   color.r = 0.0;
@@ -508,11 +522,11 @@ void DrawTarget() {
   target_marker_.colors.clear();
 }
 
-void DrawRobot() {
+void DrawRobot(const size_t nav_idx) {
   const float kRobotLength = 0.5;
   const float kRobotWidth = 0.44;
   const float kRearAxleOffset = 0.0;
-  const float kObstacleMargin = navigation_->GetGraphNav()->GetObstacleMargin();
+  const float kObstacleMargin = navigations_.at(nav_idx)->GetGraphNav()->GetObstacleMargin();
   {
     // How much the robot's body extends behind of its base link frame.
     const float l1 = -0.5 * kRobotLength - kRearAxleOffset - kObstacleMargin;
@@ -560,12 +574,12 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
   return options;
 }
 
-void DrawPathOptions() {
+void DrawPathOptions(const size_t nav_idx) {
   vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
-      navigation_->GetGraphNav()->GetLastPathOptions();
+      navigations_.at(nav_idx)->GetGraphNav()->GetLastPathOptions();
   auto path_options = ToOptions(path_rollouts);
   std::shared_ptr<PathRolloutBase> best_option =
-      navigation_->GetGraphNav()->GetOption();
+      navigations_.at(nav_idx)->GetGraphNav()->GetOption();
   for (const auto& o : path_options) {
     visualization::DrawPathOption(o.curvature,
         o.free_path_length,
@@ -715,20 +729,20 @@ void DrawMap() {
   }
 }
 
-void PublishVisualizationMarkers() {
+void PublishVisualizationMarkers(const size_t nav_idx) {
   // Fill the map lines list
   if (FLAGS_bag_mode) {
     DrawMap();
     map_lines_publisher_.publish(line_list_marker_);
   }
-  tf::Quaternion robotQ = tf::createQuaternionFromYaw(current_angle_);
+  tf::Quaternion robotQ = tf::createQuaternionFromYaw(current_angle_.at(nav_idx));
   const float rear_axle_offset = 0.0;
   pose_marker_.pose.position.x =
-    current_loc_.x() -
-    cos(current_angle_) * rear_axle_offset;
+    current_loc_.at(nav_idx).x() -
+    cos(current_angle_.at(nav_idx)) * rear_axle_offset;
   pose_marker_.pose.position.y =
-    current_loc_.y() -
-    sin(current_angle_) * rear_axle_offset;
+    current_loc_.at(nav_idx).y() -
+    sin(current_angle_.at(nav_idx)) * rear_axle_offset;
   pose_marker_.pose.position.z = 0.5 * 0.5;
   pose_marker_.pose.orientation.w = 1.0;
   pose_marker_.pose.orientation.x = robotQ.x();
@@ -744,10 +758,10 @@ void PublishVisualizationMarkers() {
   if (humans_.size() > 0) {
     for (const Human& human : humans_) {
       const Vector2f human_pose = human.pose;
-      const Eigen::Rotation2Df rot(current_angle_);
-      const Vector2f transformed = (rot * human_pose) + current_loc_;
+      const Eigen::Rotation2Df rot(current_angle_.at(nav_idx));
+      const Vector2f transformed = (rot * human_pose) + current_loc_.at(nav_idx);
       const auto point1 = ros_helpers::Eigen2DToRosPoint(transformed);
-      const Vector2f t_vel = human.vel + current_vel_;
+      const Vector2f t_vel = human.vel + current_vel_.at(nav_idx);
       const auto transformed_vel = (rot * t_vel) + transformed;
       const auto point2 = ros_helpers::Eigen2DToRosPoint(transformed_vel);
       vector<geometry_msgs::Point> points;
@@ -782,39 +796,43 @@ bool Synced() {
 void RunSocial() {
   visualization::ClearVisualizationMsg(local_viz_msg_);
   visualization::ClearVisualizationMsg(global_viz_msg_);
-  SocialAction action = SocialAction::GoAlone;
-  if (FLAGS_social_mode) {
-    SocialPipsSrv::Request req;
-    SocialPipsSrv::Response res;
-    FillRequest(&req);
-    pips_client_.call(req, res);
-    current_action_ = res.action;
-    if (res.action == 0) {
-      action = SocialAction::GoAlone;
-    } else if (res.action == 1) {
-      action = SocialAction::Halt;
-    } else if (res.action == 2) {
-      action = SocialAction::Follow;
-    } else if (res.action == 3) {
-      action = SocialAction::Pass;
-    }
-  }
 
-  Vector2f cmd_vel;
-  float cmd_angle_vel;
-  navigation_->SetNavGoal({goal_.x(), goal_.y()},
-                          goal_angle_);
-  navigation_->Run(ros::Time::now().toSec(),
-                   action,
-                   current_loc_,
-                   current_angle_,
-                   odom_,
-                   point_cloud_,
-                   humans_,
-                   cmd_vel, cmd_angle_vel);
-  SendCommand(cmd_vel, cmd_angle_vel);
-  DrawRobot();
-  DrawPathOptions();
+  for (size_t i = 0; i < navigations_.size(); i++) {
+
+    SocialAction action = SocialAction::GoAlone;
+    if (FLAGS_social_mode) {
+      SocialPipsSrv::Request req;
+      SocialPipsSrv::Response res;
+      FillRequest(&req);
+      pips_client_.call(req, res);
+      current_action_.at(i) = res.action;
+      if (res.action == 0) {
+        action = SocialAction::GoAlone;
+      } else if (res.action == 1) {
+        action = SocialAction::Halt;
+      } else if (res.action == 2) {
+        action = SocialAction::Follow;
+      } else if (res.action == 3) {
+        action = SocialAction::Pass;
+      }
+    }
+
+    Vector2f cmd_vel;
+    float cmd_angle_vel;
+    navigations_.at(i)->SetNavGoal({goal_.at(i).x(), goal_.at(i).y()},
+                            goal_angle_.at(i));
+    navigations_.at(i)->Run(ros::Time::now().toSec(),
+                     action,
+                     current_loc_.at(i),
+                     current_angle_.at(i),
+                     odom_.at(i),
+                     point_cloud_,
+                     humans_,
+                     cmd_vel, cmd_angle_vel);
+    SendCommand(i, cmd_vel, cmd_angle_vel);
+    DrawRobot(i);
+    DrawPathOptions(i);
+  }
   // DrawTarget();
   viz_pub_.publish(local_viz_msg_);
   // viz_pub_.publish(global_viz_msg_);
@@ -826,49 +844,72 @@ void RunBagfile() {
   }
 }
 
-bool SocialService(socialNavSrv::Request &req,
-                   socialNavSrv::Response& res) {
+bool SocialService(socialNavSrv::Request &reqs,
+                   socialNavSrv::Response& all_res) {
+
   visualization::ClearVisualizationMsg(local_viz_msg_);
-  SocialAction action = SocialAction::GoAlone;
-  if (req.action == 1) {
-    action = SocialAction::Halt;
-  } else if (req.action == 2) {
-    action = SocialAction::Follow;
-  } else if (req.action == 3) {
-    action = SocialAction::Pass;
+
+  for (int i = 0; i < int (reqs.nav_reqs.size()); i++){
+
+    if (i >= int (navigations_.size())){
+      navigations_.push_back(new SocialNav());
+      navigations_.at(i)->GetGraphNav()->Initialize(params_, map_path_);
+    }
+
+    graph_navigation::socialNavReq req = reqs.nav_reqs.at(i);
+
+    SocialAction action = SocialAction::GoAlone;
+    if (req.action == 1) {
+      action = SocialAction::Halt;
+    } else if (req.action == 2) {
+      action = SocialAction::Follow;
+    } else if (req.action == 3) {
+      action = SocialAction::Pass;
+    }
+
+    navigation::Odom odom = OdomHandler(req.odom);
+    odom.time += FLAGS_dt;
+
+    Vector2f cmd_vel;
+    float cmd_angle_vel;
+    navigations_.at(i)->SetNavGoal({req.goal_pose.x, req.goal_pose.y},
+                            req.goal_pose.theta);
+    LaserHandler(req.laser);
+    navigations_.at(i)->Run(ros::Time::now().toSec(),
+                     action,
+                     {req.loc.x, req.loc.y},
+                     req.loc.theta,
+                     odom,
+                     point_cloud_,
+                     ToHumans(req.human_poses, req.human_vels),
+                     cmd_vel, cmd_angle_vel);
+    auto twist = GetTwistMsg(cmd_vel, cmd_angle_vel);
+    auto ackermann = TwistToAckermann(twist);
+
+    graph_navigation::socialNavResp res = graph_navigation::socialNavResp();
+    res.cmd_vel = ackermann.velocity;
+    res.cmd_curve = ackermann.curvature;
+    res.target_id = navigations_.at(i)->GetTargetId();
+    const Vector2f local_target = navigations_.at(i)->GetLocalTarget();
+    res.local_target.x = local_target.x();
+    res.local_target.y = local_target.y();
+    SendCommand(i, cmd_vel, cmd_angle_vel);
+
+    DrawRobot(i);
+
+    DrawPathOptions(i);
+
+    all_res.nav_resps.push_back(res);
+
   }
+//  cout << endl;
 
-  navigation::Odom odom = OdomHandler(req.odom);
-  odom.time += FLAGS_dt;
-
-  Vector2f cmd_vel;
-  float cmd_angle_vel;
-  navigation_->SetNavGoal({req.goal_pose.x, req.goal_pose.y},
-                          req.goal_pose.theta);
-  LaserHandler(req.laser);
-  navigation_->Run(ros::Time::now().toSec(),
-                   action,
-                   {req.loc.x, req.loc.y},
-                   req.loc.theta,
-                   odom,
-                   point_cloud_,
-                   ToHumans(req.human_poses, req.human_vels),
-                   cmd_vel, cmd_angle_vel);
-  auto twist = GetTwistMsg(cmd_vel, cmd_angle_vel);
-  auto ackermann = TwistToAckermann(twist);
-  res.cmd_vel = ackermann.velocity;
-  res.cmd_curve = ackermann.curvature;
-  res.target_id = navigation_->GetTargetId();
-  const Vector2f local_target = navigation_->GetLocalTarget();
-  res.local_target.x = local_target.x();
-  res.local_target.y = local_target.y();
-  SendCommand(cmd_vel, cmd_angle_vel);
-  DrawRobot();
-  DrawPathOptions();
   // DrawTarget();
-  PublishVisualizationMarkers();
+//  PublishVisualizationMarkers(0);
+
   viz_pub_.publish(local_viz_msg_);
   viz_pub_.publish(global_viz_msg_);
+
   return true;
 }
 
@@ -877,27 +918,36 @@ int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   signal(SIGINT, SignalHandler);
   // Initialize ROS.
+
   ros::init(argc, argv, "navigation");
   ros::NodeHandle n;
-  navigation_ = new SocialNav();
+
+  navigations_.push_back(new SocialNav());
+//  navigations_.push_back(new SocialNav());
+//  navigations_.push_back(new SocialNav());
+
 
   // Map Loading
-  std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+  map_path_ = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
   std::string deprecated_path =
       navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
-  if (!FileExists(map_path) && FileExists(deprecated_path)) {
+  if (!FileExists(map_path_) && FileExists(deprecated_path)) {
     printf("Could not find navigation map file at %s. An V1 nav-map was found\
             at %s. Please run map_upgrade from vector_display to upgrade this\
-            map.\n", map_path.c_str(), deprecated_path.c_str());
+            map.\n", map_path_.c_str(), deprecated_path.c_str());
     return 1;
-  } else if (!FileExists(map_path)) {
-    printf("Could not find navigation map file at %s.\n", map_path.c_str());
+  } else if (!FileExists(map_path_)) {
+    printf("Could not find navigation map file at %s.\n", map_path_.c_str());
     return 1;
   }
 
-  navigation::NavigationParameters params;
-  LoadConfig(&params);
-  navigation_->GetGraphNav()->Initialize(params, map_path);
+//  navigation::NavigationParameters params;
+  LoadConfig(&params_);
+
+  navigations_.at(0)->GetGraphNav()->Initialize(params_, map_path_);
+//  navigations_.at(1)->GetGraphNav()->Initialize(params, map_path);
+//  navigations_.at(2)->GetGraphNav()->Initialize(params, map_path);
+
   if (FLAGS_bag_mode) {
     map_.Load("/home/jaholtz/code/amrl_maps/AHG2/AHG2.vectormap.txt");
     DrawMap();
@@ -949,19 +999,23 @@ int main(int argc, char** argv) {
     RateLoop loop(1.0 / FLAGS_dt);
     while (run_ && ros::ok()) {
       ros::spinOnce();
-      if (goal_set_) {
+      if (goal_set_.at(0)) {
         if (FLAGS_bag_mode) {
           RunBagfile();
         } else {
           RunSocial();
         }
       }
-      PublishVisualizationMarkers();
+      PublishVisualizationMarkers(0);
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
       loop.Sleep();
     }
   }
-  delete navigation_;
+
+  for (size_t i = 0; i < navigations_.size(); i++){
+      delete navigations_.at(i);
+  }
+
   return 0;
 }

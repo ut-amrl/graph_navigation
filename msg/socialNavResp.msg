@@ -1,0 +1,4 @@
+float32 cmd_vel
+float32 cmd_curve
+geometry_msgs/Pose2D local_target
+int32 target_id

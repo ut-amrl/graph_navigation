@@ -834,7 +834,6 @@ void Navigation::Run(const double& time,
     if (!FLAGS_no_local) {
       if (fabs(theta) > kLocalFOV) {
         if (kDebug) printf("TurnInPlace\n");
-        printf("TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
         if (kDebug) printf("ObstAv\n");
