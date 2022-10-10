@@ -68,17 +68,35 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   // mostly adapted from DeepCostMapEvaluator
   path_costs_ = std::vector<float>(paths.size(), 0.0f);
   for (size_t i = 0; i < paths.size(); i++) {
+    // Simple averaging scheme: average the costs of the visible points, discard
+    // any out-of-view points.
+    int num_visible_intermediate_states = 0;
+
     for (int j = 0; j <= rollout_density_; j++) {
       const pose_2d::Pose2Df state =
           paths[i]->GetIntermediateState(static_cast<float>(j) / rollout_density_);
-      // TODO(eyang): does this cast do what you're intending?
-      const float discount = 1.0f - state.translation.norm() * discount_factor_;
+      // TODO(eyang): does this computation make sense?
+      // const float discount = 1.0f - state.translation.norm() * discount_factor_;
+
+      // This discount assumes we have perfect knowledge of the terrain
+      // const float discount = 1.0f;
+
       const Eigen::Vector2i P_image_state =
           GetImageLocation(latest_bev_image, state.translation).cast<int>();
 
       const float cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
+      if (cost <= max_cost_) {
+        path_costs_[i] += cost;
+        num_visible_intermediate_states++;
+      }
 
-      path_costs_[i] += cost * discount / rollout_density_;
+      // path_costs_[i] += cost * discount / rollout_density_;
+    }
+
+    if (num_visible_intermediate_states != 0) {
+      path_costs_[i] /= num_visible_intermediate_states;
+    } else {
+      path_costs_[i] = max_cost_;
     }
   }
 
@@ -170,7 +188,9 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
 
   torch::Tensor model_output_tensor = torch::cat(batch_outputs, 0).squeeze();
 
-  cv::Mat1f cost_image(bev_image.rows, bev_image.cols, max_cost_);
+  // Regions that are out-of-view are indicated by a cost larger than the
+  // model's max cost.
+  cv::Mat1f cost_image(bev_image.rows, bev_image.cols, max_cost_ + 1);
   for (size_t i = 0; i < bev_patch_tensors.size(); ++i) {
     float patch_cost = model_output_tensor[i].item<float>();
 
