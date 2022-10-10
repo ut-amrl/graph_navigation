@@ -20,6 +20,11 @@ CONFIG_FLOAT(discount_factor, "TerrainEvaluator.discount_factor");
 CONFIG_UINT(rollout_density, "TerrainEvaluator.rollout_density");
 CONFIG_STRING(model_path, "TerrainEvaluator.model_path");
 
+CONFIG_FLOAT(dist_to_goal_weight, "TerrainEvaluator.dist_to_goal_weight");
+CONFIG_FLOAT(clearance_weight, "TerrainEvaluator.clearance_weight");
+CONFIG_FLOAT(fpl_weight, "TerrainEvaluator.fpl_weight");
+CONFIG_FLOAT(terrain_weight, "TerrainEvaluator.terrain_weight");
+
 TerrainEvaluator::TerrainEvaluator()
     : cost_model_path_(CONFIG_model_path),
       torch_device_(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
@@ -28,7 +33,11 @@ TerrainEvaluator::TerrainEvaluator()
       min_cost_(CONFIG_min_cost),
       max_cost_(CONFIG_max_cost),
       discount_factor_(CONFIG_discount_factor),
-      rollout_density_(CONFIG_rollout_density) {}
+      rollout_density_(CONFIG_rollout_density),
+      dist_to_goal_weight_(CONFIG_dist_to_goal_weight),
+      clearance_weight_(CONFIG_clearance_weight),
+      fpl_weight_(CONFIG_fpl_weight),
+      terrain_weight_(CONFIG_terrain_weight) {}
 
 bool TerrainEvaluator::LoadModel() {
   // Following the pytorch tutorial:
@@ -68,8 +77,19 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   // TODO(eyang): skipped a bunch of code dealing with other factors: distance to goal,
   // clearance, progress, etc.
 
+  std::vector<float> endpoint_clearance_to_goal(paths.size(), 0.0f);
+  std::vector<float> endpoint_dist_to_goal(paths.size(), local_target.norm());
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const Eigen::Vector2f path_endpoint = paths[i]->EndPoint().translation;
+    endpoint_clearance_to_goal[i] =
+        StraightLineClearance(geometry::Line2f(path_endpoint, local_target), point_cloud);
+    if (endpoint_clearance_to_goal[i] > 0) {
+      endpoint_dist_to_goal[i] = (path_endpoint - local_target).norm();
+    }
+  }
+
   // mostly adapted from DeepCostMapEvaluator
-  path_costs_ = std::vector<float>(paths.size(), 0.0f);
+  std::vector<float> terrain_costs(paths.size(), 0.0f);
   for (size_t i = 0; i < paths.size(); i++) {
     // Simple averaging scheme: average the costs of the visible points, discard
     // any out-of-view points.
@@ -94,26 +114,30 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
 
       const float cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
       if (cost <= max_cost_) {
-        path_costs_[i] += cost;
+        terrain_costs[i] += cost;
         num_visible_intermediate_states++;
       }
 
-      // path_costs_[i] += cost * discount / rollout_density_;
+      // terrain_costs[i] += cost * discount / rollout_density_;
     }
 
     if (num_visible_intermediate_states != 0) {
-      path_costs_[i] /= num_visible_intermediate_states;
+      terrain_costs[i] /= num_visible_intermediate_states;
     } else {
-      path_costs_[i] = max_cost_;
+      terrain_costs[i] = max_cost_;
     }
   }
 
-  std::shared_ptr<PathRolloutBase> best_path = paths[0];
-  float best_path_cost = path_costs_[0];
-  for (size_t i = 1; i < paths.size(); i++) {
+  std::shared_ptr<PathRolloutBase> best_path = nullptr;
+  float best_path_cost = std::numeric_limits<float>::infinity();
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const float path_progress = local_target.norm() - endpoint_dist_to_goal[i];
+    path_costs_[i] = dist_to_goal_weight_ * path_progress + fpl_weight_ * paths[i]->FPL() +
+                     clearance_weight_ * paths[i]->Clearance() + terrain_weight_ * terrain_costs[i];
+
     if (path_costs_[i] < best_path_cost) {
-      best_path = paths[i];
       best_path_cost = path_costs_[i];
+      best_path = paths[i];
     }
   }
 
@@ -266,11 +290,14 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
   // BEV image? might be useful to have both options. Maybe this toggle should
   // be in FindBest, because that's where the latest_vis_image_ is set.
 
+  // Normalize all costs linearly to be within [0, 1]
   std::vector<float> normalized_path_costs(path_costs_);
-  const float max_cost =
-      *std::max_element(normalized_path_costs.begin(), normalized_path_costs.end());
+  const auto minmax_costs =
+      std::minmax_element(normalized_path_costs.begin(), normalized_path_costs.end());
+  const float& min_cost = *minmax_costs.first;
+  const float& max_cost = *minmax_costs.second;
   for (float& cost : normalized_path_costs) {
-    cost /= max_cost;
+    cost = (cost - min_cost) / (max_cost - min_cost);
   }
 
   for (size_t i = 0; i < paths.size(); i++) {

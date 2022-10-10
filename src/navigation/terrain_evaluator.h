@@ -86,6 +86,11 @@ class TerrainEvaluator : public PathEvaluatorBase {
   float discount_factor_;
   // The number of intermediate points to evaluate along each path option
   int rollout_density_;
+
+  float dist_to_goal_weight_;
+  float clearance_weight_;
+  float fpl_weight_;
+  float terrain_weight_;
 };
 
 }  // namespace motion_primitives
