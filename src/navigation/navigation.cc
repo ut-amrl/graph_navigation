@@ -166,7 +166,7 @@ void Navigation::Initialize(const NavigationParameters& params,
     cost_map_evaluator->LoadModel();
     evaluator_ = cost_map_evaluator;
   } else if (params_.evaluator_type == "terrain") {
-    auto terrain_evaluator = std::make_shared<TerrainEvaluator>(params_);
+    auto terrain_evaluator = std::make_shared<TerrainEvaluator>();
     terrain_evaluator->LoadModel();
     evaluator_ = terrain_evaluator;
   } else if (params_.evaluator_type == "linear") {

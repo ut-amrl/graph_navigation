@@ -12,7 +12,7 @@ namespace motion_primitives {
 
 class TerrainEvaluator : public PathEvaluatorBase {
  public:
-  TerrainEvaluator(const navigation::NavigationParameters& navigation_parameters);
+  TerrainEvaluator();
 
   bool LoadModel();
 
@@ -79,6 +79,7 @@ class TerrainEvaluator : public PathEvaluatorBase {
   torch::Device torch_device_;
 
   int patch_size_;
+  int bev_pixels_per_meter_;
   float min_cost_;
   float max_cost_;
 

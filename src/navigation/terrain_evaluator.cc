@@ -10,6 +10,8 @@
 
 namespace motion_primitives {
 
+// A config reader must be initialized either in each program's main function or
+// elsewhere by the caller.
 CONFIG_INT(patch_size_pixels, "TerrainEvaluator.patch_size_pixels");
 CONFIG_INT(bev_pixels_per_meter, "TerrainEvaluator.bev_pixels_per_meter");
 CONFIG_FLOAT(min_cost, "TerrainEvaluator.min_cost");
@@ -18,10 +20,11 @@ CONFIG_FLOAT(discount_factor, "TerrainEvaluator.discount_factor");
 CONFIG_UINT(rollout_density, "TerrainEvaluator.rollout_density");
 CONFIG_STRING(model_path, "TerrainEvaluator.model_path");
 
-TerrainEvaluator::TerrainEvaluator(const navigation::NavigationParameters& navigation_parameters)
+TerrainEvaluator::TerrainEvaluator()
     : cost_model_path_(CONFIG_model_path),
       torch_device_(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
       patch_size_(CONFIG_patch_size_pixels),
+      bev_pixels_per_meter_(CONFIG_bev_pixels_per_meter),
       min_cost_(CONFIG_min_cost),
       max_cost_(CONFIG_max_cost),
       discount_factor_(CONFIG_discount_factor),
@@ -237,12 +240,9 @@ Eigen::Vector2f TerrainEvaluator::GetImageLocation(const cv::Mat3b& img,
   // Location of the Robot's (0, 0) in the image
   const Eigen::Vector2f P_image_robot(img.cols / 2, img.rows - 1);
 
-  // TODO(eyang): de-hardcode/configureify
-  const int pixels_per_meter_ = 150;
-
   // Relative image coordinates of the query point.
   const Eigen::Vector2f P_image_rel =
-      Eigen::Vector2f(-P_robot.y(), -P_robot.x()) * pixels_per_meter_;
+      Eigen::Vector2f(-P_robot.y(), -P_robot.x()) * bev_pixels_per_meter_;
 
   const Eigen::Vector2f P_image = P_image_robot + P_image_rel;
 
