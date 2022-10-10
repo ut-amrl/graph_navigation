@@ -84,6 +84,11 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
       const Eigen::Vector2i P_image_state =
           GetImageLocation(latest_bev_image, state.translation).cast<int>();
 
+      // TODO: eventually in this case, ascribe the "out-of-view point" cost
+      if (!ImageBoundCheck(cost_image, P_image_state)) {
+        LOG(ERROR) << "Cost image query point is outside the bounds of the image.";
+      }
+
       const float cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
       if (cost <= max_cost_) {
         path_costs_[i] += cost;
@@ -240,11 +245,6 @@ Eigen::Vector2f TerrainEvaluator::GetImageLocation(const cv::Mat3b& img,
       Eigen::Vector2f(-P_robot.y(), -P_robot.x()) * pixels_per_meter_;
 
   const Eigen::Vector2f P_image = P_image_robot + P_image_rel;
-
-  if (P_image.x() < 0 || P_image.x() >= img.cols || P_image.y() < 0 || P_image.y() >= img.rows) {
-    LOG(WARNING) << "Coordinates out of bounds (x: " << P_image.x() << ", y: " << P_image.y()
-                 << ") for image with dimensions " << img.size();
-  }
 
   return P_image;
 }

@@ -34,6 +34,16 @@ class TerrainEvaluator : public PathEvaluatorBase {
 
  protected:
   /**
+   * Returns whether the specified [x, y] image coordinate is a valid pixel of the
+   * specified image.
+   */
+  template <typename ScalarT>
+  bool ImageBoundCheck(const cv::Mat& image, const Eigen::Matrix<ScalarT, 2, 1>& P_image) {
+    return 0 <= P_image.x() && P_image.x() < image.cols && 0 <= P_image.y() &&
+           P_image.y() < image.rows;
+  }
+
+  /**
    * Return the approximate pixel location of a coordinate in the robot's local
    * reference frame.
    */
