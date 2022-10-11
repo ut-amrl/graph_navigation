@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "constant_curvature_arcs.h"
+
 namespace motion_primitives {
 
 // A config reader must be initialized either in each program's main function or
@@ -77,13 +79,16 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   // TODO(eyang): skipped a bunch of code dealing with other factors: distance to goal,
   // clearance, progress, etc.
 
+  // Don't consider paths with endpoints that are blocked from the goal.
   std::vector<float> endpoint_clearance_to_goal(paths.size(), 0.0f);
   std::vector<float> endpoint_dist_to_goal(paths.size(), local_target.norm());
   for (size_t i = 0; i < paths.size(); ++i) {
     const Eigen::Vector2f path_endpoint = paths[i]->EndPoint().translation;
     endpoint_clearance_to_goal[i] =
         StraightLineClearance(geometry::Line2f(path_endpoint, local_target), point_cloud);
-    if (endpoint_clearance_to_goal[i] > 0) {
+    std::cerr << i << ": " << endpoint_clearance_to_goal[i] << "\n";
+    // TODO(eyang): should this be a hyperparameter?
+    if (endpoint_clearance_to_goal[i] > 0.05) {
       endpoint_dist_to_goal[i] = (path_endpoint - local_target).norm();
     }
   }
