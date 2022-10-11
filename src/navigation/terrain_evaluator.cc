@@ -130,6 +130,7 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
 
   std::shared_ptr<PathRolloutBase> best_path = nullptr;
   float best_path_cost = std::numeric_limits<float>::infinity();
+  path_costs_ = std::vector<float>(paths.size(), best_path_cost);
   for (size_t i = 0; i < paths.size(); ++i) {
     const float path_progress = local_target.norm() - endpoint_dist_to_goal[i];
     path_costs_[i] = dist_to_goal_weight_ * path_progress + fpl_weight_ * paths[i]->FPL() +
