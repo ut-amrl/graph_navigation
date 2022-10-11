@@ -96,9 +96,7 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   // mostly adapted from DeepCostMapEvaluator
   std::vector<float> terrain_costs(paths.size(), 0.0f);
   for (size_t i = 0; i < paths.size(); i++) {
-    // Simple averaging scheme: average the costs of the visible points, discard
-    // any out-of-view points.
-    int num_visible_intermediate_states = 0;
+    float weight_sum = 0.0f;
 
     for (int j = 0; j <= rollout_density_; j++) {
       const pose_2d::Pose2Df state =
@@ -117,18 +115,25 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
         LOG(ERROR) << "Cost image query point is outside the bounds of the image.";
       }
 
-      const float cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
-      if (cost <= max_cost_) {
-        terrain_costs[i] += cost;
-        num_visible_intermediate_states++;
+      float cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
+
+      if (cost > max_cost_) {
+        // indicates this point is not visible
+        continue;
       }
+
+      float weight = std::pow(discount_factor_, state.translation.norm());
+
+      terrain_costs[i] += weight * cost;
+      weight_sum += weight;
 
       // terrain_costs[i] += cost * discount / rollout_density_;
     }
 
-    if (num_visible_intermediate_states != 0) {
-      terrain_costs[i] /= num_visible_intermediate_states;
+    if (weight_sum != 0) {
+      terrain_costs[i] /= weight_sum;
     } else {
+      // indicates none of the points were visible
       terrain_costs[i] = max_cost_;
     }
   }
