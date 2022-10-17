@@ -107,7 +107,6 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
 
       // Calculate the average terrain cost of the wheels/legs.
       // TODO(eyang): use the robot width and length from config
-      // TODO(eyang): image bound checks?
       Eigen::Vector2i P_image_frontLeft =
           GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(0.3, 0.3))
               .cast<int>();
@@ -121,11 +120,27 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
           GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(-0.3, -0.3))
               .cast<int>();
 
-      cost = cost_image.at<float>(P_image_frontLeft.y(), P_image_frontLeft.x());
-      cost += cost_image.at<float>(P_image_frontRight.y(), P_image_frontRight.x());
-      cost += cost_image.at<float>(P_image_backLeft.y(), P_image_backLeft.x());
-      cost += cost_image.at<float>(P_image_backRight.y(), P_image_backRight.x());
-      cost /= 4;
+      cost = 0;
+      int num_valid_wheels = 0;
+
+      if (ImageBoundCheck(cost_image, P_image_frontLeft)) {
+        cost += cost_image.at<float>(P_image_frontLeft.y(), P_image_frontLeft.x());
+        ++num_valid_wheels;
+      }
+      if (ImageBoundCheck(cost_image, P_image_frontRight)) {
+        cost += cost_image.at<float>(P_image_frontRight.y(), P_image_frontRight.x());
+        ++num_valid_wheels;
+      }
+      if (ImageBoundCheck(cost_image, P_image_backLeft)) {
+        cost += cost_image.at<float>(P_image_backLeft.y(), P_image_backLeft.x());
+        ++num_valid_wheels;
+      }
+      if (ImageBoundCheck(cost_image, P_image_backRight)) {
+        cost += cost_image.at<float>(P_image_backRight.y(), P_image_backRight.x());
+        ++num_valid_wheels;
+      }
+
+      cost /= num_valid_wheels;
 
       float weight = std::pow(CONFIG_discount_factor, state.translation.norm());
 
