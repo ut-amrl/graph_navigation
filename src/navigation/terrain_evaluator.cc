@@ -105,6 +105,28 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
         continue;
       }
 
+      // Calculate the average terrain cost of the wheels/legs.
+      // TODO(eyang): use the robot width and length from config
+      // TODO(eyang): image bound checks?
+      Eigen::Vector2i P_image_frontLeft =
+          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(0.3, 0.3))
+              .cast<int>();
+      Eigen::Vector2i P_image_frontRight =
+          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(0.3, -0.3))
+              .cast<int>();
+      Eigen::Vector2i P_image_backLeft =
+          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(-0.3, 0.3))
+              .cast<int>();
+      Eigen::Vector2i P_image_backRight =
+          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(-0.3, -0.3))
+              .cast<int>();
+
+      cost = cost_image.at<float>(P_image_frontLeft.y(), P_image_frontLeft.x());
+      cost += cost_image.at<float>(P_image_frontRight.y(), P_image_frontRight.x());
+      cost += cost_image.at<float>(P_image_backLeft.y(), P_image_backLeft.x());
+      cost += cost_image.at<float>(P_image_backRight.y(), P_image_backRight.x());
+      cost /= 4;
+
       float weight = std::pow(CONFIG_discount_factor, state.translation.norm());
 
       terrain_costs[i] += weight * cost;
