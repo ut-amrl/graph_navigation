@@ -78,6 +78,8 @@ class TerrainEvaluator : public PathEvaluatorBase {
   torch::jit::Module cost_model_;
   torch::Device torch_device_;
 
+  // Use CONFIG_* macros directly for automatic lua script reloading.
+  /*
   int patch_size_;
   int bev_pixels_per_meter_;
   float min_cost_;
@@ -91,6 +93,7 @@ class TerrainEvaluator : public PathEvaluatorBase {
   float clearance_weight_;
   float fpl_weight_;
   float terrain_weight_;
+  */
 };
 
 }  // namespace motion_primitives
