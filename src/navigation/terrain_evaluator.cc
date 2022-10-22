@@ -98,52 +98,44 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
         LOG(ERROR) << "Cost image query point is outside the bounds of the image.";
       }
 
-      float cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
-
-      if (cost > CONFIG_max_cost) {
+      const float center_cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
+      if (center_cost > CONFIG_max_cost) {
         // indicates this point is not visible
         continue;
       }
 
       // Calculate the average terrain cost of the wheels/legs.
-      // TODO(eyang): use the robot width and length from config
-      Eigen::Vector2i P_image_frontLeft =
-          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(0.3, 0.3))
-              .cast<int>();
-      Eigen::Vector2i P_image_frontRight =
-          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(0.3, -0.3))
-              .cast<int>();
-      Eigen::Vector2i P_image_backLeft =
-          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(-0.3, 0.3))
-              .cast<int>();
-      Eigen::Vector2i P_image_backRight =
-          GetImageLocation(latest_bev_image, state.translation + Eigen::Vector2f(-0.3, -0.3))
-              .cast<int>();
-
-      cost = 0;
+      float cost = 0;
       int num_valid_wheels = 0;
 
-      if (ImageBoundCheck(cost_image, P_image_frontLeft)) {
-        cost += cost_image.at<float>(P_image_frontLeft.y(), P_image_frontLeft.x());
-        ++num_valid_wheels;
-      }
-      if (ImageBoundCheck(cost_image, P_image_frontRight)) {
-        cost += cost_image.at<float>(P_image_frontRight.y(), P_image_frontRight.x());
-        ++num_valid_wheels;
-      }
-      if (ImageBoundCheck(cost_image, P_image_backLeft)) {
-        cost += cost_image.at<float>(P_image_backLeft.y(), P_image_backLeft.x());
-        ++num_valid_wheels;
-      }
-      if (ImageBoundCheck(cost_image, P_image_backRight)) {
-        cost += cost_image.at<float>(P_image_backRight.y(), P_image_backRight.x());
-        ++num_valid_wheels;
+      // TODO(eyang): use the robot width and length from config
+      const float robot_length = 0.6;
+      const float robot_width = 0.6;
+      const Eigen::Rotation2Df state_rotation(state.angle);
+
+      for (int i = 0; i < 4; i++) {
+        // Generate corners. These "side" values can either be 1 or -1.
+        const int x_side = 1 - (i & 0b10);
+        const int y_side = 1 - 2 * (i & 0b1);
+
+        const Eigen::Vector2f P_robot_corner(x_side * robot_length / 2, y_side * robot_width / 2);
+        const Eigen::Vector2i P_image_corner =
+            GetImageLocation(latest_bev_image, state.translation + state_rotation * P_robot_corner)
+                .cast<int>();
+
+        if (ImageBoundCheck(cost_image, P_image_corner)) {
+          cost += cost_image.at<float>(P_image_corner.y(), P_image_corner.x());
+          ++num_valid_wheels;
+        }
       }
 
-      cost /= num_valid_wheels;
+      if (num_valid_wheels != 0) {
+        cost /= num_valid_wheels;
+      } else {
+        cost = CONFIG_max_cost;
+      }
 
-      float weight = std::pow(CONFIG_discount_factor, state.translation.norm());
-
+      const float weight = std::pow(CONFIG_discount_factor, state.translation.norm());
       terrain_costs[i] += weight * cost;
       weight_sum += weight;
     }
