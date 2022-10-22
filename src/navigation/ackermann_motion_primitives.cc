@@ -57,7 +57,10 @@ AckermannSampler::AckermannSampler() {
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
-    path.length = min(nav_params.max_free_path_length, local_target.x());
+    // eyang/terrain: for terrain-based navigation, do not restrict
+    // the path length to only make progress towards the goal
+    path.length = nav_params.max_free_path_length;
+    // path.length = min(nav_params.max_free_path_length, local_target.x());
     path.fpl = path.length;
     return;
   } 
@@ -73,10 +76,15 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   path.fpl = min<float>({
       nav_params.max_free_path_length, 
       quarter_circle_dist});
-  path.length = min<float>({
-    path.fpl,
-    dist_closest_to_goal
-  });
+
+  // eyang/terrain: for terrain-based navigation, do not restrict
+  // the path length to only make progress towards the goal 
+  path.length = path.fpl;
+  std::ignore = dist_closest_to_goal;  // silence compiler warning
+  // path.length = min<float>({
+  //   path.fpl,
+  //   dist_closest_to_goal
+  // });
   const float stopping_dist = 
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
   path.length = max(path.length, stopping_dist);
