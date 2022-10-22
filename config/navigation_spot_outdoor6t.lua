@@ -53,14 +53,18 @@ TerrainEvaluator = {
   patch_size_pixels = 60;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
-  max_cost = 3.0;
+  max_cost = 2.5;
   -- discount_factor = 0.5;
   discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
-  model_path = "/home/eyang/tmp/outdoor-6t-10-16-16-58-43-e19.pt";
+
+  -- model_path = "/home/eyang/tmp/outdoor-6t-10-16-16-58-43-e19.pt";
+
+  -- trained with fall transitional grass
+  model_path = "/home/eyang/tmp/outdoor-6t-10-18-11-11-09-e19.pt";
 
   -- dist_to_goal_weight = -1.25; -- -3.5;
-  dist_to_goal_weight = -0.1;  -- ahg demo;
+  dist_to_goal_weight = -0.2;  -- ahg demo;
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
   terrain_weight = 6.0;
