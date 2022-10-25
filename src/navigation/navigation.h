@@ -143,6 +143,12 @@ class Navigation {
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
+  /**
+   * Return the planning domain, e.g. to draw navigation edges in visualization
+   * messages.
+  */
+  const GraphDomain& GetPlanningDomain() const;
+
  private:
 
   // Test 1D TOC motion in a straight line.

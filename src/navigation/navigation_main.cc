@@ -504,6 +504,14 @@ void DrawPathOptions() {
   }
 }
 
+void DrawNavigationEdges() {
+  const auto& graph_domain = navigation_.GetPlanningDomain();
+
+  for (const auto& edge : graph_domain.edges) {
+    visualization::DrawLine(edge.edge.p0, edge.edge.p1, 0x7f7f7f, global_viz_msg_);
+  }
+}
+
 /**
  * Helper method that initializes visualization_msgs::Marker parameters
  * @param vizMarker   pointer to the visualization_msgs::Marker object
@@ -874,6 +882,7 @@ int main(int argc, char** argv) {
       DrawRobot();
       DrawTarget();
       DrawPathOptions();
+      DrawNavigationEdges();
       PublishVisualizationMarkers();
       PublishPath();
       local_viz_msg_.header.stamp = ros::Time::now();

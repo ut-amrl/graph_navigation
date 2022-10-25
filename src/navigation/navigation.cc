@@ -821,6 +821,10 @@ std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }
 
+const GraphDomain& Navigation::GetPlanningDomain() const {
+  return planning_domain_;
+}
+
 vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
