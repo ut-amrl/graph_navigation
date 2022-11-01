@@ -58,6 +58,7 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
   if (fabs(path.curvature) < kEpsilon) {
     path.length = min(nav_params.max_free_path_length, local_target.x());
+    path.fpl = path.length;
     return;
   } 
   const float turn_radius = 1.0f / path.curvature;
