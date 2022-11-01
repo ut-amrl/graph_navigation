@@ -44,6 +44,7 @@
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
+#include "terrain_evaluator.h"
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -160,18 +161,20 @@ void Navigation::Initialize(const NavigationParameters& params,
   initialized_ = true;
   sampler_->SetNavParams(params);
 
-  PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
-    auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
+    auto cost_map_evaluator = std::make_shared<DeepCostMapEvaluator>(params_);
     cost_map_evaluator->LoadModel();
-    evaluator = (PathEvaluatorBase*) cost_map_evaluator;
+    evaluator_ = cost_map_evaluator;
+  } else if (params_.evaluator_type == "terrain") {
+    auto terrain_evaluator = std::make_shared<TerrainEvaluator>(params_);
+    terrain_evaluator->LoadModel();
+    evaluator_ = terrain_evaluator;
   } else if (params_.evaluator_type == "linear") {
-    evaluator = (PathEvaluatorBase*) new LinearEvaluator();
+    evaluator_ = std::make_shared<LinearEvaluator>();
   } else {
     printf("Uknown evaluator type %s\n", params_.evaluator_type.c_str());
     exit(1);
   }
-  evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
 }
 
 bool Navigation::Enabled() const {
@@ -805,7 +808,9 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
 
 const cv::Mat& Navigation::GetVisualizationImage() {
   if (params_.evaluator_type == "cost_map") {
-    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_vis_image_;
+    return std::dynamic_pointer_cast<DeepCostMapEvaluator>(evaluator_)->latest_vis_image_;
+  } else if (params_.evaluator_type == "terrain") {
+    return std::dynamic_pointer_cast<TerrainEvaluator>(evaluator_)->latest_vis_image_;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);

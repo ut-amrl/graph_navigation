@@ -773,6 +773,8 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
 int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
+  FLAGS_logtostderr = true;
+  FLAGS_colorlogtostderr = true;
   signal(SIGINT, SignalHandler);
   // Initialize ROS.
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
@@ -848,7 +850,7 @@ int main(int argc, char** argv) {
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
   cv_bridge::CvImage viz_img;
-  if (params.evaluator_type == "cost_map") {
+  if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain") {
     viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
   }
   
@@ -878,7 +880,7 @@ int main(int argc, char** argv) {
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
-      if (params.evaluator_type == "cost_map") {
+      if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain") {
         viz_img.image = navigation_.GetVisualizationImage();
         viz_img_pub_.publish(viz_img.toImageMsg());
       }

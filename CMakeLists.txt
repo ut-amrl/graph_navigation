@@ -1,5 +1,5 @@
 PROJECT(graph_navigation)
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.16)
 
 MESSAGE(STATUS "Compiling Navigation")
 MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
@@ -28,6 +28,7 @@ SET(ROS_BUILD_SHARED_LIBS false)
 LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
 FIND_PACKAGE(Torch REQUIRED)
 FIND_PACKAGE(OpenCV REQUIRED)
+FIND_PACKAGE(Boost COMPONENTS filesystem system REQUIRED)
 
 IF(NOT ROS_BUILD_TYPE)
   SET(ROS_BUILD_TYPE Release)
@@ -54,6 +55,7 @@ INCLUDE_DIRECTORIES(src/config_reader/include)
 INCLUDE_DIRECTORIES(src/third_party)
 INCLUDE_DIRECTORIES(src)
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 
 ROSBUILD_GENMSG()
 ROSBUILD_GENSRV()
@@ -70,10 +72,21 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/image_tiler.cc
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
+                        src/navigation/terrain_evaluator.cc
                         )
-TARGET_LINK_LIBRARIES(navigation 
-    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
-
+TARGET_LINK_LIBRARIES(navigation
+  shared_library
+  ${libs}
+  ${TORCH_LIBRARIES}
+  ${OpenCV_LIBS}
+  ${Boost_LIBRARIES}
+)
+target_precompile_headers(navigation
+  PRIVATE
+    <torch/torch.h>
+    <torch/script.h>
+    <opencv2/opencv.hpp>
+)
 
 ADD_EXECUTABLE(navigation_tests
     src/navigation/navigation_tests.cc
@@ -94,9 +107,21 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/linear_evaluator.cc
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
-                        src/navigation/navigation.cc)
-TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
-
+                        src/navigation/navigation.cc
+                        src/navigation/terrain_evaluator.cc)
+TARGET_LINK_LIBRARIES(social_nav
+  shared_library
+  ${libs}
+  ${TORCH_LIBRARIES}
+  ${OpenCV_LIBS}
+  ${Boost_LIBRARIES}
+)
+target_precompile_headers(social_nav
+  PRIVATE
+    <torch/torch.h>
+    <torch/script.h>
+    <opencv2/opencv.hpp>
+)
 
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})
 add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})

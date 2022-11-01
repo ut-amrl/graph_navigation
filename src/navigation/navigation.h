@@ -256,7 +256,7 @@ class Navigation {
   std::unique_ptr<motion_primitives::PathRolloutSamplerBase> sampler_;
 
   // Path evaluator.
-  std::unique_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
+  std::shared_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
 
   // Last Set of path options sampled
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
