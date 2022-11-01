@@ -76,24 +76,14 @@ Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
   }
   if (fabs(curvature) < FLT_MIN) {
     // Straight-line motion
-    return Pose2Df(0, Vector2f(length, 0));
+    return Pose2Df(0, Vector2f(f * length, 0));
   }
   const float r = 1.0 / curvature;
   return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
 }
 
 Pose2Df ConstantCurvatureArc::EndPoint() const {
-  const float a = Sign(curvature) * angular_length;
-  if (length == 0) {
-    // Pure rotational motion.
-    return Pose2Df(a, Vector2f(0, 0));
-  }
-  if (fabs(curvature) < FLT_MIN) {
-    // Straight-line motion
-    return Pose2Df(0, Vector2f(length, 0));
-  }
-  const float r = 1.0 / curvature;
-  return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
+  return GetIntermediateState(1.0);
 }
 
 }  // namespace motion_primitives
