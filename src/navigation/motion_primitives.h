@@ -37,6 +37,8 @@ namespace motion_primitives {
 // A path rollout, with the start being the robot's current pose in the robot
 // frame - 0,0,0.
 struct PathRolloutBase {
+  virtual ~PathRolloutBase() = default;
+
   // Length of the path rollout -- this is the cumulative distance traverdsed
   // along the path, $\int ||v(t)||dt$ where $v(t)$ is the instantaneous
   // velocity. 
@@ -75,6 +77,8 @@ struct PathRolloutBase {
 
 // Path rollout sampler. 
 struct PathRolloutSamplerBase {
+  virtual ~PathRolloutSamplerBase() = default;
+
   // Given the robot's current dynamic state and an obstacle point cloud, return
   // a set of n valid path rollout options that are collision-free.
   virtual std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) = 0;
@@ -116,6 +120,8 @@ struct PathRolloutSamplerBase {
 struct PathEvaluatorBase {
   // Default constructor: initialize all values to 0.
   PathEvaluatorBase() : vel(0, 0), ang_vel(0), local_target(0, 0) {}
+
+  virtual ~PathEvaluatorBase() = default;
 
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for

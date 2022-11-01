@@ -34,6 +34,8 @@
 namespace motion_primitives {
 
 struct ConstantCurvatureArc : PathRolloutBase {
+  ~ConstantCurvatureArc() = default;
+
   // Length of the path rollout.
   float Length() const override;
 
