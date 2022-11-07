@@ -343,7 +343,7 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
       } else {
         // red set to 255, decreasing green changes color from yellow to red
         color[0] = 255.0;
-        color[1] = 255.0 * (1 - 2 * normalized_path_costs[i]);
+        color[1] = 255.0 * (2 - 2 * normalized_path_costs[i]);
       }
 
       int thickness = 2;
