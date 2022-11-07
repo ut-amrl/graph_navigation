@@ -322,8 +322,8 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
   std::vector<float> normalized_path_costs(path_costs_);
   const auto minmax_costs =
       std::minmax_element(normalized_path_costs.begin(), normalized_path_costs.end());
-  const float& min_cost = *minmax_costs.first;
-  const float& max_cost = *minmax_costs.second;
+  const float min_cost = *minmax_costs.first;
+  const float max_cost = *minmax_costs.second;
   for (float& cost : normalized_path_costs) {
     cost = (cost - min_cost) / (max_cost - min_cost);
   }
