@@ -74,6 +74,8 @@ class TerrainEvaluator : public PathEvaluatorBase {
   std::vector<float> path_costs_;
 
  protected:
+  // An empty string indicates that the received images are already cost images,
+  // e.g. produced by another node like GANav.
   std::string cost_model_path_;
   torch::jit::Module cost_model_;
   torch::Device torch_device_;

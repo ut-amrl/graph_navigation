@@ -35,9 +35,11 @@ bool TerrainEvaluator::LoadModel() {
   // Following the pytorch tutorial:
   // https://pytorch.org/tutorials/advanced/cpp_export.html#step-3-loading-your-script-module-in-c
 
-  if (!boost::filesystem::exists(cost_model_path_)) {
-    throw std::system_error(std::make_error_code(std::errc::no_such_file_or_directory),
-                            "Model file '" + cost_model_path_ + "'");
+  if (cost_model_path_.length() == 0) {
+    return true;
+  } else if (!boost::filesystem::exists(cost_model_path_)) {
+    LOG(WARNING) << "Model file '" << cost_model_path_ << "' does not exist.";
+    return false;
   }
 
   try {
@@ -46,7 +48,7 @@ bool TerrainEvaluator::LoadModel() {
 
     return true;
   } catch (const c10::Error& e) {
-    std::cerr << "Error loading the model:\n" << e.msg();
+    LOG(ERROR) << "Unable to load model: \n" << e.msg();
     return false;
   }
 }
@@ -61,7 +63,14 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
     return paths.front();
   }
 
-  const cv::Mat1f cost_image = GetScalarCostImage(latest_bev_image);
+  cv::Mat1f cost_image;
+  if (cost_model_path_.length() != 0) {
+    cost_image = GetScalarCostImage(latest_bev_image);
+  } else {
+    std::vector<cv::Mat> channels;
+    cv::split(latest_bev_image, channels);
+    channels[0].convertTo(cost_image, CV_32F);
+  }
 
   // TODO(eyang): toggle computation with a flag?
   latest_vis_image_ = GetRGBCostImage(cost_image);
