@@ -140,6 +140,10 @@ class Navigation {
   float GetRobotWidth();
   float GetRobotLength();
   const cv::Mat& GetVisualizationImage();
+  // TODO(eyang): this is a hack to get a two visualization images with and
+  // without trajectory overlays. It should only be called if the evaluator type
+  // is terrain.
+  virtual const cv::Mat& GetCostMapImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 

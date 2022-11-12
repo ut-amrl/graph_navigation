@@ -817,6 +817,13 @@ const cv::Mat& Navigation::GetVisualizationImage() {
   }
 }
 
+const cv::Mat& Navigation::GetCostMapImage() {
+  // TODO(eyang): this is a hack to get a two visualization images with and
+  // without trajectory overlays.
+  
+  return std::dynamic_pointer_cast<TerrainEvaluator>(evaluator_)->latest_cost_image_;
+}
+
 std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }

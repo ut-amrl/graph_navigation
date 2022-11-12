@@ -73,7 +73,8 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   }
 
   // TODO(eyang): toggle computation with a flag?
-  latest_vis_image_ = GetRGBCostImage(cost_image);
+  latest_cost_image_ = GetRGBCostImage(cost_image);
+  latest_cost_image_.copyTo(latest_vis_image_);
 
   // TODO(eyang): skipped a bunch of code dealing with other factors: distance to goal,
   // clearance, progress, etc.
@@ -269,7 +270,7 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
 }
 
 cv::Mat3b TerrainEvaluator::GetRGBCostImage(const cv::Mat1f& scalar_cost_image) {
-  cv::Mat3b rgb_cost_image = cv::Mat3b::zeros(scalar_cost_image.rows, scalar_cost_image.cols);
+  cv::Mat3b rgb_cost_image = cv::Mat3b(scalar_cost_image.rows, scalar_cost_image.cols);
 
   cv::Mat1f intensity = (scalar_cost_image - CONFIG_min_cost) / (CONFIG_max_cost - CONFIG_min_cost);
   // Clamp the intensity values
@@ -281,8 +282,11 @@ cv::Mat3b TerrainEvaluator::GetRGBCostImage(const cv::Mat1f& scalar_cost_image) 
   // TODO(eyang): there might be a builtin function that can do this copy more effiently
   for (int row = 0; row < rgb_cost_image.rows; ++row) {
     for (int col = 0; col < rgb_cost_image.cols; ++col) {
-      // set the red channel (BGR)
-      rgb_cost_image(row, col)[2] = static_cast<uchar>(intensity(row, col));
+      if (scalar_cost_image(row, col) <= CONFIG_max_cost) {
+        rgb_cost_image.at<cv::Vec3b>(row, col) = cv::Vec3b::all(intensity(row, col));
+      } else {
+        rgb_cost_image.at<cv::Vec3b>(row, col) = cv::Vec3b(255, 0, 0);
+      }
     }
   }
 

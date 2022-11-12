@@ -147,6 +147,7 @@ ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 image_transport::Publisher viz_img_pub_;
+image_transport::Publisher cost_img_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -820,6 +821,7 @@ int main(int argc, char** argv) {
   status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
+  cost_img_pub_ = it_.advertise("/navigation/costmap", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
@@ -861,6 +863,10 @@ int main(int argc, char** argv) {
   if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain") {
     viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
   }
+  cv_bridge::CvImage cost_img;
+  if (params.evaluator_type == "terrain") {
+    cost_img = cv_bridge::CvImage(std_msgs::Header(), sensor_msgs::image_encodings::RGB8, navigation_.GetCostMapImage());
+  }
   
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
@@ -892,6 +898,10 @@ int main(int argc, char** argv) {
       if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain") {
         viz_img.image = navigation_.GetVisualizationImage();
         viz_img_pub_.publish(viz_img.toImageMsg());
+      }
+      if (params.evaluator_type == "terrain") {
+        cost_img.image = navigation_.GetCostMapImage();
+        cost_img_pub_.publish(cost_img.toImageMsg());
       }
 
       // Publish Commands

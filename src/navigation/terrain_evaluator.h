@@ -69,7 +69,8 @@ class TerrainEvaluator : public PathEvaluatorBase {
  public:
   // TODO: this is public to match DeepCostMapEvaluator: perhaps an accessor method
   // is more appropriate.
-  cv::Mat3b latest_vis_image_ = cv::Mat3b::zeros(8, 8);
+  cv::Mat3b latest_vis_image_ = cv::Mat3b::zeros(8, 8);  // has trajectory rollouts
+  cv::Mat3b latest_cost_image_ = cv::Mat3b::zeros(8, 8);  // does not have trajectory rollouts
 
   std::vector<float> path_costs_;
 
