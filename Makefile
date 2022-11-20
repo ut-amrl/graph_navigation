@@ -1,6 +1,6 @@
 #acceptable build_types: Release/Debug/Profile
-build_type=Release
-# build_type=Debug
+#build_type=Release
+ build_type=Debug
 
 .SILENT:
 

@@ -206,6 +206,7 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
 
 void GoToCallback(const amrl_msgs::Pose2Df& msg) {
   const Vector2f loc(msg.x, msg.y);
+  std::cout << "GoToCallback" << std::endl;
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.theta);
   navigation_.SetNavGoal(loc, msg.theta);
   navigation_.Resume();
@@ -213,7 +214,9 @@ void GoToCallback(const amrl_msgs::Pose2Df& msg) {
 
 void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   const Vector2f loc(msg.pose.x, msg.pose.y);
-  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
+    std::cout << "GoToCallbackAMRL" << std::endl;
+
+    printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
   navigation_.SetNavGoal(loc, msg.pose.theta);
 }
 

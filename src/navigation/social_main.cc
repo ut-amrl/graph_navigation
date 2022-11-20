@@ -800,6 +800,8 @@ void RunSocial() {
   for (size_t i = 0; i < navigations_.size(); i++) {
 
     SocialAction action = SocialAction::GoAlone;
+
+
     if (FLAGS_social_mode) {
       SocialPipsSrv::Request req;
       SocialPipsSrv::Response res;
@@ -821,14 +823,16 @@ void RunSocial() {
     float cmd_angle_vel;
     navigations_.at(i)->SetNavGoal({goal_.at(i).x(), goal_.at(i).y()},
                             goal_angle_.at(i));
+
     navigations_.at(i)->Run(ros::Time::now().toSec(),
-                     action,
-                     current_loc_.at(i),
-                     current_angle_.at(i),
-                     odom_.at(i),
-                     point_cloud_,
-                     humans_,
-                     cmd_vel, cmd_angle_vel);
+                            action,
+                            current_loc_.at(i),
+                            current_angle_.at(i),
+                            odom_.at(i),
+                            point_cloud_,
+                            humans_,
+                            cmd_vel, cmd_angle_vel);
+
     SendCommand(i, cmd_vel, cmd_angle_vel);
     DrawRobot(i);
     DrawPathOptions(i);
@@ -858,6 +862,10 @@ bool SocialService(socialNavSrv::Request &reqs,
 
     graph_navigation::socialNavReq req = reqs.nav_reqs.at(i);
 
+    bool manual_cmd = false;
+    Vector2f manual_vel = Vector2f(0, 0);
+    float manual_angle_vel = 0.;
+
     SocialAction action = SocialAction::GoAlone;
     if (req.action == 1) {
       action = SocialAction::Halt;
@@ -865,6 +873,10 @@ bool SocialService(socialNavSrv::Request &reqs,
       action = SocialAction::Follow;
     } else if (req.action == 3) {
       action = SocialAction::Pass;
+    } else if (req.action == -1){
+      manual_cmd = true;
+      manual_vel = Vector2f(req.action_vel_x, req.action_vel_y);
+      manual_angle_vel = req.action_vel_angle;
     }
 
     navigation::Odom odom = OdomHandler(req.odom);
@@ -875,14 +887,21 @@ bool SocialService(socialNavSrv::Request &reqs,
     navigations_.at(i)->SetNavGoal({req.goal_pose.x, req.goal_pose.y},
                             req.goal_pose.theta);
     LaserHandler(req.laser);
-    navigations_.at(i)->Run(ros::Time::now().toSec(),
-                     action,
-                     {req.loc.x, req.loc.y},
-                     req.loc.theta,
-                     odom,
-                     point_cloud_,
-                     ToHumans(req.human_poses, req.human_vels),
-                     cmd_vel, cmd_angle_vel);
+
+    if (!manual_cmd){
+      navigations_.at(i)->Run(ros::Time::now().toSec(),
+                              action,
+                              {req.loc.x, req.loc.y},
+                              req.loc.theta,
+                              odom,
+                              point_cloud_,
+                              ToHumans(req.human_poses, req.human_vels),
+                              cmd_vel, cmd_angle_vel);
+    }else{
+      cmd_vel = manual_vel;
+      cmd_angle_vel = manual_angle_vel;
+    }
+
     auto twist = GetTwistMsg(cmd_vel, cmd_angle_vel);
     auto ackermann = TwistToAckermann(twist);
 

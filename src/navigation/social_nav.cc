@@ -259,6 +259,7 @@ void SocialNav::Run(const double& time,
                     const std::vector<Eigen::Vector2f>& cloud,
                     const vector<Human> humans,
                     Vector2f& cmd_vel, float& cmd_angle_vel) {
+
   humans_ = humans;
   // Update the necessary components in the underlying navigation
   navigation_.UpdateOdometry(odom);
