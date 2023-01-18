@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
+#include "geometry_msgs/PoseStamped.h"
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -107,6 +108,10 @@ class Navigation {
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
                               const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> GetPlanPath();
+  //cancel function added for external global planner
+  void CancelPlanPath();
+  // setter function added for external global planner
+  bool SetPlanPath(std::vector<geometry_msgs::PoseStamped>& plan);
   bool GetCarrot(Eigen::Vector2f& carrot);
   // Enable or disable autonomy.
   void Enable(bool enable);
@@ -144,6 +149,7 @@ class Navigation {
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
  private:
+  static const char *CLASS_NAME_;
 
   // Test 1D TOC motion in a straight line.
   void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
@@ -263,6 +269,8 @@ class Navigation {
       last_options_;
   // Last PathOption taken
   std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
+  // last best option eval
+  bool last_best_option_eval_;
 };
 
 }  // namespace navigation

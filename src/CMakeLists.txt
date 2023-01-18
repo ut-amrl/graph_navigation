@@ -1,4 +1,4 @@
-# Compile ut_amrl_navigation library
+# Compile amrl_graph_navigation library
 # Requirements:
 #  - CMake 2.6 or higher
 #  - LibTorch found in the main CMakeLists.txt, e.g. FIND_PACKAGE(Torch REQUIRED)
@@ -10,8 +10,10 @@ INCLUDE_DIRECTORIES(config_reader/include)
 INCLUDE_DIRECTORIES(third_party)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(${Lua51_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(${TORCH_INCLUDE_DIRS})
 
-ADD_LIBRARY(ut_amrl_navigation
+ADD_LIBRARY(amrl_graph_navigation
             navigation/ackermann_motion_primitives.cc
             navigation/constant_curvature_arcs.cc
             navigation/deep_cost_map_evaluator.cc
@@ -21,8 +23,9 @@ ADD_LIBRARY(ut_amrl_navigation
             navigation/motion_primitives.cc
             navigation/navigation.cc
             vector_map/vector_map.cc
+            visualization/visualization.cc
 )
-TARGET_LINK_LIBRARIES(ut_amrl_navigation
+TARGET_LINK_LIBRARIES(amrl_graph_navigation
                       amrl_shared_lib
                       glog
                       gflags
@@ -33,7 +36,24 @@ TARGET_LINK_LIBRARIES(ut_amrl_navigation
 )
 
 ADD_LIBRARY(ut_amrl_social_navigation navigation/social_nav.cc)
-TARGET_LINK_LIBRARIES(ut_amrl_social_navigation ut_amrl_navigation)
+TARGET_LINK_LIBRARIES(ut_amrl_social_navigation amrl_graph_navigation)
+
+ADD_EXECUTABLE(pointcloud_to_laserscan
+    pointcloud_to_laserscan/pointcloud_to_laserscan_main.cc
+)
+
+target_link_libraries(pointcloud_to_laserscan
+    glog
+    gflags
+    amrl_shared_lib
+    lua5.1
+    ${BUILD_SPECIFIC_LIBRARIES}
+    ${catkin_LIBRARIES}
+)
+
+add_dependencies(pointcloud_to_laserscan
+    ${catkin_EXPORTED_TARGETS}
+)
 
 ADD_EXECUTABLE(navigation_tests
     navigation/navigation_tests.cc
@@ -45,3 +65,8 @@ TARGET_LINK_LIBRARIES(navigation_tests
     glog
     gflags
     pthread)
+
+install(TARGETS amrl_graph_navigation pointcloud_to_laserscan amrl_shared_lib
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

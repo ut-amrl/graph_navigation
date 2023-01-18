@@ -32,6 +32,7 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
+#include "ros/node_handle.h"
 
 using std::min;
 using std::max;
@@ -41,18 +42,17 @@ using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 using namespace math_util;
 
-CONFIG_FLOAT(max_curvature, "AckermannSampler.max_curvature");
-CONFIG_FLOAT(clearance_clip, "AckermannSampler.clearance_path_clip_fraction");
-
 namespace {
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
+
 }  // namespace
 
 namespace motion_primitives {
 
 AckermannSampler::AckermannSampler() {
 }
+
 
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   ConstantCurvatureArc& path = *path_ptr;
@@ -82,6 +82,7 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
 }
 
 vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
+
   vector<shared_ptr<PathRolloutBase>> samples;
   if (false) {
     samples = {
@@ -91,13 +92,14 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     };
     return samples;
   }
+
   const float max_domega = 
       nav_params.dt * nav_params.angular_limits.max_acceleration;
   const float max_dv = 
       nav_params.dt * nav_params.linear_limits.max_acceleration;
   const float robot_speed = fabs(vel.x());
-  float c_min = -CONFIG_max_curvature;
-  float c_max = CONFIG_max_curvature;
+  float c_min = -nav_params.max_curvature;
+  float c_max = nav_params.max_curvature;
   if (robot_speed > max_dv + kEpsilon) {
     c_min = max<float>(
         c_min, (ang_vel - max_domega) / (robot_speed - max_dv));
@@ -105,7 +107,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
         c_max, (ang_vel + max_domega) / (robot_speed - max_dv));
   }
   const float dc = (c_max - c_min) / static_cast<float>(n - 1);
-  // printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
+
   if (false) {
     for (float c = c_min; c <= c_max; c+= dc) {
       auto sample = new ConstantCurvatureArc(c);
@@ -115,8 +117,8 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
       samples.push_back(shared_ptr<PathRolloutBase>(sample));
     }
   } else {
-    const float dc = (2.0f * CONFIG_max_curvature) / static_cast<float>(n - 1);
-    for (float c = -CONFIG_max_curvature; c <= CONFIG_max_curvature; c+= dc) {
+    const float dc = (2.0f * nav_params.max_curvature) / static_cast<float>(n - 1);
+    for (float c = -nav_params.max_curvature; c <= nav_params.max_curvature; c+= dc) {  
       auto sample = new ConstantCurvatureArc(c);
       SetMaxPathLength(sample);
       CheckObstacles(sample);
@@ -232,7 +234,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     const float theta = ((path.curvature > 0.0f) ?
         atan2<float>(p.x(), path_radius - p.y()) :
         atan2<float>(p.x(), p.y() - path_radius));
-    if (theta < CONFIG_clearance_clip * angle_min && theta > 0.0) {
+    if (theta < nav_params.clearance_clip * angle_min && theta > 0.0) {
       const float r = (p - c).norm();
       const float current_clearance = fabs(r - fabs(path_radius));
       if (path.clearance > current_clearance) {

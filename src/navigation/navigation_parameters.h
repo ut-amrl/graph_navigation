@@ -83,6 +83,8 @@ struct NavigationParameters {
 
   bool can_traverse_stairs;
   bool use_map_speed;
+  // Do not use graph nav global plan when true.
+  bool local_planner_only;
 
   // Distance tolerance to reaching target.
   float target_dist_tolerance;
@@ -92,11 +94,14 @@ struct NavigationParameters {
   float target_angle_tolerance;
 
   bool use_kinect;
-
   std::string evaluator_type;
-
   std::string model_path;
 
+  // values for Ackermann sampler
+  float max_curvature;
+  float clearance_clip;
+
+  // camera calibration
   cv::Mat K;
   cv::Mat D;
   cv::Mat H;
@@ -117,11 +122,12 @@ struct NavigationParameters {
       max_clearance(1.0),
       can_traverse_stairs(false),
       use_map_speed(true),
+      local_planner_only(true),
       target_dist_tolerance(0.1),
       target_vel_tolerance(0.1),
       target_angle_tolerance(0.05),
       use_kinect(true),
-      evaluator_type("cost_map") {
+      evaluator_type("linear") {
       }
 };
 }  // namespace navigation

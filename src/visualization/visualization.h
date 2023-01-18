@@ -25,6 +25,7 @@
 
 #include "eigen3/Eigen/Dense"
 #include "amrl_msgs/VisualizationMsg.h"
+#include "visualization_msgs/Marker.h"
 
 namespace visualization {
 
@@ -46,11 +47,17 @@ void DrawLine(const Eigen::Vector2f& p0,
               uint32_t color,
               amrl_msgs::VisualizationMsg& msg);
 
+void DrawLine(const Eigen::Vector2f& p0, const Eigen::Vector2f& p1, uint32_t color,
+              visualization_msgs::Marker& msg);
+
 // Add a "X" to the visualization message.
 void DrawCross(const Eigen::Vector2f& location,
                float size,
                uint32_t color,
                amrl_msgs::VisualizationMsg& msg);
+// RViz version
+void DrawCross(const Eigen::Vector2f& location, float size, uint32_t color,
+               visualization_msgs::Marker& msg, std::string frame);
 
 // Add a single line to the visualization message.
 void DrawArc(const Eigen::Vector2f& center,
@@ -59,6 +66,10 @@ void DrawArc(const Eigen::Vector2f& center,
              float end_angle,
              uint32_t color,
              amrl_msgs::VisualizationMsg& msg);
+
+// Overloaded function: RViz Version
+void DrawArc(const Eigen::Vector2f& center, float radius, float start_angle,
+             float end_angle, uint32_t color, visualization_msgs::Marker& msg, std::string frame);
 
 // Add a particle to the visualization message.
 void DrawParticle(const Eigen::Vector2f& loc,
@@ -71,5 +82,11 @@ void DrawPathOption(const float curvature,
                     const uint32_t color,
                     bool show_clearance,
                     amrl_msgs::VisualizationMsg& msg);
+
+// Overloaded function: RViz Version
+void DrawPathOption(const float curvature, const float distance,
+                    const float clearance, const uint32_t color,
+                    bool show_clearance, visualization_msgs::Marker& msg,
+                    std::string frame);
 
 }  // namespace visualization

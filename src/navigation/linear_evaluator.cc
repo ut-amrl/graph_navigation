@@ -38,6 +38,8 @@
 #include "ackermann_motion_primitives.h"
 #include "linear_evaluator.h"
 
+#include <ros/console.h>
+
 using std::min;
 using std::max;
 using std::vector;
@@ -48,9 +50,11 @@ using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
 
-DEFINE_double(dw, 1, "Distance weight");
+//TODO: create rosparams for evaluator weights?
+
+DEFINE_double(dw, 1.0, "Distance weight");
 DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
+DEFINE_double(fw, -1.0, "Free path weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 
 namespace motion_primitives {
@@ -88,7 +92,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   if (best == nullptr) {
-    printf("No valid path found\n");
+    //ROS_WARN("No valid path found");
     // No valid paths!
     return nullptr;
   }
@@ -97,6 +101,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
       FLAGS_fw * best->Length() +
       FLAGS_cw * best->Clearance();
+  float best_dist;
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length = (path_to_goal_exists ?
@@ -104,11 +109,17 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
     const float cost = FLAGS_dw * path_length +
       FLAGS_fw * paths[i]->Length() +
       FLAGS_cw * paths[i]->Clearance();
+      
+      // Debug:
+      // ROS_DEBUG_STREAM(CLASS_NAME_ << ": Arc: " << i << " cost: " << cost << " path length: " << path_length << " dist to goal: " << dist_to_goal[i] << "free path length: " << paths[i]->Length());
+      // ROS_DEBUG_STREAM(CLASS_NAME_ << ": Coefficients: " << "Length: " << FLAGS_fw << " Clearance: " << FLAGS_cw << " Path Length: " << FLAGS_dw);
+
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
     }
   }
+  
   return best;
 }
 
