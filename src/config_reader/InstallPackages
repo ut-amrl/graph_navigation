@@ -1,0 +1,2 @@
+#!/bin/bash
+sudo apt-get install -y liblua5.1-dev clang valgrind libeigen3-dev
