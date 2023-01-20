@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = git@github.com:ut-amrl/config-reader.git
+	branch = master
+	commit = 353b55d98a1cb895b4c8677a50594081aa72a87c
+	parent = c21ab8c4cdc1ee623359a2d40068c5773a7170a4
+	method = merge
+	cmdver = 0.4.5

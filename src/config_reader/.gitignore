@@ -1,0 +1,5 @@
+.vscode/
+examples/example
+examples/multi_file_example
+examples/interactive_demo
+examples/tests

@@ -1,0 +1,19 @@
+dist: xenial
+sudo: required
+language:
+  - cpp
+compiler:
+  - gcc
+  - clang
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - gcc
+      - cmake
+      - clang
+before_install:
+  - ./InstallPackages
+script: cd examples && make test
+
