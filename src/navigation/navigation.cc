@@ -533,7 +533,6 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   //     V2COMP(robot_loc_), V2COMP(v0), V2COMP(v1), (v0 - v1).norm());
   const int num_intersections = geometry::CircleLineIntersection<float>(
       robot_loc_, params_.carrot_dist, v0, v1, &r0, &r1);
-  //TODO Bugfix: say set a nav goal -> goal reached -> switched to manual and start moving -> as soon as its gets away from the prev nav target, the following error starts continuously printing. So once nav target reached this following line should not be done.
   if (num_intersections == 0) {
     fprintf(stderr, "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) sq_carrot_dist: (%f) closest_dist: (%f)\n",
       v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), kSqCarrotDist, closest_dist);
