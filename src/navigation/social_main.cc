@@ -47,6 +47,7 @@
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "graph_navigation/graphNavSrv.h"
 #include "graph_navigation/socialNavSrv.h"
+#include "graph_navigation/socialNavReset.h"
 #include "math/geometry.h"
 #include "motion_primitives.h"
 #include "sensor_msgs/LaserScan.h"
@@ -95,6 +96,7 @@ using std::vector;
 using Eigen::Vector2f;
 using graph_navigation::graphNavSrv;
 using graph_navigation::socialNavSrv;
+using graph_navigation::socialNavReset;
 using geometry::Line2f;
 using geometry::kEpsilon;
 using ros_helpers::InitRosHeader;
@@ -848,6 +850,30 @@ void RunBagfile() {
   }
 }
 
+bool ResetService(socialNavReset::Request &reqs,
+                  socialNavReset::Response &res){
+
+
+  std::cout << "RESETING" << std::endl;
+//  std::string s(reqs.reqs.at(0).map_path.begin(), reqs.reqs.at(0).map_path.end());
+  map_path_ = reqs.reqs.at(0).map_path;
+  map_path_ = navigation::GetMapPath(FLAGS_maps_dir, map_path_);
+
+  map_.Load(map_path_);
+  DrawMap();
+  map_lines_publisher_.publish(line_list_marker_);
+
+  navigations_ = vector<SocialNav*>();
+  for (int i = 0; i < int (reqs.reqs.at(0).number_of_agents); i++) {
+    navigations_.push_back(new SocialNav());
+    navigations_.at(i)->GetGraphNav()->Initialize(params_, map_path_);
+  }
+//  graph_navigation::socialNavResetResp resp = graph_navigation::socialNavResetResp();
+//  resp.number_of_agents = navigations_.size();
+
+  return true;
+}
+
 bool SocialService(socialNavSrv::Request &reqs,
                    socialNavSrv::Response& all_res) {
 
@@ -980,7 +1006,7 @@ int main(int argc, char** argv) {
   vis_pub_ =
       n.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
   map_lines_publisher_ =
-      n.advertise<visualization_msgs::Marker>("/simulator_visualization", 6);
+      n.advertise<visualization_msgs::Marker>("/graphnav_simulator_visualization", 6);
   pose_marker_publisher_ =
       n.advertise<visualization_msgs::Marker>("/simulator_visualization", 6);
   human_marker_publisher_ =
@@ -1009,6 +1035,8 @@ int main(int argc, char** argv) {
   ros::ServiceServer social_nav_srv =
     n.advertiseService("socialNavSrv", &SocialService);
   pips_client_ = n.serviceClient<SocialPipsSrv>("SocialPipsSrv");
+  ros::ServiceServer social_nav_reset =
+          n.advertiseService("socialNavReset", &ResetService);
 
   InitSimulatorVizMarkers();
 

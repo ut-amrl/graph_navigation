@@ -1,0 +1,2 @@
+int32 number_of_agents
+string map_path
