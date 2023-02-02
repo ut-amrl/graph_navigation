@@ -477,6 +477,12 @@ bool Navigation::PlanStillValid() {
 
 bool Navigation::GetCarrot(Vector2f& carrot) {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
+  if ((robot_loc_ - nav_goal_loc_).squaredNorm()< 2.0) 
+  {
+      SetCarrotDist(1.5*((robot_vel_.norm() + 0.5 * params_.dt*params_.linear_limits.max_acceleration) * params_.dt +
+      Sq(robot_vel_.norm() + params_.dt*params_.linear_limits.max_acceleration) / (2.0 * params_.linear_limits.max_deceleration)));
+      // SetCarrotDist(5.0);
+  }
   CHECK_GE(plan_path_.size(), 2u);
 
   if ((plan_path_[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
