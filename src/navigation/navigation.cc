@@ -477,6 +477,7 @@ bool Navigation::PlanStillValid() {
 
 bool Navigation::GetCarrot(Vector2f& carrot) {
   const float kSqCarrotDist = Sq(params_.carrot_dist);
+  // SNUPI Development code block 
   if ((robot_loc_ - nav_goal_loc_).squaredNorm()< 2.0) 
   {
       SetCarrotDist(1.5*((robot_vel_.norm() + 0.5 * params_.dt*params_.linear_limits.max_acceleration) * params_.dt +
