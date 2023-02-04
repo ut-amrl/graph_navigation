@@ -485,29 +485,40 @@ bool Navigation::PlanStillValid() {
 
 
 int auction_optimal_bid() {
+    //number of trials for each agent 
     int num_trials = 100;
+    // Number of agents
     std::vector<int> agents = {50};
-    std::vector<int> ego_agents = {15, 26, 37};
+    // Current ego agent
+    std::vector<int> ego_agents = {15};
 
+    // no-op variable (was used in some other project)
     std::map<int, std::vector<double>> agents_util;
+    // private incentives
     std::map<int, std::vector<int>> incentives_opt;
 
     std::random_device rd;
     std::mt19937 gen(rd());
+    // We generate a distribution of pseudo incentives from uniform distribution. 199 is hardcoded.
     std::uniform_int_distribution<> dis(0, 199);
 
+    // Iterate over agents. This will be just 1 for each agent.
     for (int ag : ego_agents) {
-        std::vector<double> utility_av;
-        for (int i = 0; i < num_trials; i++) {
-            std::vector<double> utility;
-            std::vector<double> alpha;
+        std::vector<double> utility_av;         // ignore this line
+        for (int i = 0; i < num_trials; i++) {  // Iterate over trials
+            std::vector<double> utility;        // Here is where utility for the agent will be stored for each trial
+            std::vector<double> alpha;          // rewards
+            // Setting rewards for each of the k items that an agent can be rewarded
             for (int i = 0; i < agents[0]; i++) {
                 alpha.push_back(i / 100.0); 
             }
             incentives_opt[ag] = std::vector<int>(agents[0]);
+            // Generating pseudo incentives for agent and sort them.
             std::generate(incentives_opt[ag].begin(), incentives_opt[ag].end(), [&] { return dis(gen); });          
             std::sort(incentives_opt[ag].begin(), incentives_opt[ag].end());
-
+            // This is the main optimization loop. For each bid in the psedu incentives, we calculate
+            // the utility value. Then, across all the bids, we find the index of the bid at which 
+            // utility is maximum
             for (int bid : incentives_opt[ag]) {
                 std::vector<int> incentives_opt_copy = incentives_opt[ag];
                 incentives_opt_copy[ag] = bid;
