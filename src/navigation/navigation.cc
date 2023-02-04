@@ -44,6 +44,14 @@
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
+#include <iostream>
+#include <numeric>
+#include <random>
+#include <vector>
+#include <map>
+#include <cassert>
+#include <iterator>
+
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -473,6 +481,52 @@ bool Navigation::PlanStillValid() {
     }
   }
   return false;
+}
+
+
+int auction_optimal_bid() {
+    int num_trials = 100;
+    std::vector<int> agents = {50};
+    std::vector<int> ego_agents = {15, 26, 37};
+
+    std::map<int, std::vector<double>> agents_util;
+    std::map<int, std::vector<int>> incentives_opt;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 199);
+
+    for (int ag : ego_agents) {
+        std::vector<double> utility_av;
+        for (int i = 0; i < num_trials; i++) {
+            std::vector<double> utility;
+            std::vector<double> alpha;
+            for (int i = 0; i < agents[0]; i++) {
+                alpha.push_back(i / 100.0); 
+            }
+            incentives_opt[ag] = std::vector<int>(agents[0]);
+            std::generate(incentives_opt[ag].begin(), incentives_opt[ag].end(), [&] { return dis(gen); });          
+            std::sort(incentives_opt[ag].begin(), incentives_opt[ag].end());
+
+            for (int bid : incentives_opt[ag]) {
+                std::vector<int> incentives_opt_copy = incentives_opt[ag];
+                incentives_opt_copy[ag] = bid;
+                std::sort(incentives_opt_copy.begin(), incentives_opt_copy.end());
+
+                double penalty = 0;
+                for (int i = 0; i < std::distance(incentives_opt_copy.begin(), std::find(incentives_opt_copy.begin(), incentives_opt_copy.end(), bid)); i++) {
+                    penalty += incentives_opt_copy[i] * (alpha[i + 1] - alpha[i]);
+                }
+
+                utility.push_back(incentives_opt[ag][ag] * alpha[std::distance(incentives_opt_copy.begin(), std::find(incentives_opt_copy.begin(), incentives_opt_copy.end(), bid))] - penalty);
+            }
+            // utility_av.push_back(utility);
+            auto biggest = std::max_element(std::begin(utility), std::end(utility));
+            std::cout << "Max element is " << *biggest << " at position " << std::distance(std::begin(utility), biggest);
+            std::cout << "and is equal to " << ag<< std::endl;
+        }
+    }
+    return 0;
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot) {
