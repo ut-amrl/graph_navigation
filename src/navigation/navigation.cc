@@ -523,17 +523,17 @@ int auction_optimal_bid() {
                 std::vector<int> incentives_opt_copy = incentives_opt[ag];
                 incentives_opt_copy[ag] = bid;
                 std::sort(incentives_opt_copy.begin(), incentives_opt_copy.end());
-
+                // Computing the penalty. See Equation (8) on pg. 25 of https://timroughgarden.org/f13/f13.pdf
                 double penalty = 0;
                 for (int i = 0; i < std::distance(incentives_opt_copy.begin(), std::find(incentives_opt_copy.begin(), incentives_opt_copy.end(), bid)); i++) {
                     penalty += incentives_opt_copy[i] * (alpha[i + 1] - alpha[i]);
                 }
-
+                // Utility for the current bid in the current trial
                 utility.push_back(incentives_opt[ag][ag] * alpha[std::distance(incentives_opt_copy.begin(), std::find(incentives_opt_copy.begin(), incentives_opt_copy.end(), bid))] - penalty);
             }
-            // utility_av.push_back(utility);
-            auto biggest = std::max_element(std::begin(utility), std::end(utility));
-            std::cout << "Max element is " << *biggest << " at position " << std::distance(std::begin(utility), biggest);
+            // utility_av.push_back(utility); (ignore)
+            auto max_utility = std::max_element(std::begin(utility), std::end(utility));  // max utility value
+            std::cout << "Max element is " << *max_utility << " at position " << std::distance(std::begin(utility), max_utility);
             std::cout << "and is equal to " << ag<< std::endl;
         }
     }
