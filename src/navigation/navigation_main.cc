@@ -365,6 +365,12 @@ void PublishForwardPredictedPCL(const vector<Vector2f>& pcl) {
   fp_pcl_pub_.publish(fp_pcl_msg);
 }
 
+void PublishBids(int bid) {
+  // std_msgs::Int32 bid_msg_;
+  bid_msg_.data = bid;
+  bid_pub_.publish(bid_msg_);
+}
+
 nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
   nav_msgs::Path carrotNav;
   carrotNav.header.stamp=ros::Time::now();
@@ -869,7 +875,7 @@ int main(int argc, char** argv) {
 
     // Publish Nav Status
     PublishNavStatus();
-
+    PublishBids(navigation_.auction_optimal_bid());
     if(nav_succeeded) {
       // Publish Visualizations
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
