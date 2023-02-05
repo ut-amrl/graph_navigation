@@ -100,6 +100,7 @@ class Navigation {
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   void SetOverride(const Eigen::Vector2f& loc, float angle);
   void Resume();
+  int auction_optimal_bid();
   bool PlanStillValid();
   void Plan(Eigen::Vector2f goal_loc);
   std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,

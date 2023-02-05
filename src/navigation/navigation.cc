@@ -536,6 +536,8 @@ int auction_optimal_bid() {
             std::cout << "Max element is " << *max_utility << " at position " << std::distance(std::begin(utility), max_utility);
             std::cout << "and is equal to " << ag<< std::endl;
         }
+        bid_msg_.data = ag;
+        bid_pub_.publish(bid_msg_);
     }
     return 0;
 }

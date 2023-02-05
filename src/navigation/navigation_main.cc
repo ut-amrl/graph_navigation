@@ -146,6 +146,7 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+ros::Publisher bid_pub_;
 image_transport::Publisher viz_img_pub_;
 
 // Messages
@@ -154,6 +155,7 @@ visualization_msgs::Marker pose_marker_;
 visualization_msgs::Marker target_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
+std_msgs::Int32 bid_msg_;
 
 void EnablerCallback(const std_msgs::Bool& msg) {
   enabled_ = msg.data;
@@ -799,6 +801,7 @@ int main(int argc, char** argv) {
   navigation_.Initialize(params, map_path);
 
   // Publishers
+  bid_pub_ = n.advertise<std_msgs/Int32>("bids", 1, true);
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(
