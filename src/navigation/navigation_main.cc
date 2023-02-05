@@ -65,6 +65,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Int32.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -801,7 +802,7 @@ int main(int argc, char** argv) {
   navigation_.Initialize(params, map_path);
 
   // Publishers
-  bid_pub_ = n.advertise<std_msgs/Int32>("bids", 1, true);
+  bid_pub_ = n.advertise<std_msgs::Int32>("bids", 1, true);
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
   global_viz_msg_ = visualization::NewVisualizationMessage(

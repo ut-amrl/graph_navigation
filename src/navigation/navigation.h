@@ -30,6 +30,7 @@
 #include "graph_domain.h"
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
+#include "std_msgs/Int32.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -200,7 +201,9 @@ class Navigation {
   // Newest image received.
   cv::Mat latest_image_;
   double t_image_;
-
+ 
+  // Bid Message
+  std_msgs::Int32 bid_msg_;  
 
   NavigationState nav_state_;
   
