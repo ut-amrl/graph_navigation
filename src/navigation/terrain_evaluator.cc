@@ -222,9 +222,7 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
       // standardized.
       // bev_patch_tensor = bev_patch_tensor.to(torch::kFloat);
 
-      // TODO(eyang): The sample model was probably trained on BGR. We should
-      // standardize the expected channel order.
-      // bev_patch_tensor = bev_patch_tensor.flip(2);  // BGR -> RGB
+      bev_patch_tensor = bev_patch_tensor.flip(2);  // BGR -> RGB
 
       bev_patch_tensor = bev_patch_tensor.permute({2, 0, 1});
 
