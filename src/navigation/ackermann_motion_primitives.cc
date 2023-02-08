@@ -87,7 +87,10 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
   // });
   const float stopping_dist = 
       Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
-  path.length = max(path.length, stopping_dist);
+  // eyang/terrain: since the robot is now allowed to move past the goal,
+  // sometimes the stopping distance makes the curve too long.
+  std::ignore = stopping_dist;
+  // path.length = max(path.length, stopping_dist);
 }
 
 vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
