@@ -115,6 +115,7 @@ CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
+DEFINE_double(speed_factor, 1.0, "Factor to multiply speed by");
 
 // DECLARE_int32(v);
 
@@ -796,6 +797,7 @@ int main(int argc, char** argv) {
   // Load Parameters and Initialize
   navigation::NavigationParameters params;
   LoadConfig(&params);
+  params.linear_limits.max_speed *= FLAGS_speed_factor;
   navigation_.Initialize(params, map_path);
 
   // Publishers
