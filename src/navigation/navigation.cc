@@ -42,7 +42,6 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
-#include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
 
 using Eigen::Rotation2Df;
@@ -162,9 +161,9 @@ void Navigation::Initialize(const NavigationParameters& params,
 
   PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
-    auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
-    cost_map_evaluator->LoadModel();
-    evaluator = (PathEvaluatorBase*) cost_map_evaluator;
+    // auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
+    // cost_map_evaluator->LoadModel();
+    // evaluator = (PathEvaluatorBase*) cost_map_evaluator;
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*) new LinearEvaluator();
   } else {
@@ -804,12 +803,8 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
 }
 
 const cv::Mat& Navigation::GetVisualizationImage() {
-  if (params_.evaluator_type == "cost_map") {
-    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_vis_image_;
-  } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);
-  }
 }
 
 std::shared_ptr<PathRolloutBase> Navigation::GetOption() {

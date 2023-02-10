@@ -6,6 +6,8 @@ MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
 MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
+SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 SET(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Werror")
 SET(LIBRARY_NAME "graph_nav_lib"
     CACHE STRING "Name of compiled library")
@@ -25,8 +27,8 @@ ROSBUILD_INIT()
 SET(ROS_BUILD_STATIC_LIBS true)
 SET(ROS_BUILD_SHARED_LIBS false)
 
-LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
-FIND_PACKAGE(Torch REQUIRED)
+# LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
+# FIND_PACKAGE(Torch REQUIRED)
 FIND_PACKAGE(OpenCV REQUIRED)
 
 IF(NOT ROS_BUILD_TYPE)
@@ -35,8 +37,8 @@ ENDIF()
 
 MESSAGE(STATUS "ROS-Overrride Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "CXX Flags: ${CMAKE_CXX_FLAGS}")
-MESSAGE(STATUS "LibTorch location: ${TORCH_INCLUDE_DIRS}")
-MESSAGE(STATUS "LibTorch libraries: ${TORCH_LIBRARIES}")
+# MESSAGE(STATUS "LibTorch location: ${TORCH_INCLUDE_DIRS}")
+# MESSAGE(STATUS "LibTorch libraries: ${TORCH_LIBRARIES}")
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
@@ -67,9 +69,9 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/ackermann_motion_primitives.cc
                         src/navigation/constant_curvature_arcs.cc
                         src/navigation/linear_evaluator.cc
-                        src/navigation/image_tiler.cc
-                        src/navigation/deep_cost_map_evaluator.cc
-                        src/navigation/image_based_evaluator.cc
+                        # src/navigation/image_tiler.cc
+                        # src/navigation/deep_cost_map_evaluator.cc
+                        # src/navigation/image_based_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
     shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
@@ -90,10 +92,10 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/motion_primitives.cc
                         src/navigation/ackermann_motion_primitives.cc
                         src/navigation/constant_curvature_arcs.cc
-                        src/navigation/image_tiler.cc
                         src/navigation/linear_evaluator.cc
-                        src/navigation/deep_cost_map_evaluator.cc
-                        src/navigation/image_based_evaluator.cc
+                        # src/navigation/image_tiler.cc
+                        # src/navigation/deep_cost_map_evaluator.cc
+                        # src/navigation/image_based_evaluator.cc
                         src/navigation/navigation.cc)
 TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
