@@ -99,7 +99,7 @@ using ros_helpers::InitRosHeader;
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 const string kOpenCVWindow = "Image window";
 
-DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
+DEFINE_string(robot_config, "config/automata_snupi.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
@@ -112,7 +112,7 @@ CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
-DEFINE_string(map, "UT_Campus", "Name of navigation map file");
+DEFINE_string(map, "AHG2", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
 DEFINE_double(speed_factor, 1.0, "Factor to multiply speed by");
@@ -121,7 +121,7 @@ DEFINE_double(speed_factor, 1.0, "Factor to multiply speed by");
 
 bool run_ = true;
 bool simulate_ = false;
-bool enabled_ = false;
+bool enabled_ = true;
 bool received_odom_ = false;
 bool received_laser_ = false;
 Vector2f goal_ = {0, 0};
