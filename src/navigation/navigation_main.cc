@@ -121,7 +121,7 @@ DEFINE_double(speed_factor, 1.0, "Factor to multiply speed by");
 
 bool run_ = true;
 bool simulate_ = false;
-bool enabled_ = true;
+bool enabled_ = false;
 bool received_odom_ = false;
 bool received_laser_ = false;
 Vector2f goal_ = {0, 0};

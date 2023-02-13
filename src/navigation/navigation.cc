@@ -275,27 +275,27 @@ void Navigation::ForwardPredict(double t) {
   using Eigen::Rotation2Df;
   using Eigen::Translation2f;
   Affine2f lidar_tf = Affine2f::Identity();
-  for (const Twist& c : command_history_) {
-    const double cmd_time = c.time;
-    if (cmd_time > t) continue;
-    if (cmd_time >= t_odometry_ - params_.dt) {
-      const float dt = (t_odometry_ > cmd_time) ?
-          min<double>(t_odometry_ - cmd_time, params_.dt) :
-          min<double>(t - cmd_time, params_.dt);
-      odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
-          c.linear.x(), c.linear.y()));
-      odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
-    }
-    if (t_point_cloud_ >= cmd_time  - params_.dt) {
-      const float dt = (t_point_cloud_ > cmd_time) ?
-          min<double>(t_point_cloud_ - cmd_time, params_.dt) :
-          min<double>(t - cmd_time, params_.dt);
-      lidar_tf =
-          Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
-          Rotation2Df(-c.angular.z() * dt) *
-          lidar_tf;
-    }
-  }
+  // for (const Twist& c : command_history_) {
+  //   const double cmd_time = c.time;
+  //   if (cmd_time > t) continue;
+  //   if (cmd_time >= t_odometry_ - params_.dt) {
+  //     const float dt = (t_odometry_ > cmd_time) ?
+  //         min<double>(t_odometry_ - cmd_time, params_.dt) :
+  //         min<double>(t - cmd_time, params_.dt);
+  //     odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
+  //         c.linear.x(), c.linear.y()));
+  //     odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
+  //   }
+  //   if (t_point_cloud_ >= cmd_time  - params_.dt) {
+  //     const float dt = (t_point_cloud_ > cmd_time) ?
+  //         min<double>(t_point_cloud_ - cmd_time, params_.dt) :
+  //         min<double>(t - cmd_time, params_.dt);
+  //     lidar_tf =
+  //         Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
+  //         Rotation2Df(-c.angular.z() * dt) *
+  //         lidar_tf;
+  //   }
+  // }
   fp_point_cloud_.resize(point_cloud_.size());
   for (size_t i = 0; i < point_cloud_.size(); ++i) {
     fp_point_cloud_[i] = lidar_tf * point_cloud_[i];
