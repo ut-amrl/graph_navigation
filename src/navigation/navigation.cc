@@ -628,7 +628,7 @@ bool Navigation::GetCarrot(Vector2f& carrot) {
   // Iterate from current line segment to goal until the segment intersects
   // the circle centered at the robot, of radius kCarrotDist.
   // The goal is not within carrot dist of the robot, and the robot is within
-  // carrot dist of some line segment. Hence, there must exist at least one
+  // carrot dist of some line segment. Hence, t must exist at least one
   // vertex along the plan towards the goal that is out of the carrot dist.
   for (int i = i1; i - 1 >= 0; --i) {
     i0 = i;
@@ -693,6 +693,15 @@ Vector2f GetFinalPoint(const PathOption& o) {
 
 DEFINE_double(tx, 0.4, "Test obstacle point - X");
 DEFINE_double(ty, -0.38, "Test obstacle point - Y");
+
+void Navigation::SetOriginalWeights() {
+  ((LinearEvaluator*)evaluator_.get())->SetOriginalWeights();
+}
+
+void Navigation::SetCurveWeights() {
+  ((LinearEvaluator*)evaluator_.get())->SetCurveWeights();
+}
+
 
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
@@ -769,7 +778,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          ang_vel_cmd);
   best_option_ = best_path;
   last_curvature_cmd_ = ang_vel_cmd / vel_cmd.x();
-  printf("vel_cmd %f\n", vel_cmd.norm());
+  // printf("vel_cmd %f\n", vel_cmd.norm());
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
@@ -1001,6 +1010,7 @@ bool Navigation::Run(const double& time,
     return true;
   }
 
+
   // Before swithcing states we need to update the local target.
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
@@ -1022,6 +1032,7 @@ bool Navigation::Run(const double& time,
     }
   }
 
+
   // Switch between navigation states.
   NavigationState prev_state = nav_state_;
   do {
@@ -1036,6 +1047,7 @@ bool Navigation::Run(const double& time,
       nav_state_ = NavigationState::kStopped;
     }
   } while (prev_state != nav_state_);
+
 
 
   switch (nav_state_) {
@@ -1059,6 +1071,7 @@ bool Navigation::Run(const double& time,
           static_cast<int>(nav_state_));
     }
   }
+
 
   if (nav_state_ == NavigationState::kPaused ||
       nav_state_ == NavigationState::kStopped) {
@@ -1091,6 +1104,7 @@ bool Navigation::Run(const double& time,
     if (kDebug) printf("Reached Goal: TurnInPlace\n");
     TurnInPlace(cmd_vel, cmd_angle_vel);
   }
+
 
   return true;
 }

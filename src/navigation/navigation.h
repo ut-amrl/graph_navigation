@@ -162,6 +162,9 @@ class Navigation {
   // const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
+  
+  void SetCurveWeights();
+  void SetOriginalWeights();
 
  private:
 
@@ -208,6 +211,7 @@ class Navigation {
   // Get a carrot goal using the disparity extender algorithm
   Eigen::Vector2f DisparityExtender();
 
+
   // Current robot location.
   Eigen::Vector2f robot_loc_;
   // Current robot orientation.
@@ -226,6 +230,10 @@ class Navigation {
   cv::Mat latest_image_;
   double t_image_;
 
+  float orig_cw_;
+  float orig_dw_;
+  float orig_fw_;
+  float orig_ow_;
 
   NavigationState nav_state_;
 

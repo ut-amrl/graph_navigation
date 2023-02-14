@@ -48,6 +48,10 @@ using navigation::MotionLimits;
 using namespace geometry;
 using namespace math_util;
 
+DEFINE_double(c_dw, 0, "Curve Distance weight");
+DEFINE_double(c_cw, -1, "Curve Clearance weight");
+DEFINE_double(c_ow, 0.0, "Curve Option clearance weight");
+DEFINE_double(c_fw, 0.0, "Cruve Free path weight");
 DEFINE_double(dw, 0, "Distance weight");
 DEFINE_double(cw, -1, "Clearance weight");
 DEFINE_double(ow, 0.0, "Option clearance weight");
@@ -160,12 +164,54 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   return best;
 }
 
+void LinearEvaluator::SetCurveWeights() {
+ if(!orig_weights_captured) {
+	 orig_fw = FLAGS_fw; 
+ 	 orig_dw = FLAGS_dw; 
+	 orig_ow = FLAGS_ow; 
+	 orig_cw = FLAGS_cw; 
+	 orig_weights_captured = true;
+ }
+ FLAGS_fw = FLAGS_c_fw; 
+ FLAGS_dw = FLAGS_c_dw; 
+ FLAGS_ow = FLAGS_c_ow; 
+ FLAGS_cw = FLAGS_c_cw; 
+}
+
+void LinearEvaluator::SetOriginalWeights() {
+ if(!orig_weights_captured) return;
+ FLAGS_fw = orig_fw;
+ FLAGS_dw = orig_dw;
+ FLAGS_ow = orig_ow;
+ FLAGS_cw = orig_cw;
+}
+
+float LinearEvaluator::GetClearanceWeight() {
+  return FLAGS_cw;
+}
+
+float LinearEvaluator::GetDistanceWeight() {
+  return FLAGS_dw;
+}
+
+float LinearEvaluator::GetOptionClearanceWeight() {
+  return FLAGS_ow;
+}
+
+float LinearEvaluator::GetFreePathWeight() {
+  return FLAGS_fw;
+}
+
 void LinearEvaluator::SetClearanceWeight(const float &weight) {
   FLAGS_cw = weight;
 }
 
 void LinearEvaluator::SetDistanceWeight(const float &weight) {
   FLAGS_dw = weight;
+}
+
+void LinearEvaluator::SetOptionClearanceWeight(const float &weight) {
+  FLAGS_ow = weight;
 }
 
 void LinearEvaluator::SetFreePathWeight(const float &weight) {

@@ -32,10 +32,24 @@ struct LinearEvaluator :  PathEvaluatorBase {
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
+  float GetClearanceWeight();
+  float GetDistanceWeight();
+  float GetFreePathWeight();
+  float GetOptionClearanceWeight();
+  void SetOptionClearanceWeight(const float& weight);
   void SetClearanceWeight(const float& weight);
   void SetDistanceWeight(const float& weight);
   void SetFreePathWeight(const float& weight);
   void SetSubOpt(const float& threshold);
+
+  void SetCurveWeights();
+  void SetOriginalWeights();
+
+  bool orig_weights_captured;
+  float orig_cw;
+  float orig_dw;
+  float orig_fw;
+  float orig_ow;
 };
 
 }  // namespace motion_primitives

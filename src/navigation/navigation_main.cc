@@ -53,6 +53,7 @@
 #include "graph_navigation/graphNavSrv.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
+#include "sensor_msgs/Joy.h"
 // #include "sensor_msgs/CompressedImage.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
@@ -208,6 +209,18 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
     point_cloud_[i] = r * cached_rays_[i] + kLaserLoc;
   }
   navigation_.ObservePointCloud(point_cloud_, cached_dtheta_, msg.header.stamp.toSec());
+}
+
+void JoystickCallback(const sensor_msgs::Joy& msg) {
+  // A sets constants to the curve constants
+  if (msg.buttons[0]) {
+    navigation_.SetCurveWeights();
+    // printf("Curve weights");
+  }
+  else {
+   navigation_.SetOriginalWeights(); 
+   // printf("Orig weights");
+  }
 }
 
 void GoToCallback(const geometry_msgs::PoseStamped& msg) {
@@ -896,6 +909,8 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   ros::Subscriber laser_sub =
       n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
+  ros::Subscriber joystick_sub =
+      n.subscribe("/joystick", 1, &JoystickCallback);
   // ros::Subscriber img_sub =
   //     n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
