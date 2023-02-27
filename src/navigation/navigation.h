@@ -131,7 +131,9 @@ class Navigation {
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
 
- private:
+  // Navigation parameters.
+  NavigationParameters params_;
+private:
 
   // Test 1D TOC motion in a straight line.
   void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
@@ -231,8 +233,6 @@ class Navigation {
 
   // Whether to enable autonomous navigation or not.
   bool enabled_;
-  // Navigation parameters.
-  NavigationParameters params_;
 
   // Whether or not things have been initialized.
   bool initialized_;

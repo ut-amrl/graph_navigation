@@ -914,6 +914,13 @@ bool SocialService(socialNavSrv::Request &reqs,
                             req.goal_pose.theta);
     LaserHandler(req.laser);
 
+    if (req.max_speed > 0){
+//      std::cout << "Prev: " << navigations_.at(i)->navigation_.params_.linear_limits.max_speed << std::endl;
+//      navigations_.at(i)->navigation_.params_.linear_limits.max_speed = req.max_speed;
+//      std::cout << "Post: " << navigations_.at(i)->navigation_.params_.linear_limits.max_speed << std::endl;
+      navigations_.at(i)->kMaxVel = req.max_speed;
+    }
+
     if (!manual_cmd){
       navigations_.at(i)->Run(ros::Time::now().toSec(),
                               action,

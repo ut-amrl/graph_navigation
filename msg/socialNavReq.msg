@@ -2,6 +2,7 @@ int32 action
 float32 action_vel_x
 float32 action_vel_y
 float32 action_vel_angle
+float32 max_speed
 amrl_msgs/Pose2Df goal_pose
 geometry_msgs/Pose2D loc
 nav_msgs/Odometry odom

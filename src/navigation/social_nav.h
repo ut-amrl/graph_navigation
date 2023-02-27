@@ -55,8 +55,10 @@ class SocialNav {
   int GetTargetId();
   Eigen::Vector2f GetLocalTarget();
   Navigation* GetGraphNav();
- private:
+
   Navigation navigation_;
+  float kMaxVel = 1.5;
+private:
   SocialAction last_action_;
   Eigen::Vector2f pose_;
   float theta_;
@@ -83,7 +85,6 @@ class SocialNav {
       const int& id_c,
       int& output_id);
   bool TargetGood();
-  const float kMaxVel = 1.5;
 };
 
 }  // namespace navigation
