@@ -479,8 +479,6 @@ bool Navigation::PlanStillValid() {
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot) {
-  carrot = override_target_;
-  return true;
   const float kSqCarrotDist = Sq(params_.carrot_dist);
   CHECK_GE(plan_path_.size(), 2u);
 
@@ -591,9 +589,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
 
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
-  // if (nav_state_ == NavigationState::kOverride) {
-  //   local_target = override_target_;
-  // }
+  if (nav_state_ == NavigationState::kOverride) {
+    local_target = override_target_;
+  }
 
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
   evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
@@ -877,7 +875,7 @@ bool Navigation::Run(const double& time,
     //   if (kDebug) printf("Replanning\n");
     //   plan_path_ = Plan(robot_loc_, nav_goal_loc_);
     // }
-    if (nav_state_ == NavigationState::kGoto || nav_state_ == NavigationState::kOverride) {
+    if (nav_state_ == NavigationState::kGoto) {
       // Get Carrot and check if done
       Vector2f carrot(0, 0);
       bool foundCarrot = GetCarrot(carrot);

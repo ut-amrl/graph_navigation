@@ -123,15 +123,11 @@ def find_next_carrot(pos: Tuple[int, int]) -> int:
             return min(Namespace.last_carrot_idx + 1, len(Namespace.plan) - 1)
 
 
-def image_to_robot_location(rpos: Tuple[int, int, float], cpos: Tuple[int, int]) -> Tuple[float, float, float]:
-    dx = cpos[0] - rpos[0]
-    dy = cpos[1] - rpos[1]
-    rtheta = rpos[2]
-    
-    # x = dx * np.cos(rtheta) - dy * np.sin(rtheta)
-    # y = dy * np.cos(rtheta) + dx * np.sin(rtheta)
-    # return x / Namespace.fac, -y / Namespace.fac, np.arctan2(y, x)
-    return x / Namespace.fac, -y / Namespace.fac, np.arctan2(y, x)
+def image_to_world_location(pos: Tuple[int, int]) -> Tuple[float, float]:
+    x, y = pos
+    x = (x - Namespace.start[0]) / Namespace.fac
+    y = -(y - Namespace.start[1]) / Namespace.fac
+    return x / Namespace.fac, -y / Namespace.fac
 
 
 def loc_callback(msg: Localization2DMsg):
@@ -145,19 +141,19 @@ def loc_callback(msg: Localization2DMsg):
     Namespace.last_carrot_idx = newcarroti
     newcarrot = Namespace.plan[newcarroti]
 
-    # convert the carrot to robot local coordinates
-    localcarrot = image_to_robot_location(impos, newcarrot)
+    # convert the carrot to map coordinates
+    localcarrot = image_to_world_location(newcarrot)
 
     # publish the carrot
     print(f"At ({msg.pose.x:.2f}, {msg.pose.y:.2f}, {msg.pose.theta:.2f})")
     print(f"At {impos}")
     print(f"Want to go to  ({newcarrot[0]}, {newcarrot[1]})")
-    print(f"Sending carrot ({localcarrot[0]}, {localcarrot[1]})")
+    print(f"Sending goal ({localcarrot[0]}, {localcarrot[1]})")
     print()
-    m = Pose2Df()
-    m.x = localcarrot[0]
-    m.y = localcarrot[1]
-    m.theta = localcarrot[2]
+    m = Localization2DMsg()
+    m.pose.x = localcarrot[0]
+    m.pose.y = localcarrot[1]
+    m.pose.theta = pos[2]
     Namespace.pub.publish(m)
 
 
@@ -175,7 +171,7 @@ if __name__ == "__main__":
     plt.imsave("eernav.jpg", mapimg)
 
     rospy.init_node("satnav")
-    Namespace.pub = rospy.Publisher("/nav_override", Pose2Df, queue_size=1)
+    Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
 
     l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
 
