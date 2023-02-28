@@ -47,7 +47,7 @@ AckermannSampler = {
 };
 
 TerrainEvaluator = {
-  patch_size_pixels = 64;
+  patch_size_pixels = 40;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
   max_cost = 2.5;
@@ -58,7 +58,7 @@ TerrainEvaluator = {
   -- model_path = "/home/eyang/tmp/outdoor-6t-10-16-16-58-43-e19.pt";
 
   -- trained with fall transitional grass
-  model_path = "/home/amrl_user/rahul/models/eerdemo.pt";
+  model_path = "/home/amrl_user/rahul/models/jit_cost_model_outdoor_6dim.pt";
 
   -- dist_to_goal_weight = -0.2;
   dist_to_goal_weight = -0.3;
