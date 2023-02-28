@@ -1,43 +1,16 @@
+from typing import List, Tuple
 import roslib
 
 roslib.load_manifest("graph_navigation")
 
-import rospy
-import numpy as np
-from amrl_msgs.msg import Localization2DMsg, Pose2Df
-
-import argparse
-
-import cv2
-import torch
-import numpy as np
-from PIL import Image
 from math import ceil
-from matplotlib import pyplot as plt
 from queue import PriorityQueue
 
-
-class PatchFromImageDataset:
-    def __init__(self, img_path: str, patch_size: int = 40) -> None:
-        self.image = np.array(Image.open(img_path))
-        self.image = np.moveaxis(self.image, [2, 0, 1], [0, 1, 2])[:3]
-        self.patch_size = patch_size
-        self.h = int(ceil(self.image.shape[1] / self.patch_size))
-        self.w = int(ceil(self.image.shape[2] / self.patch_size))
-        self.len = self.w * self.h
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        w = self.patch_size * (idx % self.w)
-        h = self.patch_size * (idx // self.w)
-        out = self.image[:, h : h + self.patch_size, w : w + self.patch_size]
-        if out.shape != [3, 40, 40]:
-            k = np.zeros((3, 40, 40))
-            k[:, : out.shape[1], : out.shape[2]] = out
-            out = k
-        return out
+import cv2
+import numpy as np
+import rospy
+from amrl_msgs.msg import Localization2DMsg, Pose2Df
+from matplotlib import pyplot as plt
 
 
 class CustomQueue(PriorityQueue):
@@ -46,31 +19,6 @@ class CustomQueue(PriorityQueue):
             for i in self.queue:
                 if item == i[1]:
                     return True
-
-
-def create_costmap(img):
-    dataset = PatchFromImageDataset("./eer_lawn_moremasked.jpg")
-    loader = torch.utils.data.DataLoader(dataset, batch_size=1)
-    model = torch.jit.load("./jit_cost_model_outdoor_6dim.pt")
-    model.eval()
-    model.cuda()
-
-    costmap = np.zeros((dataset.h, dataset.w))
-    i = 0
-    with torch.no_grad():
-        for batch in loader:
-            h = i // dataset.w
-            w = i % dataset.w
-            if batch.numpy().any():
-                preds = list(model(batch.float().to("cuda")).cpu().numpy())
-                costmap[h, w] = preds[0]
-            else:
-                costmap[h, w] = 100
-            if i % (len(dataset) // 10) == 0:
-                print(i / len(dataset))
-            i += 1
-
-    return costmap
 
 
 def plan(start, goal, costmap):
@@ -138,10 +86,44 @@ class Namespace:
     x = 0.0
     y = 0.0
 
-    start_loc = None
-    fac = 20
-    last_carrot = None
-    plan = None
+    start_loc = None  # no longer needed bc assuming start of (0, 0, -pi/2)
+    fac: int = 20
+    last_carrot_idx: int = None
+    plan: List[Tuple[int, int]] = None
+    carrot_set_dist = 3
+
+
+def anglemod(a: float) -> float:
+    return a - (2 * np.pi) * np.round(a / (2 * np.pi))
+
+
+def robot_to_image_location(pos: Tuple[float, float, float]) -> Tuple[int, int]:
+    x, y, theta = pos
+    x = round(-x * Namespace.fac)
+    y = round(y * Namespace.fac)
+    return x, y
+
+
+# takes position of robot in image and returns index of next carrot to send
+def find_next_carrot(pos: Tuple[int, int]) -> int:
+    if Namespace.last_carrot_idx is None:
+        return min(len(plan) - 1, 2)
+    else:
+        dlast = np.sqrt(
+            (pos[0] - plan[Namespace.last_carrot_idx][0]) ** 2
+            + (pos[1] - plan[Namespace.last_carrot_idx][1]) ** 2
+        )
+        if dlast > Namespace.carrot_set_dist:
+            return Namespace.last_carrot_idx
+        else:
+            return min(Namespace.last_carrot_idx + 1, len(plan) - 1)
+
+
+def image_to_robot_location(pos: Tuple[int, int]) -> Tuple[float, float, float]:
+    x, y = pos
+    x = -x / Namespace.fac
+    y = y / Namespace.fac
+    return x, y, -np.pi / 2
 
 
 def loc_callback(msg: Localization2DMsg):
@@ -153,8 +135,9 @@ def loc_callback(msg: Localization2DMsg):
     impos = robot_to_image_location(pos)
 
     # then, using last set carrot, find next carrot that is closest to the robot
-    newcarrot = find_next_carrot(impos)
-    Namespace.last_carrot = newcarrot
+    newcarroti = find_next_carrot(impos)
+    Namespace.last_carrot_idx = newcarroti
+    newcarrot = Namespace.plan[newcarroti]
 
     # convert the carrot to robot local coordinates
     localcarrot = image_to_robot_location(newcarrot)
@@ -178,12 +161,12 @@ if __name__ == "__main__":
     cv2.circle(mapimg, start, 10, 0xFF0000, thickness=-1)
     cv2.circle(mapimg, goal, 10, 0x00FF00, thickness=-1)
     for k in p:
-        cv2.circle(mapimg, [i * 40 for i in k], 5, 0x0000FF, thickness=-1)
+        cv2.circle(mapimg, tuple([i * 40 for i in k]), 5, 0x0000FF, thickness=-1)
     plt.imsave("eernav.jpg", mapimg)
 
-    # rospy.init_node("satnav")
-    # Namespace.pub = rospy.Publisher("/nav_override", Localization2DMsg, queue_size=1)
+    rospy.init_node("satnav")
+    Namespace.pub = rospy.Publisher("/nav_override", Localization2DMsg, queue_size=1)
 
-    # l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
+    l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
 
-    # rospy.spin()
+    rospy.spin()
