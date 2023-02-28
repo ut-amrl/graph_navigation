@@ -19,7 +19,7 @@ NavigationParameters = {
   max_linear_speed = 0.5;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
-  max_angular_speed = 1.0;
+  max_angular_speed = 0.5;
   carrot_dist = 5;
   system_latency = 0.24;
   obstacle_margin = 0.15;
@@ -55,14 +55,11 @@ TerrainEvaluator = {
   discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  -- model_path = "/home/eyang/tmp/outdoor-6t-10-16-16-58-43-e19.pt";
-
-  -- trained with fall transitional grass
-  model_path = "/home/amrl_user/rahul/models/jit_cost_model_outdoor_6dim.pt";
+  model_path = "/home/amrl_user/rahul/graph_navigation/jit_cost_model_outdoor_6dim.pt";
 
   -- dist_to_goal_weight = -0.2;
   dist_to_goal_weight = -0.3;
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
-  terrain_weight = 6.0;
+  terrain_weight = 3.0;
 }

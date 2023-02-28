@@ -417,12 +417,12 @@ void PublishPath() {
 }
 
 void DrawTarget() {
-  const float carrot_dist = navigation_.GetCarrotDist();
+  // const float carrot_dist = navigation_.GetCarrotDist();
   const Eigen::Vector2f target = navigation_.GetTarget();
   auto msg_copy = global_viz_msg_;
   visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
-  visualization::DrawArc(
-      Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+  // visualization::DrawArc(
+  //     Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
   visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 }

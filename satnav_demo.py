@@ -87,62 +87,73 @@ class Namespace:
     y = 0.0
 
     start_loc = None  # no longer needed bc assuming start of (0, 0, -pi/2)
-    fac: int = 20
+    fac: int = 21
     last_carrot_idx: int = None
     plan: List[Tuple[int, int]] = None
-    carrot_set_dist = 3
+    carrot_set_dist = 3 * fac
+    start = (2020, 530)
+    goal = (580, 790)
 
 
 def anglemod(a: float) -> float:
     return a - (2 * np.pi) * np.round(a / (2 * np.pi))
 
 
-def robot_to_image_location(pos: Tuple[float, float, float]) -> Tuple[int, int]:
+def world_to_image_location(pos: Tuple[float, float, float]) -> Tuple[int, int, float]:
     x, y, theta = pos
-    x = round(-x * Namespace.fac)
-    y = round(y * Namespace.fac)
-    return x, y
+    x = round(x * Namespace.fac) + Namespace.start[0]
+    y = round(-y * Namespace.fac) + Namespace.start[1]
+    theta = theta
+    return x, y, theta
 
 
 # takes position of robot in image and returns index of next carrot to send
 def find_next_carrot(pos: Tuple[int, int]) -> int:
     if Namespace.last_carrot_idx is None:
-        return min(len(plan) - 1, 2)
+        return min(len(Namespace.plan) - 1, 3)
     else:
         dlast = np.sqrt(
-            (pos[0] - plan[Namespace.last_carrot_idx][0]) ** 2
-            + (pos[1] - plan[Namespace.last_carrot_idx][1]) ** 2
+            (pos[0] - Namespace.plan[Namespace.last_carrot_idx][0]) ** 2
+            + (pos[1] - Namespace.plan[Namespace.last_carrot_idx][1]) ** 2
         )
+        print(f"Currently {dlast} pixels away from next carrot")
         if dlast > Namespace.carrot_set_dist:
             return Namespace.last_carrot_idx
         else:
-            return min(Namespace.last_carrot_idx + 1, len(plan) - 1)
+            return min(Namespace.last_carrot_idx + 1, len(Namespace.plan) - 1)
 
 
-def image_to_robot_location(pos: Tuple[int, int]) -> Tuple[float, float, float]:
-    x, y = pos
-    x = -x / Namespace.fac
-    y = y / Namespace.fac
-    return x, y, -np.pi / 2
+def image_to_robot_location(rpos: Tuple[int, int, float], cpos: Tuple[int, int]) -> Tuple[float, float, float]:
+    dx = cpos[0] - rpos[0]
+    dy = cpos[1] - rpos[1]
+    rtheta = rpos[2]
+    
+    # x = dx * np.cos(rtheta) - dy * np.sin(rtheta)
+    # y = dy * np.cos(rtheta) + dx * np.sin(rtheta)
+    # return x / Namespace.fac, -y / Namespace.fac, np.arctan2(y, x)
+    return x / Namespace.fac, -y / Namespace.fac, np.arctan2(y, x)
 
 
 def loc_callback(msg: Localization2DMsg):
     pos = (msg.pose.x, msg.pose.y, msg.pose.theta)
-    if start_loc is None:
-        start_loc = pos
 
     # first find robot position in image,
-    impos = robot_to_image_location(pos)
+    impos = world_to_image_location(pos)
 
     # then, using last set carrot, find next carrot that is closest to the robot
-    newcarroti = find_next_carrot(impos)
+    newcarroti = find_next_carrot(impos[:2])
     Namespace.last_carrot_idx = newcarroti
     newcarrot = Namespace.plan[newcarroti]
 
     # convert the carrot to robot local coordinates
-    localcarrot = image_to_robot_location(newcarrot)
+    localcarrot = image_to_robot_location(impos, newcarrot)
 
     # publish the carrot
+    print(f"At ({msg.pose.x:.2f}, {msg.pose.y:.2f}, {msg.pose.theta:.2f})")
+    print(f"At {impos}")
+    print(f"Want to go to  ({newcarrot[0]}, {newcarrot[1]})")
+    print(f"Sending carrot ({localcarrot[0]}, {localcarrot[1]})")
+    print()
     m = Pose2Df()
     m.x = localcarrot[0]
     m.y = localcarrot[1]
@@ -154,18 +165,17 @@ if __name__ == "__main__":
     mapimg = cv2.imread("./eer_lawn_moremasked.jpg")
     costmap = cv2.imread("./eercost.jpg", cv2.IMREAD_GRAYSCALE)
 
-    start = (2050, 500)
-    goal = (580, 790)
-    p = plan(start, goal, costmap)
-    Namespace.plan = p
-    cv2.circle(mapimg, start, 10, 0xFF0000, thickness=-1)
-    cv2.circle(mapimg, goal, 10, 0x00FF00, thickness=-1)
+    p = plan(Namespace.start, Namespace.goal, costmap)
+    Namespace.plan = [tuple([i * 40 for i in k]) for k in p]
+    print(p)
+    cv2.circle(mapimg, Namespace.start, 10, 0xFF0000, thickness=-1)
+    cv2.circle(mapimg, Namespace.goal, 10, 0x00FF00, thickness=-1)
     for k in p:
         cv2.circle(mapimg, tuple([i * 40 for i in k]), 5, 0x0000FF, thickness=-1)
     plt.imsave("eernav.jpg", mapimg)
 
     rospy.init_node("satnav")
-    Namespace.pub = rospy.Publisher("/nav_override", Localization2DMsg, queue_size=1)
+    Namespace.pub = rospy.Publisher("/nav_override", Pose2Df, queue_size=1)
 
     l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
 
