@@ -5,7 +5,7 @@ end
 NavigationParameters = {
   laser_topic = "/scan";
   odom_topic = "/jackal_velocity_controller/odom";
-  localization_topic = "/localization";
+  localization_topic = "localization";
   image_topic = "/bev/single/compressed";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
@@ -16,50 +16,52 @@ NavigationParameters = {
   dt = 0.025;
   max_linear_accel = 0.5;
   max_linear_decel = 0.5;
+  -- max_linear_speed = 1.4;
   max_linear_speed = 0.5;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
-  max_angular_speed = 0.5;
-  carrot_dist = 5;
+  max_angular_speed = 1.0;
+  carrot_dist = 5;  -- large carrot distance so the goal does not latch onto the map
   system_latency = 0.24;
   obstacle_margin = 0.15;
-  num_options = 31;
+  -- num_options = 31;
+  num_options = 11;
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
-  max_free_path_length = 5;
+  -- max_free_path_length = 4.0;
+  max_free_path_length = 3.5;  -- ahg demo
   max_clearance = 1.0;
   can_traverse_stairs = false;
-  evaluator_type = "terrain";
+  evaluator_type = "linear";
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "";
-  local_fov = deg2rad(180);  -- do not turn in place when the goal is behind the robot
+  local_fov = deg2rad(90);
   target_dist_tolerance = 0.5;
   target_vel_tolerance = 0.2;
   target_angle_tolerance = deg2rad(20);
-  use_map_speed = false;
+  use_map_speed = true;
   use_kinect = false;
 };
 
 AckermannSampler = {
-  max_curvature = 2.5;
+  max_curvature = 1.0;
   clearance_path_clip_fraction = 0.8;
 };
 
 TerrainEvaluator = {
-  patch_size_pixels = 40;
+  patch_size_pixels = 64;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
-  max_cost = 2.5;
+  max_cost = 2.0;
   -- discount_factor = 0.5;
   discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
+  model_path = "/home/amrl_user/rahul/fullcostnet_19.pt";
 
-  model_path = "/home/amrl_user/rahul/graph_navigation/jit_cost_model_outdoor_6dim.pt";
-
-  -- dist_to_goal_weight = -0.2;
-  dist_to_goal_weight = 0.3;
+  -- dist_to_goal_weight = -1.25; -- -3.5;
+  dist_to_goal_weight = -0.0;  -- ahg demo;
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
-  terrain_weight = 0.0;
+  terrain_weight = 6.0; -- ahg demo
 }

@@ -127,7 +127,7 @@ def image_to_world_location(pos: Tuple[int, int]) -> Tuple[float, float]:
     x, y = pos
     x = (x - Namespace.start[0]) / Namespace.fac
     y = -(y - Namespace.start[1]) / Namespace.fac
-    return x / Namespace.fac, -y / Namespace.fac
+    return x, y
 
 
 def loc_callback(msg: Localization2DMsg):

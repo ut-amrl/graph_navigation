@@ -871,10 +871,10 @@ bool Navigation::Run(const double& time,
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
     // Recompute global plan as necessary.
-    // if (!PlanStillValid()) {
-    //   if (kDebug) printf("Replanning\n");
-    //   plan_path_ = Plan(robot_loc_, nav_goal_loc_);
-    // }
+    if (!PlanStillValid()) {
+      if (kDebug) printf("Replanning\n");
+      plan_path_ = Plan(robot_loc_, nav_goal_loc_);
+    }
     if (nav_state_ == NavigationState::kGoto) {
       // Get Carrot and check if done
       Vector2f carrot(0, 0);
