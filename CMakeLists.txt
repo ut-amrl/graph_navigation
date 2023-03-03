@@ -63,6 +63,7 @@ MESSAGE(STATUS "Includes: ${INCLUDE_DIRECTORIES}")
 ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation_main.cc
                         src/navigation/navigation.cc
+                        src/navigation/contingency.cc
                         src/navigation/motion_primitives.cc
                         src/navigation/ackermann_motion_primitives.cc
                         src/navigation/constant_curvature_arcs.cc
@@ -94,7 +95,8 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/linear_evaluator.cc
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
-                        src/navigation/navigation.cc)
+                        src/navigation/navigation.cc
+                        src/navigation/contingency.cc)
 TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
 

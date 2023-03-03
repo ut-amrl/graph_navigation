@@ -46,3 +46,6 @@ src/graph_navigation/__init__.py
 # Editors
 .vscode/
 compile_commands.json
+
+# My files
+automata_navigation_remapped.sh

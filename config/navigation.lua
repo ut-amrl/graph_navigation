@@ -14,6 +14,7 @@ NavigationParameters = {
     y = 0;
   };
   dt = 0.025;
+  -- dt = 2;
   max_linear_accel = 0.5;
   max_linear_decel = 0.5;
   max_linear_speed = 0.5;
