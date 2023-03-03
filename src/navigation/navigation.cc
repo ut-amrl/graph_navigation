@@ -851,7 +851,19 @@ bool Navigation::Run(const double &time,
                      Vector2f &cmd_vel,
                      float &cmd_angle_vel) {
     TEMP_C++;
-    std::cout << "Counter: " << TEMP_C << std::endl;
+    fprintf(stderr, "Counter: %d \n", TEMP_C);
+    if (nav_state_ == NavigationState::kContingency){
+        fprintf(stderr, "kContingency \n");
+    }
+    else if (nav_state_ == NavigationState::kStopped){
+        fprintf(stderr, "kStopped \n");
+    }
+    else if (nav_state_ == NavigationState::kGoto){
+        fprintf(stderr, "kGoto \n");
+    }
+    else{
+        fprintf(stderr, "DONT KNOW \n");
+    }
 
     if (TEMP_C > 3000) {
         nav_state_ = NavigationState::kContingency;

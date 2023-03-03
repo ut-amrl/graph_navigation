@@ -34,7 +34,7 @@ float Navigation::GetSafeAngle() {
 bool Navigation::ExtractSafePose(Eigen::Vector2f &loc, float &angle) {
     // TODO Implement: extract from image rostopic, convert to robot ref frame then
 
-    // Testing hardcoded
+    // Testing hardcoded (the below values are what you see when you set nav goal and websocket outputs)
     Eigen::Vector2f dummy_loc(30.21, 21.12);
     float dummy_angle(-0.64);
     loc = Rotation2Df(-robot_angle_) * (dummy_loc - robot_loc_);
