@@ -9,6 +9,7 @@ NavigationParameters = {
   image_topic = "/camera/rgb/image_raw/compressed";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
+  contingency_enable_topic = "/contingency/enable";
   laser_loc = {
     x = 0.065;
     y = 0;

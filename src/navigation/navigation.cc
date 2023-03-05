@@ -147,6 +147,7 @@ Navigation::Navigation() : robot_loc_(0, 0),
                            t_point_cloud_(0),
                            t_odometry_(0),
                            enabled_(false),
+                           contingency_enabled_(false),
                            initialized_(false),
                            sampler_(nullptr),
                            evaluator_(nullptr),
@@ -183,6 +184,14 @@ bool Navigation::Enabled() const {
 
 void Navigation::Enable(bool enable) {
     enabled_ = enable;
+}
+
+bool Navigation::EnabledContingency() const {
+    return contingency_enabled_;
+}
+
+void Navigation::EnableContingency(bool enable) {
+    contingency_enabled_ = enable;
 }
 
 void Navigation::SetNavGoal(const Vector2f &loc, float angle) {
@@ -845,30 +854,9 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
     return plan_path_;
 }
 
-int TEMP_C = 0;
-
 bool Navigation::Run(const double &time,
                      Vector2f &cmd_vel,
                      float &cmd_angle_vel) {
-    TEMP_C++;
-    fprintf(stderr, "Counter: %d \n", TEMP_C);
-    if (nav_state_ == NavigationState::kContingency){
-        fprintf(stderr, "kContingency \n");
-    }
-    else if (nav_state_ == NavigationState::kStopped){
-        fprintf(stderr, "kStopped \n");
-    }
-    else if (nav_state_ == NavigationState::kGoto){
-        fprintf(stderr, "kGoto \n");
-    }
-    else{
-        fprintf(stderr, "DONT KNOW \n");
-    }
-
-    if (TEMP_C > 3000) {
-        nav_state_ = NavigationState::kContingency;
-    }
-
     const bool kDebug = FLAGS_v > 0;
     if (!initialized_) {
         if (kDebug)
@@ -897,6 +885,15 @@ bool Navigation::Run(const double &time,
     } else if (FLAGS_test_latency) {
         LatencyTest(cmd_vel, cmd_angle_vel);
         return true;
+    }
+    
+    if (contingency_enabled_) {
+        nav_state_ = NavigationState::kContingency;
+    }
+
+    fprintf(stderr, "------------------------------------------------------------------------------DEBUG nav_state_ is %d\n", static_cast<int>(nav_state_));
+    if (contingency_enabled_) {
+        nav_state_ = NavigationState::kStopped;
     }
 
     // Shift to Contingency Planning

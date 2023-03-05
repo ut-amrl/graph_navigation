@@ -116,6 +116,10 @@ class Navigation {
     void Enable(bool enable);
     // Indicates whether autonomy is enabled or not.
     bool Enabled() const;
+    // Enable or disable contingency planning.
+    void EnableContingency(bool enable);
+    // Indicates whether contingency planning is enabled or not.
+    bool EnabledContingency() const;
     // Stop all navigation functions.
     void Pause();
     // Set parameters for navigation.
@@ -250,6 +254,9 @@ class Navigation {
 
     // Whether to enable autonomous navigation or not.
     bool enabled_;
+    // Contingency enabler -> whether you wanna trigger contingency planning
+    bool contingency_enabled_;
+
     // Navigation parameters.
     NavigationParameters params_;
 

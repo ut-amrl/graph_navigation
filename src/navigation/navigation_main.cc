@@ -109,6 +109,7 @@ CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
+CONFIG_STRING(contingency_enable_topic, "NavigationParameters.contingency_enable_topic");
 CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
@@ -157,6 +158,10 @@ VisualizationMsg global_viz_msg_;
 
 void EnablerCallback(const std_msgs::Bool &msg) {
     enabled_ = msg.data;
+}
+
+void ContingencyEnablerCallback(const std_msgs::Bool &msg) {
+    navigation_.EnableContingency(msg.data);
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry &msg) {
@@ -844,6 +849,7 @@ int main(int argc, char **argv) {
         n.subscribe("halt_robot", 1, &HaltCallback);
     ros::Subscriber override_sub =
         n.subscribe("nav_override", 1, &OverrideCallback);
+    ros::Subscriber contingency_enabler_sub = n.subscribe(CONFIG_contingency_enable_topic, 1, &ContingencyEnablerCallback);
 
     std_msgs::Header viz_img_header;          // empty viz_img_header
     viz_img_header.stamp = ros::Time::now();  // time
