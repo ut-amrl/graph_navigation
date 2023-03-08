@@ -151,8 +151,9 @@ Navigation::Navigation() : robot_loc_(0, 0),
                            initialized_(false),
                            sampler_(nullptr),
                            evaluator_(nullptr),
+                           got_safe_pose_(false),
                            safe_local_target_loc_(0, 0),
-                           safe_local_target_angle_(0) {
+                           safe_ground_target_angle_(0) {
     sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
 
@@ -184,14 +185,6 @@ bool Navigation::Enabled() const {
 
 void Navigation::Enable(bool enable) {
     enabled_ = enable;
-}
-
-bool Navigation::EnabledContingency() const {
-    return contingency_enabled_;
-}
-
-void Navigation::EnableContingency(bool enable) {
-    contingency_enabled_ = enable;
 }
 
 void Navigation::SetNavGoal(const Vector2f &loc, float angle) {
@@ -694,7 +687,7 @@ void Navigation::TurnInPlace(Vector2f &cmd_vel, float &cmd_angle_vel) {
         if (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
             robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
             // TurnInPlace after reaching safe loc
-            dTheta = AngleDiff(safe_local_target_angle_, robot_angle_);
+            dTheta = AngleDiff(safe_ground_target_angle_, robot_angle_);
         } else {
             // TurnInPlace to get in FOV
             dTheta = atan2(safe_local_target_loc_.y(), safe_local_target_loc_.x());
@@ -886,7 +879,7 @@ bool Navigation::Run(const double &time,
         LatencyTest(cmd_vel, cmd_angle_vel);
         return true;
     }
-    
+
     if (contingency_enabled_) {
         nav_state_ = NavigationState::kContingency;
     }

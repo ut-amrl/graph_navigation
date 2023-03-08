@@ -100,7 +100,7 @@ class Navigation {
                            Eigen::Vector2f *obstruction);
     void SetNavGoal(const Eigen::Vector2f &loc, float angle);
     void SetOverride(const Eigen::Vector2f &loc, float angle);
-    void SetSafePose(const Eigen::Vector2f &loc, float angle);
+    void SetSafePose(const bool &gotSafe, const Eigen::Vector2f &loc, const float &angle);
     void Resume();
     bool PlanStillValid();
     void Plan(Eigen::Vector2f goal_loc);
@@ -110,7 +110,8 @@ class Navigation {
                                 const Eigen::Vector2f &end);
     std::vector<GraphDomain::State> GetPlanPath();
     bool ContingencyPlanner(const Eigen::Vector2f &initial, Eigen::Vector2f &cmd_vel, float &angular_vel_cmd, const bool &kDebug);
-    bool ExtractSafePose(Eigen::Vector2f &loc, float &angle);
+    void GetSafeLocalLocFromGround(Eigen::Vector2f &loc, const Eigen::Vector2f &gr);
+    void GetSafeGroundAngleFromLocal(float &angle, const float &loc_angle);
     bool GetCarrot(Eigen::Vector2f &carrot);
     // Enable or disable autonomy.
     void Enable(bool enable);
@@ -275,8 +276,9 @@ class Navigation {
     std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
 
     // Safe Pose for contingency planning, in robot's ref frame
+    bool got_safe_pose_;
     Eigen::Vector2f safe_local_target_loc_;
-    float safe_local_target_angle_;
+    float safe_ground_target_angle_;
 };
 
 }  // namespace navigation

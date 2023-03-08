@@ -16,11 +16,11 @@ using namespace math_util;
 DECLARE_bool(no_local);
 
 namespace navigation {
-
-void Navigation::SetSafePose(const Eigen::Vector2f &loc, float angle) {
+void Navigation::SetSafePose(const bool &gotSafe, const Eigen::Vector2f &loc, const float &angle) {
     nav_state_ = NavigationState::kContingency;
+    got_safe_pose_ = gotSafe;
     safe_local_target_loc_ = loc;
-    safe_local_target_angle_ = angle;
+    safe_ground_target_angle_ = angle;
 }
 
 Eigen::Vector2f Navigation::GetSafeTarget() {
@@ -28,33 +28,33 @@ Eigen::Vector2f Navigation::GetSafeTarget() {
 }
 
 float Navigation::GetSafeAngle() {
-    return safe_local_target_angle_;
+    return safe_ground_target_angle_;
 }
 
-bool Navigation::ExtractSafePose(Eigen::Vector2f &loc, float &angle) {
-    // TODO Implement: extract from image rostopic, convert to robot ref frame then
-
-    // Testing hardcoded (the below values are what you see when you set nav goal and websocket outputs)
-    Eigen::Vector2f dummy_loc(30.21, 21.12);
-    float dummy_angle(-0.64);
-    loc = Rotation2Df(-robot_angle_) * (dummy_loc - robot_loc_);
-    angle = dummy_angle;
-    return true;
+bool Navigation::EnabledContingency() const {
+    return contingency_enabled_;
 }
 
-// TODO Implement another function to take joystick input -> set nav_state_ to kContingency
+void Navigation::EnableContingency(bool enable) {
+    contingency_enabled_ = enable;
+}
+
+void Navigation::GetSafeLocalLocFromGround(Eigen::Vector2f &loc, const Eigen::Vector2f &gr) {
+    loc = Rotation2Df(-robot_angle_) * (gr - robot_loc_);
+}
+
+void Navigation::GetSafeGroundAngleFromLocal(float &angle, const float &loc_angle) {
+    angle = loc_angle + robot_angle_;
+}
+
 // TODO Implement another function to take robofleet input -> set nav_state_ to kContingency
 
 bool Navigation::ContingencyPlanner(const Eigen::Vector2f &initial, Eigen::Vector2f &cmd_vel, float &angular_vel_cmd, const bool &kDebug) {
-    Eigen::Vector2f safe_loc(0, 0);
-    float safe_angle(0);
-    bool gotSafePose = ExtractSafePose(safe_loc, safe_angle);
-    if (!gotSafePose) {
+    if (!got_safe_pose_) {
         return false;
     }
-    SetSafePose(safe_loc, safe_angle);
 
-    if (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) && AngleDist(robot_angle_, safe_local_target_angle_) < params_.target_angle_tolerance) {
+    if (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) && AngleDist(robot_angle_, safe_ground_target_angle_) < params_.target_angle_tolerance) {
         nav_state_ = NavigationState::kStopped;
     }
 

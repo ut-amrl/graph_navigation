@@ -65,6 +65,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Float64MultiArray.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -110,6 +111,7 @@ CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 CONFIG_STRING(contingency_enable_topic, "NavigationParameters.contingency_enable_topic");
+CONFIG_STRING(contingency_safe_pose_topic, "NavigationParameters.contingency_safe_pose_topic");
 CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
@@ -162,6 +164,28 @@ void EnablerCallback(const std_msgs::Bool &msg) {
 
 void ContingencyEnablerCallback(const std_msgs::Bool &msg) {
     navigation_.EnableContingency(msg.data);
+}
+
+void ContingencySafePoseCallback(const std_msgs::Float64MultiArray &msg) {
+    bool gotSafe = (msg.data[0] == 1);
+    Eigen::Vector2f local_safe_loc(0, 0);
+    float ground_safe_angle(0);
+    if (msg.data[1] == 0) {
+        local_safe_loc = Eigen::Vector2f(msg.data[2], msg.data[3]);
+    } else if (msg.data[1] == 1) {
+        navigation_.GetSafeLocalLocFromGround(local_safe_loc, Eigen::Vector2f(msg.data[2], msg.data[3]));
+    } else {
+        fprintf(stderr, "ERROR: unknown bool for safe location\n");
+    }
+
+    if (msg.data[4] == 0) {
+        navigation_.GetSafeGroundAngleFromLocal(ground_safe_angle, float(msg.data[5]));
+    } else if (msg.data[4] == 1) {
+        ground_safe_angle = float(msg.data[5]);
+    } else {
+        fprintf(stderr, "ERROR: unknown bool for safe angle\n");
+    }
+    navigation_.SetSafePose(gotSafe, local_safe_loc, ground_safe_angle);
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry &msg) {
@@ -850,6 +874,7 @@ int main(int argc, char **argv) {
     ros::Subscriber override_sub =
         n.subscribe("nav_override", 1, &OverrideCallback);
     ros::Subscriber contingency_enabler_sub = n.subscribe(CONFIG_contingency_enable_topic, 1, &ContingencyEnablerCallback);
+    ros::Subscriber contingency_safepose_sub = n.subscribe(CONFIG_contingency_safe_pose_topic, 1, &ContingencySafePoseCallback);
 
     std_msgs::Header viz_img_header;          // empty viz_img_header
     viz_img_header.stamp = ros::Time::now();  // time
