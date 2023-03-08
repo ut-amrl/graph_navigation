@@ -884,11 +884,6 @@ bool Navigation::Run(const double &time,
         nav_state_ = NavigationState::kContingency;
     }
 
-    fprintf(stderr, "------------------------------------------------------------------------------DEBUG nav_state_ is %d\n", static_cast<int>(nav_state_));
-    if (contingency_enabled_) {
-        nav_state_ = NavigationState::kStopped;
-    }
-
     // Shift to Contingency Planning
     if (nav_state_ == NavigationState::kContingency) {
         bool foundSafePath = ContingencyPlanner(robot_loc_, cmd_vel, cmd_angle_vel, kDebug);
