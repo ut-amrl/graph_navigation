@@ -45,12 +45,12 @@ class ExtractSafeSpot:
         #       5 -> theta
 
         msg = Float64MultiArray()
-        msg.data[0] = 1
-        msg.data[1] = 1
-        msg.data[2] = 30.21
-        msg.data[3] = 21.12
-        msg.data[4] = 1
-        msg.data[5] = -0.64
+        msg.data.append(1)
+        msg.data.append(1)
+        msg.data.append(30.21)
+        msg.data.append(21.12)
+        msg.data.append(1)
+        msg.data.append(-0.64)
         self.loc_pub.publish(msg)
 
 
