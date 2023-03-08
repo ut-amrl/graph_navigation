@@ -2,7 +2,6 @@
 import sys
 import time
 import numpy as np
-from scipy.ndimage import filters
 import cv2
 import roslib
 import rospy
