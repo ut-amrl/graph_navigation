@@ -74,7 +74,7 @@ struct Odom {
 enum class NavigationState {
     kStopped = 0,
     kPaused = 1,
-    kGoto = 2,
+    kGoto = 2, // when you set navgoal, switches to this state
     kTurnInPlace = 3,
     kOverride = 4,
     kContingency = 5
