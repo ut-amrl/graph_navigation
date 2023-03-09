@@ -211,6 +211,7 @@ class Navigation {
     double t_image_;
 
     NavigationState nav_state_;
+    NavigationState nav_state_before_contingency_;
 
     // Navigation goal location.
     Eigen::Vector2f nav_goal_loc_;

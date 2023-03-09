@@ -140,6 +140,7 @@ Navigation::Navigation() : robot_loc_(0, 0),
                            robot_vel_(0, 0),
                            robot_omega_(0),
                            nav_state_(NavigationState::kStopped),
+                           nav_state_before_contingency_(NavigationState::kStopped),
                            nav_goal_loc_(0, 0),
                            nav_goal_angle_(0),
                            odom_initialized_(false),
@@ -882,7 +883,16 @@ bool Navigation::Run(const double &time,
     }
 
     if (contingency_enabled_) {
+        if (nav_state_ != NavigationState::kContingency) {
+            nav_state_before_contingency_ = nav_state_;
+        }
         nav_state_ = NavigationState::kContingency;
+    }
+
+    if (!contingency_enabled_) {
+        if (nav_state_ == NavigationState::kContingency) {
+            nav_state_ = nav_state_before_contingency_;
+        }
     }
 
     // Shift to Contingency Planning

@@ -47,24 +47,20 @@ void Navigation::GetSafeGroundAngleFromLocal(float &angle, const float &loc_angl
 }
 
 // TODO Implement another function to take robofleet input -> set nav_state_ to kContingency
+// TODO Make RunObstaAvoid (and maybe TurnInPlace too) return a bool when they cannot do it successfully and catch that bool to return output of Run and ContingencyPlanner properly
 
 bool Navigation::ContingencyPlanner(const Eigen::Vector2f &initial, Eigen::Vector2f &cmd_vel, float &angular_vel_cmd, const bool &kDebug) {
     if (!got_safe_pose_) {
         return false;
     }
 
-    if (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) && AngleDist(robot_angle_, safe_ground_target_angle_) < params_.target_angle_tolerance) {
-        nav_state_ = NavigationState::kStopped;
-    }
-
     if (kDebug) {
         printf("\nNav Contingency\n");
     }
 
-    if (nav_state_ == NavigationState::kStopped) {
+    if (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) && AngleDist(robot_angle_, safe_ground_target_angle_) < params_.target_angle_tolerance) {
         Halt(cmd_vel, angular_vel_cmd);
-        return true;
-    } else if (nav_state_ == NavigationState::kContingency) {
+    } else {
         Eigen::Vector2f local_target(0, 0);
         local_target = safe_local_target_loc_;
         const float theta = atan2(local_target.y(), local_target.x());
@@ -80,7 +76,6 @@ bool Navigation::ContingencyPlanner(const Eigen::Vector2f &initial, Eigen::Vecto
             }
         }
     }
-
     return true;
 }
 
