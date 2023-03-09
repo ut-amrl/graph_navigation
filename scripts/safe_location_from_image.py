@@ -19,7 +19,7 @@ class ExtractSafeSpot:
             "/contingency/safe_pose", Float64MultiArray, queue_size=1)
 
     def callback(self, msg):
-        np_arr = np.fromstring(msg.data, np.uint8)
+        np_arr = np.fromstring(msg.data, np.uint8)  # try frombuffer
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         image_np_rgb = np.array(cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB))
         # pil_image = Image.fromarray(image_np_rgb)

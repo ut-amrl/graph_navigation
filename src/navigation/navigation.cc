@@ -850,6 +850,7 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
 bool Navigation::Run(const double &time,
                      Vector2f &cmd_vel,
                      float &cmd_angle_vel) {
+    fprintf(stderr, "-----------------------------DEBUG Nav state: %d\n", static_cast<int>(nav_state_));
     const bool kDebug = FLAGS_v > 0;
     if (!initialized_) {
         if (kDebug)
