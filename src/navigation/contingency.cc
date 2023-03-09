@@ -17,7 +17,6 @@ DECLARE_bool(no_local);
 
 namespace navigation {
 void Navigation::SetSafePose(const bool &gotSafe, const Eigen::Vector2f &loc, const float &angle) {
-    nav_state_ = NavigationState::kContingency;
     got_safe_pose_ = gotSafe;
     safe_local_target_loc_ = loc;
     safe_ground_target_angle_ = angle;
