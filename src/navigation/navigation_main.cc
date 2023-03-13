@@ -113,7 +113,7 @@ CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
 CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
-DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_string(twist_drive_topic, "cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
 
 // DECLARE_int32(v);

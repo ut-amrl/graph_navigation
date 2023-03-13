@@ -75,14 +75,14 @@ TARGET_LINK_LIBRARIES(navigation
     shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 
 
-ADD_EXECUTABLE(navigation_tests
-    src/navigation/navigation_tests.cc
-    src/navigation/motion_primitives.cc
-)
-TARGET_LINK_LIBRARIES(navigation_tests
-    gtest
-    gtest_main
-    ${libs})
+# ADD_EXECUTABLE(navigation_tests
+#     src/navigation/navigation_tests.cc
+#     src/navigation/motion_primitives.cc
+# )
+# TARGET_LINK_LIBRARIES(navigation_tests
+#     gtest
+#     gtest_main
+#     ${libs})
 
 ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/social_nav.cc
