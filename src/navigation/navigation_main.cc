@@ -168,12 +168,12 @@ void ContingencyEnablerCallback(const std_msgs::Bool &msg) {
 
 void ContingencySafePoseCallback(const std_msgs::Float64MultiArray &msg) {
     bool gotSafe = (msg.data[0] == 1);
-    Eigen::Vector2f local_safe_loc(0, 0);
+    Eigen::Vector2f ground_safe_loc(0, 0);
     float ground_safe_angle(0);
     if (msg.data[1] == 0) {
-        local_safe_loc = Eigen::Vector2f(msg.data[2], msg.data[3]);
+        navigation_.GetSafeGroundLocFromLocal(ground_safe_loc, Eigen::Vector2f(msg.data[2], msg.data[3]));
     } else if (msg.data[1] == 1) {
-        navigation_.GetSafeLocalLocFromGround(local_safe_loc, Eigen::Vector2f(msg.data[2], msg.data[3]));
+        ground_safe_loc = Eigen::Vector2f(msg.data[2], msg.data[3]);
     } else {
         fprintf(stderr, "ERROR: unknown bool for safe location\n");
     }
@@ -185,7 +185,7 @@ void ContingencySafePoseCallback(const std_msgs::Float64MultiArray &msg) {
     } else {
         fprintf(stderr, "ERROR: unknown bool for safe angle\n");
     }
-    navigation_.SetSafePose(gotSafe, local_safe_loc, ground_safe_angle);
+    navigation_.SetSafePose(gotSafe, ground_safe_loc, ground_safe_angle);
 }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry &msg) {

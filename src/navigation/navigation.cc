@@ -153,9 +153,9 @@ Navigation::Navigation() : robot_loc_(0, 0),
                            sampler_(nullptr),
                            evaluator_(nullptr),
                            got_safe_pose_(false),
-                           safe_local_target_loc_(0, 0),
+                           safe_ground_target_loc_(0, 0),
                            safe_ground_target_angle_(0),
-                           safe_anchor_local_target_loc_(0, 0),
+                           safe_anchor_ground_target_loc_(0, 0),
                            safe_anchor_ground_target_angle_(0) {
     sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
@@ -602,7 +602,7 @@ void Navigation::RunObstacleAvoidance(Vector2f &vel_cmd, float &ang_vel_cmd) {
     if (nav_state_ == NavigationState::kOverride) {
         local_target = override_target_;
     } else if (nav_state_ == NavigationState::kContingency) {
-        local_target = safe_anchor_local_target_loc_;
+        local_target = GetSafeLocalLocFromGround(safe_anchor_ground_target_loc_);
     }
 
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
@@ -687,13 +687,13 @@ void Navigation::TurnInPlace(Vector2f &cmd_vel, float &cmd_angle_vel) {
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
         dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
     } else if (nav_state_ == NavigationState::kContingency) {
-        if (safe_anchor_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
+        if (GetSafeLocalLocFromGround(safe_anchor_ground_target_loc_).squaredNorm() < Sq(params_.target_dist_tolerance) &&
             robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
             // TurnInPlace after reaching safe loc
             dTheta = AngleDiff(safe_anchor_ground_target_angle_, robot_angle_);
         } else {
             // TurnInPlace to get in FOV
-            dTheta = atan2(safe_anchor_local_target_loc_.y(), safe_anchor_local_target_loc_.x());
+            dTheta = atan2(GetSafeLocalLocFromGround(safe_anchor_ground_target_loc_).y(), GetSafeLocalLocFromGround(safe_anchor_ground_target_loc_).x());
         }
     }
     if (kDebug)
@@ -900,7 +900,7 @@ bool Navigation::Run(const double &time,
         } else if (contingency_halt_counter == CONTINGENCY_HALT_TEMP) {
             contingency_halt_counter++;
             safe_anchor_ground_target_angle_ = safe_ground_target_angle_;
-            safe_anchor_local_target_loc_ = safe_local_target_loc_;
+            safe_anchor_ground_target_loc_ = safe_ground_target_loc_;
         } else {
             ModifyContingencyAnchor();
         }
