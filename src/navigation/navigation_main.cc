@@ -883,7 +883,7 @@ int main(int argc, char **argv) {
         viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
     }
 
-    RateLoop loop(1.0 / params.dt);
+    RateLoop loop(1.0 / params.dt);  // Runs the loop at specified Hz
     while (run_ && ros::ok()) {
         visualization::ClearVisualizationMsg(local_viz_msg_);
         visualization::ClearVisualizationMsg(global_viz_msg_);

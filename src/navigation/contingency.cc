@@ -46,6 +46,10 @@ void Navigation::GetSafeGroundAngleFromLocal(float &angle, const float &loc_angl
     angle = loc_angle + robot_angle_;
 }
 
+void Navigation::ModifyContingencyAnchor() {
+    ;  // Modify anchor target based on safe_local blabla targets
+}
+
 // TODO Implement another function to take robofleet input -> set nav_state_ to kContingency
 // TODO Make RunObstaAvoid (and maybe TurnInPlace too) return a bool when they cannot do it successfully and catch that bool to return output of Run and ContingencyPlanner properly
 
@@ -58,14 +62,14 @@ bool Navigation::ContingencyPlanner(const Eigen::Vector2f &initial, Eigen::Vecto
         printf("\nNav Contingency\n");
     }
 
-    if (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) && AngleDist(robot_angle_, safe_ground_target_angle_) < params_.target_angle_tolerance) {
+    if (safe_anchor_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) && AngleDist(robot_angle_, safe_anchor_ground_target_angle_) < params_.target_angle_tolerance) {
         Halt(cmd_vel, angular_vel_cmd);
     } else {
         Eigen::Vector2f local_target(0, 0);
-        local_target = safe_local_target_loc_;
+        local_target = safe_anchor_local_target_loc_;
         const float theta = atan2(local_target.y(), local_target.x());
         if (!FLAGS_no_local) {
-            if (fabs(theta) > params_.local_fov || (safe_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance))) {
+            if (fabs(theta) > params_.local_fov || (safe_anchor_local_target_loc_.squaredNorm() < Sq(params_.target_dist_tolerance) && robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance))) {
                 if (kDebug)
                     printf("TurnInPlace\n");
                 TurnInPlace(cmd_vel, angular_vel_cmd);

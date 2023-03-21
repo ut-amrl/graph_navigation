@@ -74,7 +74,7 @@ struct Odom {
 enum class NavigationState {
     kStopped = 0,
     kPaused = 1,
-    kGoto = 2, // when you set navgoal, switches to this state
+    kGoto = 2,  // when you set navgoal, switches to this state
     kTurnInPlace = 3,
     kOverride = 4,
     kContingency = 5
@@ -110,6 +110,7 @@ class Navigation {
                                 const Eigen::Vector2f &end);
     std::vector<GraphDomain::State> GetPlanPath();
     bool ContingencyPlanner(const Eigen::Vector2f &initial, Eigen::Vector2f &cmd_vel, float &angular_vel_cmd, const bool &kDebug);
+    void ModifyContingencyAnchor();
     void GetSafeLocalLocFromGround(Eigen::Vector2f &loc, const Eigen::Vector2f &gr);
     void GetSafeGroundAngleFromLocal(float &angle, const float &loc_angle);
     bool GetCarrot(Eigen::Vector2f &carrot);
@@ -280,6 +281,8 @@ class Navigation {
     bool got_safe_pose_;
     Eigen::Vector2f safe_local_target_loc_;
     float safe_ground_target_angle_;
+    Eigen::Vector2f safe_anchor_local_target_loc_;
+    float safe_anchor_ground_target_angle_;
 };
 
 }  // namespace navigation
