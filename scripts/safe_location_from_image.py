@@ -17,7 +17,7 @@ from std_msgs.msg import Float64MultiArray
 
 # -----------------------------------------------------------------------
 # PARAMETERS
-CKPT_PATH = "/home/smodak/4000.pt"
+CKPT_PATH = "/home/dynamo/Music/4000.pt"
 CAM_IMG_TOPIC = "/camera/rgb/image_raw/compressed"
 LOC_PUB_TOPIC = "/contingency/safe_pose"
 OVERLAY_PUB_TOPIC = "/contingency/overlay/compressed"
