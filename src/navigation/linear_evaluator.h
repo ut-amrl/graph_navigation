@@ -50,6 +50,7 @@ struct LinearEvaluator :  PathEvaluatorBase {
   float orig_dw;
   float orig_fw;
   float orig_ow;
+  float orig_sw;
 };
 
 }  // namespace motion_primitives

@@ -1,0 +1,13 @@
+no param switching
+9.12
+9.15
+9.32
+9.15
+9.28
+
+manual param switched
+9.10
+8.91
+8.74
+8.83
+8.73

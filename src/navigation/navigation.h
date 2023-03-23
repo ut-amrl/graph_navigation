@@ -32,6 +32,7 @@
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
 #include "racing_line.h"
+#include "track_evaluator.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -162,7 +163,8 @@ class Navigation {
   // const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
-  
+
+  void SetParams(float cw, float dw, float ocw, float fw, float max_speed);
   void SetCurveWeights();
   void SetOriginalWeights();
 
@@ -304,6 +306,9 @@ class Navigation {
       last_options_;
   // Last PathOption taken
   std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
+  
+  // Track evaluator.
+  std::unique_ptr<motion_primitives::TrackEvaluator> track_evaluator_;
 };
 
 }  // namespace navigation

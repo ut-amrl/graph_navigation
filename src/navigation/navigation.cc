@@ -43,6 +43,7 @@
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 // #include "deep_cost_map_evaluator.h"
+// #include "track_evaluator.h"
 #include "linear_evaluator.h"
 
 using Eigen::Rotation2Df;
@@ -79,6 +80,10 @@ DEFINE_string(test_log_file, "", "Log test results to file");
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
 
 DEFINE_bool(no_local, false, "can be used to turn off local planner");
+
+DEFINE_double(ms, 2.0, "");
+DEFINE_double(c_ms, 2.0, "");
+
 
 namespace {
 // Epsilon value for handling limited numerical precision.
@@ -153,7 +158,8 @@ Navigation::Navigation() :
     enabled_(false),
     initialized_(false),
     sampler_(nullptr),
-    evaluator_(nullptr) {
+    evaluator_(nullptr),
+    track_evaluator_()	{
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
 
@@ -164,6 +170,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   planning_domain_ = GraphDomain(map_file, &params_);
   initialized_ = true;
   sampler_->SetNavParams(params);
+  // track_evaluator_->LoadModel();
 
   PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
@@ -360,6 +367,16 @@ void Navigation::DisparityTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
 void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const Vector2f kTarget(10, 0);
   local_target_ = kTarget;
+
+  // predict track weights
+  if (fp_point_cloud_.size() > 0) {
+	  vector<float> ranges(fp_point_cloud_.size());
+	  for (size_t i = 0; i < ranges.size(); i++) {
+	      ranges[i] = fp_point_cloud_[i].norm();
+	  }  
+	  // track_evaluator_->PredictWeights(ranges);
+  }
+
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
 }
 
@@ -696,12 +713,21 @@ DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 
 void Navigation::SetOriginalWeights() {
   ((LinearEvaluator*)evaluator_.get())->SetOriginalWeights();
+  params_.linear_limits.max_speed = FLAGS_ms;
 }
 
 void Navigation::SetCurveWeights() {
   ((LinearEvaluator*)evaluator_.get())->SetCurveWeights();
+  params_.linear_limits.max_speed = FLAGS_c_ms;
 }
 
+void Navigation::SetParams(float cw, float dw, float ocw, float fw, float max_speed) {
+  ((LinearEvaluator*)evaluator_.get())->SetClearanceWeight(cw);
+  ((LinearEvaluator*)evaluator_.get())->SetDistanceWeight(dw);
+  ((LinearEvaluator*)evaluator_.get())->SetOptionClearanceWeight(ocw);
+  ((LinearEvaluator*)evaluator_.get())->SetClearanceWeight(fw);
+  params_.linear_limits.max_speed = max_speed;
+}
 
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
@@ -743,6 +769,12 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     RecycleLastCurvature();
     return;
   }
+  //printf("Using weights cw=%0.2f, dw=%0.2f, ocw=%0.2f, fw=%0.2f", 
+  //  ((LinearEvaluator*)evaluator_.get())->GetClearanceWeight(),
+  //  ((LinearEvaluator*)evaluator_.get())->GetDistanceWeight(),
+  //  ((LinearEvaluator*)evaluator_.get())->GetOptionClearanceWeight(),
+  //  ((LinearEvaluator*)evaluator_.get())->GetFreePathWeight()
+  //);
   auto best_path = evaluator_->FindBest(paths);
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");
@@ -974,6 +1006,9 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
 bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
+  // IKD
+  cmd_angle_vel *= 1.6620121770501366;
+  // IKD  
   static RateChecker rate_checker("Navigation::Run");
   RateChecker::Invocation invoke(&rate_checker);
   const bool kDebug = FLAGS_v > 0;
@@ -1010,7 +1045,6 @@ bool Navigation::Run(const double& time,
     return true;
   }
 
-
   // Before swithcing states we need to update the local target.
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
@@ -1024,6 +1058,7 @@ bool Navigation::Run(const double& time,
       Vector2f carrot(0, 0);
       bool foundCarrot = GetCarrot(carrot);
       if (!foundCarrot) {
+        cout << "no carrot" << endl;
         Halt(cmd_vel, cmd_angle_vel);
         return false;
       }
@@ -1031,7 +1066,6 @@ bool Navigation::Run(const double& time,
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
     }
   }
-
 
   // Switch between navigation states.
   NavigationState prev_state = nav_state_;
@@ -1047,7 +1081,6 @@ bool Navigation::Run(const double& time,
       nav_state_ = NavigationState::kStopped;
     }
   } while (prev_state != nav_state_);
-
 
 
   switch (nav_state_) {
@@ -1071,7 +1104,6 @@ bool Navigation::Run(const double& time,
           static_cast<int>(nav_state_));
     }
   }
-
 
   if (nav_state_ == NavigationState::kPaused ||
       nav_state_ == NavigationState::kStopped) {
@@ -1104,7 +1136,6 @@ bool Navigation::Run(const double& time,
     if (kDebug) printf("Reached Goal: TurnInPlace\n");
     TurnInPlace(cmd_vel, cmd_angle_vel);
   }
-
 
   return true;
 }

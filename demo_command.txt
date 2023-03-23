@@ -1,0 +1,1 @@
+./bin/navigation --map gdc_lab_track_05_15 --test_avoidance --cw -5 --fw -5 --dw 0 --ow 0 --ms 4.0 --c_cw -5 --c_fw -5 --c_dw 0 --c_ow 0 --c_sw -0 --c_ms 1.5 --robot_config config/ut_automata.lua

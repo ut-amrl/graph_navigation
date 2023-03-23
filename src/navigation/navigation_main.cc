@@ -66,6 +66,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Float64.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -211,8 +212,36 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   navigation_.ObservePointCloud(point_cloud_, cached_dtheta_, msg.header.stamp.toSec());
 }
 
+void TrackParamCallback(const std_msgs::Float64& msg) {
+  // Listens to the '/track_weight_predictor' topic to change driving parameters
+  static int last_prediction = 0;
+  int prediction = floor(msg.data + 0.5);
+  // defaults to the best original params from GDC lab track
+  float cw = -5.0;
+  float dw = 0.0;
+  float ocw = 0.0;
+  float fw = -5.0;
+  float max_speed = 1.0;
+  if (prediction != last_prediction) {
+    switch(prediction) {
+      case 0:
+        navigation_.SetOriginalWeights(); 
+        break;
+      case 1:
+        navigation_.SetCurveWeights();
+        break;
+      case 2:
+        navigation_.SetParams(cw, dw, ocw, fw, max_speed);
+        break;
+    }
+    printf("Updated params to cw=%0.2f, dw=%0.2f, ocw=%0.2f, fw=%0.2f\n",
+              cw, dw, ocw, fw);
+  }
+  last_prediction = prediction;
+}
+
 void JoystickCallback(const sensor_msgs::Joy& msg) {
-  // A sets constants to the curve constants
+  // A Button sets constants to the curve constants
   if (msg.buttons[0]) {
     navigation_.SetCurveWeights();
     // printf("Curve weights");
@@ -911,6 +940,8 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
   ros::Subscriber joystick_sub =
       n.subscribe("/joystick", 1, &JoystickCallback);
+  ros::Subscriber param_predictor_sub =
+      n.subscribe("/track_param_predictor", 1, &TrackParamCallback);
   // ros::Subscriber img_sub =
   //     n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =

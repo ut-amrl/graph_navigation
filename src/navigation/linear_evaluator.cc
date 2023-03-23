@@ -51,11 +51,13 @@ using namespace math_util;
 DEFINE_double(c_dw, 0, "Curve Distance weight");
 DEFINE_double(c_cw, -1, "Curve Clearance weight");
 DEFINE_double(c_ow, 0.0, "Curve Option clearance weight");
-DEFINE_double(c_fw, 0.0, "Cruve Free path weight");
+DEFINE_double(c_fw, 0.0, "Curve Free path weight");
+DEFINE_double(c_sw, 0.0, "Curve sharpness weight");
 DEFINE_double(dw, 0, "Distance weight");
 DEFINE_double(cw, -1, "Clearance weight");
 DEFINE_double(ow, 0.0, "Option clearance weight");
 DEFINE_double(fw, 0.0, "Free path weight");
+DEFINE_double(sw, 0.0, "Sharpness weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 DEFINE_double(fpl_avg_window,
              0.1,
@@ -144,7 +146,8 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   float best_cost = FLAGS_dw * dist_to_goal[best_i] +
       FLAGS_fw * best->Length() +
       FLAGS_ow * option_clearance[best_i] +
-      FLAGS_cw * clearance[best_i];
+      FLAGS_cw * clearance[best_i] +
+      FLAGS_sw * best->AngularLength();;
   for (size_t i = 0; i < paths.size(); ++i) {
 
     if (paths[i]->Length() <= 0.0f) continue;
@@ -155,7 +158,8 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
     const float cost = FLAGS_dw * dist_to_goal[i] +
       FLAGS_fw * paths[i]->Length() +
       FLAGS_ow * option_clearance[i] +
-      FLAGS_cw * clearance[i];
+      FLAGS_cw * clearance[i] +
+      FLAGS_sw * paths[i]->AngularLength();
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
@@ -170,12 +174,14 @@ void LinearEvaluator::SetCurveWeights() {
  	 orig_dw = FLAGS_dw; 
 	 orig_ow = FLAGS_ow; 
 	 orig_cw = FLAGS_cw; 
+	 orig_sw = FLAGS_sw; 
 	 orig_weights_captured = true;
  }
  FLAGS_fw = FLAGS_c_fw; 
  FLAGS_dw = FLAGS_c_dw; 
  FLAGS_ow = FLAGS_c_ow; 
  FLAGS_cw = FLAGS_c_cw; 
+ FLAGS_sw = FLAGS_c_sw; 
 }
 
 void LinearEvaluator::SetOriginalWeights() {
@@ -184,6 +190,7 @@ void LinearEvaluator::SetOriginalWeights() {
  FLAGS_dw = orig_dw;
  FLAGS_ow = orig_ow;
  FLAGS_cw = orig_cw;
+ FLAGS_sw = orig_sw;
 }
 
 float LinearEvaluator::GetClearanceWeight() {

@@ -7,6 +7,19 @@ MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS on)
+
+
+
+#include_directories("/home/amrl_user/.local/lib/python3.6/site-packages/torch/include")
+
+#link_directories("/home/amrl_user/.local/lib")
+#link_directories("/home/amrl_user/.local/lib/python3.6/site-packages/torch/lib")
+
+#list(APPEND CMAKE_PREFIX_PATH "/home/amrl_user/.local/lib/python3.6/site-packages/torch")
+
+
+
+
 SET(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Werror")
 SET(LIBRARY_NAME "graph_nav_lib"
     CACHE STRING "Name of compiled library")
@@ -28,6 +41,9 @@ SET(ROS_BUILD_SHARED_LIBS true)
 
 # LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
 # FIND_PACKAGE(Torch REQUIRED)
+list(APPEND CMAKE_PREFIX_PATH "/home/amrl_user/.local/lib/python3.6/site-packages/torch/share/cmake")
+#set(Torch_DIR "/home/amrl_user/.local/lib/python3.6/site-packages/torch")
+find_package(Torch REQUIRED)
 FIND_PACKAGE(OpenCV REQUIRED)
 
 IF(NOT ROS_BUILD_TYPE)
@@ -68,8 +84,8 @@ TARGET_LINK_LIBRARIES(navigation ut_amrl_navigation ${libs})
 ADD_DEPENDENCIES(navigation ${catkin_EXPORTED_TARGETS})
 # ADD_DEPENDENCIES(social_nav ${catkin_EXPORTED_TARGETS})
 
-ROSBUILD_ADD_LIBRARY(graph_nav_rl
-                     src/navigation/graph_nav_rl.cc
-                     src/visualization/visualization.cc
-                     src/simulator/simulator.cc)
-TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)
+#ROSBUILD_ADD_LIBRARY(graph_nav_rl
+#                     src/navigation/graph_nav_rl.cc
+#                     src/visualization/visualization.cc
+#                     src/simulator/simulator.cc)
+#TARGET_LINK_LIBRARIES(graph_nav_rl ut_amrl_navigation)

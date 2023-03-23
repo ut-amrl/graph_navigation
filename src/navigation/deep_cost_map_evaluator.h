@@ -23,6 +23,29 @@
 #include <vector>
 #include <mutex>
 
+#undef LOG
+#undef CHECK
+#undef VLOG
+#undef LOG_IF
+#undef VLOG_IF
+#undef VLOG_IS_ON
+#undef DCHECK
+#undef CHECK_OP
+#undef CHECK_EQ
+#undef CHECK_NE
+#undef CHECK_LE
+#undef CHECK_LT
+#undef CHECK_GE
+#undef CHECK_GT
+#undef DCHECK_EQ
+#undef DCHECK_NE
+#undef DCHECK_LE
+#undef DCHECK_LT
+#undef DCHECK_GE
+#undef DCHECK_GT
+#undef CHECK_NOTNULL
+#undef DCHECK_NOTNULL
+#include "torch/script.h"
 #include "torch/torch.h"
 
 #include "motion_primitives.h"

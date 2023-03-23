@@ -1,0 +1,398 @@
+CMakeFiles/ROSBUILD_gensrv_lisp.dir/build.make:220: warning: overriding recipe for target '../srv_gen/lisp/_package.lisp'
+CMakeFiles/ROSBUILD_gensrv_lisp.dir/build.make:134: warning: ignoring old recipe for target '../srv_gen/lisp/_package.lisp'
+CMakeFiles/ROSBUILD_gensrv_lisp.dir/build.make:220: warning: overriding recipe for target '../srv_gen/lisp/_package.lisp'
+CMakeFiles/ROSBUILD_gensrv_lisp.dir/build.make:134: warning: ignoring old recipe for target '../srv_gen/lisp/_package.lisp'
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:95:0: error: "VLOG" redefined [-Werror]
+ #define VLOG(n)                   \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1094:0: note: this is the location of the previous definition
+ #define VLOG(verboselevel) LOG_IF(INFO, VLOG_IS_ON(verboselevel))
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:99:0: error: "LOG_IF" redefined [-Werror]
+ #define LOG_IF(n, condition)                                  \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:570:0: note: this is the location of the previous definition
+ #define LOG_IF(severity, condition) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:102:0: error: "VLOG_IF" redefined [-Werror]
+ #define VLOG_IF(n, condition)                    \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1096:0: note: this is the location of the previous definition
+ #define VLOG_IF(verboselevel, condition) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:106:0: error: "VLOG_IS_ON" redefined [-Werror]
+ #define VLOG_IS_ON(verboselevel) (CAFFE2_LOG_THRESHOLD <= -(verboselevel))
+ 
+In file included from /usr/include/glog/logging.h:513:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/vlog_is_on.h:82:0: note: this is the location of the previous definition
+ #define VLOG_IS_ON(verboselevel)                                \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:129:0: error: "DCHECK" redefined [-Werror]
+ #define DCHECK(condition) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1031:0: note: this is the location of the previous definition
+ #define DCHECK(condition) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:134:0: error: "CHECK_OP" redefined [-Werror]
+ #define CHECK_OP(val1, val2, op)                                              \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:763:0: note: this is the location of the previous definition
+ #define CHECK_OP(name, op, val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:139:0: error: "CHECK_EQ" redefined [-Werror]
+ #define CHECK_EQ(val1, val2) CHECK_OP(val1, val2, ==)
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:788:0: note: this is the location of the previous definition
+ #define CHECK_EQ(val1, val2) CHECK_OP(_EQ, ==, val1, val2)
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:140:0: error: "CHECK_NE" redefined [-Werror]
+ #define CHECK_NE(val1, val2) CHECK_OP(val1, val2, !=)
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:789:0: note: this is the location of the previous definition
+ #define CHECK_NE(val1, val2) CHECK_OP(_NE, !=, val1, val2)
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:141:0: error: "CHECK_LE" redefined [-Werror]
+ #define CHECK_LE(val1, val2) CHECK_OP(val1, val2, <=)
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:790:0: note: this is the location of the previous definition
+ #define CHECK_LE(val1, val2) CHECK_OP(_LE, <=, val1, val2)
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:142:0: error: "CHECK_LT" redefined [-Werror]
+ #define CHECK_LT(val1, val2) CHECK_OP(val1, val2, <)
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:791:0: note: this is the location of the previous definition
+ #define CHECK_LT(val1, val2) CHECK_OP(_LT, < , val1, val2)
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:143:0: error: "CHECK_GE" redefined [-Werror]
+ #define CHECK_GE(val1, val2) CHECK_OP(val1, val2, >=)
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:792:0: note: this is the location of the previous definition
+ #define CHECK_GE(val1, val2) CHECK_OP(_GE, >=, val1, val2)
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:144:0: error: "CHECK_GT" redefined [-Werror]
+ #define CHECK_GT(val1, val2) CHECK_OP(val1, val2, >)
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:793:0: note: this is the location of the previous definition
+ #define CHECK_GT(val1, val2) CHECK_OP(_GT, > , val1, val2)
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:156:0: error: "DCHECK_EQ" redefined [-Werror]
+ #define DCHECK_EQ(val1, val2) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1036:0: note: this is the location of the previous definition
+ #define DCHECK_EQ(val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:159:0: error: "DCHECK_NE" redefined [-Werror]
+ #define DCHECK_NE(val1, val2) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1041:0: note: this is the location of the previous definition
+ #define DCHECK_NE(val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:162:0: error: "DCHECK_LE" redefined [-Werror]
+ #define DCHECK_LE(val1, val2) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1046:0: note: this is the location of the previous definition
+ #define DCHECK_LE(val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:165:0: error: "DCHECK_LT" redefined [-Werror]
+ #define DCHECK_LT(val1, val2) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1051:0: note: this is the location of the previous definition
+ #define DCHECK_LT(val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:168:0: error: "DCHECK_GE" redefined [-Werror]
+ #define DCHECK_GE(val1, val2) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1056:0: note: this is the location of the previous definition
+ #define DCHECK_GE(val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:171:0: error: "DCHECK_GT" redefined [-Werror]
+ #define DCHECK_GT(val1, val2) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1061:0: note: this is the location of the previous definition
+ #define DCHECK_GT(val1, val2) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:177:0: error: "CHECK_NOTNULL" redefined [-Werror]
+ #define CHECK_NOTNULL(val) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:798:0: note: this is the location of the previous definition
+ #define CHECK_NOTNULL(val) \
+ 
+In file included from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/Logging.h:28:0,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/core/TensorImpl.h:19,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/core/TensorBody.h:14,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Tensor.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/Context.h:4,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/ATen/ATen.h:9,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/csrc/api/include/torch/types.h:3,
+                 from /home/amrl_user/.local/lib/python3.6/site-packages/torch/include/torch/script.h:3,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:38:
+/home/amrl_user/.local/lib/python3.6/site-packages/torch/include/c10/util/logging_is_not_google_glog.h:188:0: error: "DCHECK_NOTNULL" redefined [-Werror]
+ #define DCHECK_NOTNULL(val) \
+ 
+In file included from /home/amrl_user/graph_navigation/src/shared/math/math_util.h:24:0,
+                 from /home/amrl_user/graph_navigation/src/shared/math/geometry.h:31,
+                 from /home/amrl_user/graph_navigation/src/shared/math/line2d.h:28,
+                 from /home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:32:
+/usr/include/glog/logging.h:1068:0: note: this is the location of the previous definition
+ #define DCHECK_NOTNULL(val) (val)
+ 
+/home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc: In member function ‘bool motion_primitives::DeepCostMapEvaluator::LoadModel()’:
+/home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:73:32: error: ‘is_available’ is not a member of ‘at::cuda’
+     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+                                ^~~~~~~~~~~~
+/home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc: In member function ‘void motion_primitives::DeepCostMapEvaluator::UpdateLocalCostMap()’:
+/home/amrl_user/graph_navigation/src/navigation/deep_cost_map_evaluator.cc:114:32: error: ‘is_available’ is not a member of ‘at::cuda’
+     auto device = torch::cuda::is_available() ? torch::kCUDA : torch::kCPU;
+                                ^~~~~~~~~~~~
+cc1plus: all warnings being treated as errors
+make[3]: *** [src/CMakeFiles/ut_amrl_navigation.dir/navigation/deep_cost_map_evaluator.cc.o] Error 1
+make[2]: *** [src/CMakeFiles/ut_amrl_navigation.dir/all] Error 2
+make[1]: *** [all] Error 2
+make: *** [all] Error 2
