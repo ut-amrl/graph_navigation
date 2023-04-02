@@ -61,7 +61,9 @@ TerrainEvaluator = {
   model_path = "/home/eyang/tmp/naturl/current.jit";
 
   -- dist_to_goal_weight = -0.2;
-  dist_to_goal_weight = -0.7;
+  -- dist_to_goal_weight = -0.7;
+  dist_to_goal_weight = -2.0;
+
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
   terrain_weight = 4.0;

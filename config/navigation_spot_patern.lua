@@ -53,17 +53,70 @@ TerrainEvaluator = {
   patch_size_pixels = 64;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
-  max_cost = 1.1;
-  -- discount_factor = 0.5;
-  discount_factor = 0.8; -- ahg demo
+  -- max_cost = 0.0;
+  discount_factor = 0.8;
+  -- discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  model_path = "/home/eyang/tmp/rca/current.jit";
+  -- max cost * terrain weight should be around 20-24
+
+  -- model_path = "/home/eyang/tmp/patern/ahg.jit";
+  -- max_cost = 3.0;
+  -- terrain_weight = 8.0;
+
+  -- model_path = "/home/eyang/tmp/patern/ahg-night-gen2.jit";
+  -- max_cost = 2.5;
+  -- terrain_weight = 9.0;
+
+  -- model_path = "/home/eyang/tmp/patern/pma-initial.jit";
+  -- max_cost = 2.0;
+  -- terrain_weight = 12.0;
+
+  -- model_path = "/home/eyang/tmp/patern/pma-retrain.jit";
+  -- max_cost = 1.2;
+  -- terrain_weight = 20.0;
+
+  -- model_path = "/home/eyang/tmp/patern/01pebble-gen0.jit";
+  -- max_cost = 2.0;
+  -- terrain_weight = 12.0;
+
+  -- model_path = "/home/eyang/tmp/patern/01pebble-gen1.jit";
+  -- max_cost = 1.2;
+  -- terrain_weight = 20.0;
+
+  -- model_path = "/home/eyang/tmp/patern/pma-night-gen2.jit";
+  -- max_cost = 1.2;
+  -- terrain_weight = 20.0;
+
+  -- model_path = "/home/eyang/tmp/patern/eer-gen0.jit";
+  -- max_cost = 3.0;
+  -- terrain_weight = 8.0;
+
+  -- model_path = "/home/eyang/tmp/patern/eer-gen1.jit";
+  -- max_cost = 3.0;
+  -- terrain_weight = 8.0;
+
+  -- model_path = "/home/eyang/tmp/patern/eer-gen2.jit";
+  -- max_cost = 2.5;
+  -- terrain_weight = 9.0;
+
+  -- model_path = "/home/eyang/tmp/patern/gdc-gen0.jit";
+  -- max_cost = 2.5;
+  -- terrain_weight = 9.0;
+
+  -- model_path = "/home/eyang/tmp/patern/gdc-gen1.jit";
+  -- max_cost = 2.5;
+  -- terrain_weight = 9.0;
+
+  model_path = "/home/eyang/tmp/patern/08mulch-02-23-01-03-22.jit";
+  max_cost = 2.5;
+  terrain_weight = 9.0;
 
   -- dist_to_goal_weight = -0.2;
   dist_to_goal_weight = -0.7;
   -- dist_to_goal_weight = -2.0;
+
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
-  terrain_weight = 24.0;
+  -- terrain_weight = 4.0;
 }

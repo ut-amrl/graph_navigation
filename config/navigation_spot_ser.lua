@@ -53,17 +53,23 @@ TerrainEvaluator = {
   patch_size_pixels = 64;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
-  max_cost = 1.1;
+  -- max_cost = 0.0;
   -- discount_factor = 0.5;
   discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  model_path = "/home/eyang/tmp/rca/current.jit";
+  model_path = "/home/eyang/tmp/ser/current.jit";
+  max_cost = 5.0;
+  terrain_weight = 4.8;
+
+  -- grass eq
+  -- max_cost = 3.0;
+  -- terrain_weight = 8.0;
 
   -- dist_to_goal_weight = -0.2;
   dist_to_goal_weight = -0.7;
   -- dist_to_goal_weight = -2.0;
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
-  terrain_weight = 24.0;
+  -- terrain_weight = 4.0;
 }
