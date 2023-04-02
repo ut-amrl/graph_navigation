@@ -20,7 +20,7 @@ NavigationParameters = {
   max_angular_accel = 5;
   max_angular_decel = 5;
   max_angular_speed = 5.0;
-  carrot_dist = 1;
+  carrot_dist = 3;
   system_latency = 0.24;
   obstacle_margin = 0.05;
   num_options = 31;
@@ -35,7 +35,7 @@ NavigationParameters = {
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
 
-  local_fov = deg2rad(60);
+  local_fov = deg2rad(30);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
