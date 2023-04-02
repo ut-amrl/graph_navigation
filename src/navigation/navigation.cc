@@ -949,8 +949,16 @@ bool Navigation::Run(const double& time,
         if (kDebug) printf("TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
-        if (kDebug) printf("ObstAv\n");
-        RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+        if (local_target.norm() < params_.target_dist_tolerance) {
+          // Patch added for terrain-based navigation to stop the robot when it
+          // reaches the goal because the constant curvature arcs are not
+          // truncated to prevent progress away from the goal.
+          if (kDebug) printf("Halt (Terrain, Reached Goal)\n");
+          Halt(cmd_vel, cmd_angle_vel);
+        } else {
+          if (kDebug) printf("ObstAv\n");
+          RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+        }
       }
     }
   } else if (nav_state_ == NavigationState::kTurnInPlace) {
