@@ -25,41 +25,127 @@ OUT_FPS = 30
 # -----------------------------------------------------------------------
 
 
+class SpotAzureKinectCameraProjection:
+    def __init__(self):
+        """
+        Frames nomenclature:
+        (1) World Coordinates: Attached to the robot at the centre of robot's base (Z up, X forward, Y towards robot's left hand side)
+        (2) Camera Pose: Attached at the camera centre, basically translate (1) to that point and then rotate about +Y axis so as to align +X such that it comes straight out of the camera lens
+        (3) Camera Coordinates: Attached at the camera centre, basically rotate (2 rotations) (2) such that the new +Y is along old -Z and new +X is along old -Y
+        (4) Pixel Coordinaes: 3D to 2D intrinsic matrix brings (3) to (4)
+        """
+        self.M_intrinsic = self.get_M_intrinsic()
+        self.kinect_pose_params = self.get_kinect_pose_params()
+        self.M_perspective = self.get_M_perspective()
+        self.mats = self.get_projection_mats()
+
+    def get_projection_mats(self):
+        T_43 = self.M_intrinsic @ self.M_perspective  # 3x4
+        T_32 = self.get_std_rot("X", -math.pi/2) @ self.get_std_rot("Z", -math.pi/2)  # 4x4
+        T_21 = self.get_std_rot(*self.kinect_pose_params["rot"]) @ self.get_std_trans(*self.kinect_pose_params["trans"])  # 4x4
+        T_41 = T_43 @ T_32 @ T_21  # 3x4
+        H_41 = T_41[:, [0, 1, 3]]  # homography for Z=0 plane, 3x3
+        H_14 = np.linalg.inv(H_41)  # 3x3
+        return {"T_43": T_43, "T_32": T_32, "T_21": T_21, "T_41": T_41, "H_41": H_41, "H_14": H_14}
+
+    def get_M_intrinsic(self):
+        # 3x3
+        mat = [
+            [934.6554, 0, 1028.3415],
+            [0, 938.6148, 747.5388],
+            [0, 0, 1]
+        ]
+        return np.array(mat)
+
+    def get_kinect_pose_params(self):
+        # metres, radians
+        # first did translation, then rotation
+        params = {}
+        params["cx"] = 24.5 / 100
+        params["cy"] = -2 / 100   # initially I measured 7, but -2 seems to be the correct one
+        params["cz"] = 76 / 100
+        params["trans"] = (params["cx"], params["cy"], params["cz"])
+        params["rot"] = ("Y", np.deg2rad(15.2))
+        return params
+
+    def get_ordinary_from_homo(self, v):
+        # Scales so that last coord is 1 and then removes last coord
+        o = v.squeeze()
+        o = o/o[-1]
+        return o[:-1]
+
+    def get_homo_from_ordinary(self, v):
+        o = list(v.squeeze())
+        o.append(1)
+        return np.array(o)
+
+    def get_std_trans(self, cx, cy, cz):
+        # cx, cy, cz are the coords of O_M wrt O_F when expressed in F
+        mat = [
+            [1, 0, 0, -cx],
+            [0, 1, 0, -cy],
+            [0, 0, 1, -cz],
+            [0, 0, 0, 1]
+        ]
+        return np.array(mat)
+
+    def get_std_rot(self, axis, alpha):
+        # axis is either "X", "Y", or "Z" axis of F and alpha is positive acc to right hand thumb rule dirn
+        if axis == "X":
+            mat = [
+                [1, 0, 0, 0],
+                [0, math.cos(alpha), math.sin(alpha), 0],
+                [0, -math.sin(alpha), math.cos(alpha), 0],
+                [0, 0, 0, 1]
+            ]
+        elif axis == "Y":
+            mat = [
+                [math.cos(alpha), 0, -math.sin(alpha), 0],
+                [0, 1, 0, 0],
+                [math.sin(alpha), 0, math.cos(alpha), 0],
+                [0, 0, 0, 1]
+            ]
+        elif axis == "Z":
+            mat = [
+                [math.cos(alpha), math.sin(alpha), 0, 0],
+                [-math.sin(alpha), math.cos(alpha), 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1]
+            ]
+        else:
+            raise ValueError("Invalid axis!")
+        return np.array(mat)
+
+    def get_M_perspective(self):
+        # 3x4
+        mat = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]
+        return np.array(mat)
+
+
 class ExtractSafeSpot:
     def __init__(self):
         self.latest_image = None
         self.height = 1280//2
         self.width = 1920//2
-        self.transformImg = tf.Compose([tf.ToTensor(), tf.Resize(
-            (self.height, self.width)), tf.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-        self.transformAnn = tf.Compose([tf.Resize((self.height, self.width))])
+        self.transformImg = tf.Compose([tf.ToTensor(), tf.Resize((self.height, self.width)), tf.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
         self.device = self._load_device()
         self.bmask_model = self._load_bmask_model(CKPT_PATH)
         self.bmask_cmap = self.get_bmask_cmap()
-        self.cam_int = self.get_intrinsic_matrix()
-        self.cam_ext = self.get_extrinsic_matrix()
-        self.world_to_pixel = self.cam_int @ self.cam_ext
-        self.pixel_to_world = np.linalg.pinv(self.world_to_pixel)
-        rospy.Subscriber(CAM_IMG_TOPIC, CompressedImage,
-                         self.image_callback, queue_size=1, buff_size=2**32)
-        self.loc_pub = rospy.Publisher(
-            LOC_PUB_TOPIC, Float64MultiArray, queue_size=1)
-        self.overlay_pub = rospy.Publisher(
-            OVERLAY_PUB_TOPIC, CompressedImage, queue_size=1)
+        self.kinect = SpotAzureKinectCameraProjection()
+
+        rospy.Subscriber(CAM_IMG_TOPIC, CompressedImage, self.image_callback, queue_size=1, buff_size=2**32)
+        self.loc_pub = rospy.Publisher(LOC_PUB_TOPIC, Float64MultiArray, queue_size=1)
+        self.overlay_pub = rospy.Publisher(OVERLAY_PUB_TOPIC, CompressedImage, queue_size=1)
         rospy.Timer(rospy.Duration(1/OUT_FPS), self.processing_callback)
 
     def _load_device(self):
-        device = torch.device(
-            'cuda') if torch.cuda.is_available() else torch.device('cpu')
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         return device
 
     def _load_bmask_model(self, cpath):
-        Net = torchvision.models.segmentation.deeplabv3_resnet50(
-            pretrained=True)  # Load net
-        Net.classifier[4] = torch.nn.Conv2d(256, 2, kernel_size=(
-            1, 1), stride=(1, 1))  # Change final layer to 2 classes
-        Net.backbone.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(
-            7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        Net = torchvision.models.segmentation.deeplabv3_resnet50(pretrained=True)  # Load net
+        Net.classifier[4] = torch.nn.Conv2d(256, 2, kernel_size=(1, 1), stride=(1, 1))  # Change final layer to 2 classes
+        Net.backbone.conv1 = torch.nn.Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         Net = DP(Net, device_ids=[0])
         Net = Net.to(self.device)
         ckpt = torch.load(cpath)
@@ -72,45 +158,10 @@ class ExtractSafeSpot:
         cmap = np.array([[0, 0, 0], [255, 255, 255]], dtype=np.uint8)
         return cmap
 
-    def get_intrinsic_matrix(self):
-        """
-        Returns numpy camera intrinsic matrix 3 x 4 for azure kinect on spot
-        """
-        return np.array([
-            [971.578125, 0, 1022.449585, 0],
-            [0, 971.594238, 778.467773, 0],
-            [0, 0, 1, 0]
-        ])
-
-    def get_extrinsic_matrix(self):
-        """
-        Returns numpy camera extrinsic matrix 4 x 4 for azure kinect on spot
-        """
-        return np.array([
-            [-4.18014e-08, -0.292372, 0.956305, 0.34],
-            [-1, 1.91069e-15, -4.37114e-08, 0],
-            [1.278e-08, -0.956305, -0.292372, 0.733],
-            [0, 0, 0, 1]
-        ])
-
     def image_callback(self, msg):
         self.latest_image = msg.data
 
     def processing_callback(self, _):
-        def get_homo_from_canonical_form(x, y):
-            """
-            Returns homogenized pixel coordinates
-            """
-            return np.array([x, y, 1])
-
-        def scale_to_one(v):
-            """
-            Scales the vector so that the last coord is 1, and then returns reduced vector
-            """
-            v = v.squeeze()
-            v_scaled = v/v[-1]
-            return v_scaled[:-1]
-
         def mask1D_to_rgb(mask1D, cmap):
             if mask1D.shape[-1] == 1:
                 mask1D = mask1D.squeeze()
@@ -124,21 +175,18 @@ class ExtractSafeSpot:
 
         pred_bmask = self.get_bmask(img3)  # gives 0 1 matrix binary mask
         b1, pixel_x, pixel_y = self.deduce_safe_loc(pred_bmask)
-        b2, orient_1_x, orient_1_y, orient_2_x, orient_2_y = self.deduce_safe_angle(
-            pred_bmask, pixel_x, pixel_y)
+        b2, orient_1_x, orient_1_y, orient_2_x, orient_2_y = self.deduce_safe_angle(pred_bmask, pixel_x, pixel_y)
 
         if (b1 and b2):
-            loc = get_homo_from_canonical_form(pixel_x, pixel_y)
-            orient1 = get_homo_from_canonical_form(orient_1_x, orient_1_y)
-            orient2 = get_homo_from_canonical_form(orient_2_x, orient_2_y)
-            loc_w = (scale_to_one(self.pixel_to_world @ loc)
-                     [:2]).squeeze()  # ignore Z
-            orient1_w = (scale_to_one(
-                self.pixel_to_world @ orient1)[:2]).squeeze()
-            orient2_w = (scale_to_one(
-                self.pixel_to_world @ orient2)[:2]).squeeze()
-            rel_ang = math.atan(
-                (orient2_w[0] - orient1_w[0]) / (orient2_w[1] - orient1_w[1]))
+            loc = self.kinect.get_homo_from_ordinary(np.array([pixel_x, pixel_y]))
+            orient1 = self.kinect.get_homo_from_ordinary(np.array([orient_1_x, orient_1_y]))
+            orient2 = self.kinect.get_homo_from_ordinary(np.array([orient_2_x, orient_2_y]))
+
+            loc_w = self.kinect.get_ordinary_from_homo(self.kinect.mats["H_14"] @ loc).squeeze()
+            orient1_w = self.kinect.get_ordinary_from_homo(self.kinect.mats["H_14"] @ orient1).squeeze()
+            orient2_w = self.kinect.get_ordinary_from_homo(self.kinect.mats["H_14"] @ orient2).squeeze()
+
+            rel_ang = math.atan((orient2_w[0] - orient1_w[0]) / (orient2_w[1] - orient1_w[1]))
         else:
             loc_w = np.array([0, 0])
             rel_ang = 0
@@ -162,8 +210,7 @@ class ExtractSafeSpot:
 
         bmask3d = mask1D_to_rgb(pred_bmask, self.bmask_cmap)
         overlay = np.array(cv2.addWeighted(bmask3d, 0.4, img2, 1-0.4, gamma=0))
-        overlay = cv2.circle(overlay, (pixel_x, pixel_y),
-                             radius=50, color=(0, 0, 255), thickness=-1)
+        overlay = cv2.circle(overlay, (pixel_x, pixel_y), radius=50, color=(0, 0, 255), thickness=-1)
 
         msg = CompressedImage()
         msg.header.stamp = rospy.Time.now()
@@ -183,8 +230,7 @@ class ExtractSafeSpot:
 
         height_ini, width_ini, depth_ini = img.shape
         inp = prepare_input_model(img)
-        inp = torch.autograd.Variable(
-            inp, requires_grad=False).to(self.device).unsqueeze(0)
+        inp = torch.autograd.Variable(inp, requires_grad=False).to(self.device).unsqueeze(0)
         with torch.no_grad():
             Prd = self.bmask_model(inp)['out']  # Run net
         Prd = tf.Resize((height_ini, width_ini))(Prd[0])
