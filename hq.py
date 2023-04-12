@@ -160,6 +160,7 @@ def loc_callback(msg: Localization2DMsg):
 if __name__ == "__main__":
     mapimg = cv2.imread("honors_quad.jpg")
     costmap = cv2.imread("hq_costmap.jpg", cv2.IMREAD_GRAYSCALE)
+    # costmap[:] = 0
 
     p = plan(Namespace.start, Namespace.goal, costmap)
     Namespace.plan = [tuple([i * 32 for i in k]) for k in p]
@@ -168,7 +169,7 @@ if __name__ == "__main__":
     cv2.circle(mapimg, Namespace.goal, 10, 0x00FF00, thickness=-1)
     for k in p:
         cv2.circle(mapimg, tuple([i * 32 for i in k]), 5, 0x0000FF, thickness=-1)
-    plt.imsave("eernav.jpg", mapimg)
+    plt.imsave("hqnav.jpg", mapimg)
 
     # rospy.init_node("satnav")
     # Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
