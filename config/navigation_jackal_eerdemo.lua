@@ -55,11 +55,11 @@ TerrainEvaluator = {
   discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  model_path = "/home/amrl_user/rahul/graph_navigation/jit_cost_model_outdoor_6dim.pt";
+  model_path = "/home/amrl_user/rahul/graph_navigation/models/2023-03-08_fullcost.pt";
 
   -- dist_to_goal_weight = -0.2;
-  dist_to_goal_weight = 0.3;
-  clearance_weight = 0; -- -0.25;
-  fpl_weight = 0; -- -0.75;
-  terrain_weight = 0.0;
+  dist_to_goal_weight = -0.3;
+  clearance_weight = 0.00; -- -0.25;
+  fpl_weight = 0.0; -- -0.75;
+  terrain_weight = 1.0;
 }
