@@ -22,18 +22,20 @@ class PatchFromImageDataset:
     def __getitem__(self, idx):
         w = self.patch_size * (idx % self.w)
         h = self.patch_size * (idx // self.w)
-        out = self.image[:, h : h + self.patch_size, w : w + self.patch_size]
-        if out.shape != [3, 40, 40]:
-            k = np.zeros((3, 40, 40))
+        out = self.image[:, h: h + self.patch_size, w: w + self.patch_size]
+        if out.shape != [3, self.patch_size, self.patch_size]:
+            k = np.zeros((3, self.patch_size, self.patch_size))
             k[:, : out.shape[1], : out.shape[2]] = out
             out = k
         return out
 
 
-def create_costmap(img):
+def create_costmap():
     dataset = PatchFromImageDataset("./eer_lawn_moremasked.jpg")
+    # dataset = PatchFromImageDataset("./eerlawn_initial.jpg")
     loader = torch.utils.data.DataLoader(dataset, batch_size=1)
     model = torch.jit.load("./jit_cost_model_outdoor_6dim.pt")
+    # model = torch.jit.load("./eerlawn1.pt")
     model.eval()
     model.cuda()
 
@@ -45,6 +47,7 @@ def create_costmap(img):
             w = i % dataset.w
             if batch.numpy().any():
                 preds = list(model(batch.float().to("cuda")).cpu().numpy())
+                print(preds)
                 costmap[h, w] = preds[0]
             else:
                 costmap[h, w] = 100
@@ -56,7 +59,5 @@ def create_costmap(img):
 
 
 if __name__ == "__main__":
-    mapimg = cv2.imread("./eer_lawn_moremasked.jpg")
-    mapimg = cv2.cvtColor(mapimg, cv2.COLOR_BGR2RGB)
-    costmap = create_costmap(mapimg)
+    costmap = create_costmap()
     plt.imsave("eercost.jpg", costmap)

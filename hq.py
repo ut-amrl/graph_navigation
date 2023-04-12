@@ -91,8 +91,8 @@ class Namespace:
     last_carrot_idx: int = None
     plan: List[Tuple[int, int]] = None
     carrot_set_dist = 3 * fac
-    start = (2020, 530)
-    goal = (580, 790)
+    start = (450, 300)
+    goal = (750, 1300)
 
 
 def anglemod(a: float) -> float:
@@ -158,8 +158,8 @@ def loc_callback(msg: Localization2DMsg):
 
 
 if __name__ == "__main__":
-    mapimg = cv2.imread("./eer_lawn_moremasked.jpg")
-    costmap = cv2.imread("./eercost.jpg", cv2.IMREAD_GRAYSCALE)
+    mapimg = cv2.imread("honors_quad.jpg")
+    costmap = cv2.imread("hq_costmap.jpg", cv2.IMREAD_GRAYSCALE)
 
     p = plan(Namespace.start, Namespace.goal, costmap)
     Namespace.plan = [tuple([i * 32 for i in k]) for k in p]
@@ -170,9 +170,9 @@ if __name__ == "__main__":
         cv2.circle(mapimg, tuple([i * 32 for i in k]), 5, 0x0000FF, thickness=-1)
     plt.imsave("eernav.jpg", mapimg)
 
-    rospy.init_node("satnav")
-    Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
+    # rospy.init_node("satnav")
+    # Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
 
-    l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
+    # l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
 
-    rospy.spin()
+    # rospy.spin()
