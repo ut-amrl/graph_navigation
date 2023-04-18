@@ -99,7 +99,7 @@ using ros_helpers::InitRosHeader;
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 const string kOpenCVWindow = "Image window";
 
-DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
+DEFINE_string(robot_config, "config/navigation_jackal_eerdemo.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
