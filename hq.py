@@ -160,7 +160,7 @@ def loc_callback(msg: Localization2DMsg):
 if __name__ == "__main__":
     mapimg = cv2.imread("honors_quad.jpg")
     costmap = cv2.imread("hq_costmap.jpg", cv2.IMREAD_GRAYSCALE)
-    # costmap[:] = 0
+    costmap[:] = 0
 
     p = plan(Namespace.start, Namespace.goal, costmap)
     Namespace.plan = [tuple([i * 32 for i in k]) for k in p]
