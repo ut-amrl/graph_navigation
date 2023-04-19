@@ -20,7 +20,7 @@ NavigationParameters = {
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 0.5;
-  carrot_dist = 5;
+  carrot_dist = 10;
   system_latency = 0.24;
   obstacle_margin = 0.15;
   num_options = 31;
@@ -55,10 +55,10 @@ TerrainEvaluator = {
   discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  model_path = "/home/amrl_user/rahul/graph_navigation/models/2023-03-08_fullcost.pt";
+  model_path = "/home/amrl_user/rahul/graph_navigation/models/fullcost_exp.pt";
 
   -- dist_to_goal_weight = -0.2;
-  dist_to_goal_weight = -0.3;
+  dist_to_goal_weight = -0.15;
   clearance_weight = 0.00; -- -0.25;
   fpl_weight = 0.0; -- -0.75;
   terrain_weight = 1.0;

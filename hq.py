@@ -171,9 +171,9 @@ if __name__ == "__main__":
         cv2.circle(mapimg, tuple([i * 32 for i in k]), 5, 0x0000FF, thickness=-1)
     plt.imsave("hqnav.jpg", mapimg)
 
-    # rospy.init_node("satnav")
-    # Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
+    rospy.init_node("satnav")
+    Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
 
-    # l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
+    l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
 
-    # rospy.spin()
+    rospy.spin()

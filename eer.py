@@ -87,7 +87,7 @@ class Namespace:
     y = 0.0
 
     start_loc = None  # no longer needed bc assuming start of (0, 0, -pi/2)
-    fac: int = 21
+    fac: int = 23
     last_carrot_idx: int = None
     plan: List[Tuple[int, int]] = None
     carrot_set_dist = 3 * fac
@@ -138,6 +138,9 @@ def loc_callback(msg: Localization2DMsg):
 
     # then, using last set carrot, find next carrot that is closest to the robot
     newcarroti = find_next_carrot(impos[:2])
+    if (newcarroti == Namespace.last_carrot_idx):
+        print('old')
+        return
     Namespace.last_carrot_idx = newcarroti
     newcarrot = Namespace.plan[newcarroti]
 
@@ -171,9 +174,9 @@ if __name__ == "__main__":
         cv2.circle(mapimg, tuple([i * 32 for i in k]), 5, 0x0000FF, thickness=-1)
     plt.imsave("eernav.jpg", mapimg)
 
-    # rospy.init_node("satnav")
-    # Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
+    rospy.init_node("satnav")
+    Namespace.pub = rospy.Publisher("/move_base_simple/goal_amrl", Localization2DMsg, queue_size=1)
 
-    # l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
+    l = rospy.Subscriber("/localization", Localization2DMsg, loc_callback)
 
-    # rospy.spin()
+    rospy.spin()
