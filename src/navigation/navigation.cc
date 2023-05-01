@@ -882,7 +882,7 @@ bool Navigation::Run(const double& time,
     prev_state = nav_state_;
     if (nav_state_ == NavigationState::kGoto &&
         local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
-        robot_vel_.squaredNorm() < Sq(params_.target_dist_tolerance)) {
+        robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
       nav_state_ = NavigationState::kTurnInPlace;
     } else if (nav_state_ == NavigationState::kTurnInPlace &&
           AngleDist(robot_angle_, nav_goal_angle_) < 
