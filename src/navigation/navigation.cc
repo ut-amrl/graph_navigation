@@ -779,6 +779,10 @@ string Navigation::GetNavStatus() {
   }
 }
 
+uint8_t Navigation::GetNavStatusUint8() {
+  return static_cast<uint8_t>(nav_state_);
+}
+
 vector<Vector2f> Navigation::GetPredictedCloud() {
   return fp_point_cloud_;
 }

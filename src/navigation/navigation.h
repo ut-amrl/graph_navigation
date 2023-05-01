@@ -134,6 +134,7 @@ class Navigation {
   Eigen::Vector2f GetVelocity();
   float GetAngularVelocity();
   std::string GetNavStatus();
+  uint8_t GetNavStatusUint8();
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
   float GetObstacleMargin();

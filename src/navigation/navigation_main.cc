@@ -38,7 +38,7 @@
 #include "config_reader/config_reader.h"
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
-#include "actionlib_msgs/GoalStatus.h"
+#include "amrl_msgs/NavStatusMsg.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
@@ -72,7 +72,7 @@
 #include "motion_primitives.h"
 #include "navigation.h"
 
-using actionlib_msgs::GoalStatus;
+using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using math_util::DegToRad;
@@ -141,7 +141,6 @@ ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher map_lines_publisher_;
 ros::Publisher pose_marker_publisher_;
-ros::Publisher nav_status_pub_;
 ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
@@ -319,8 +318,9 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
 }
 
 void PublishNavStatus() {
-  GoalStatus status;
-  status.status = 1;
+  NavStatusMsg status;
+  status.stamp = ros::Time::now();
+  status.status = navigation_.GetNavStatusUint8();
 
   status_pub_.publish(status);
 }
@@ -807,7 +807,7 @@ int main(int argc, char** argv) {
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
       FLAGS_twist_drive_topic, 1);
-  status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
+  status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
