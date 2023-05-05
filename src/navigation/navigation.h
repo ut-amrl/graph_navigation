@@ -183,17 +183,17 @@ class Navigation {
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
 
-  // Current robot location.
+  // Current map frame robot location (LocalizationCallback).
   Eigen::Vector2f robot_loc_;
-  // Current robot orientation.
+  // Current map frame robot orientation (LocalizationCallback).
   float robot_angle_;
   // Current robot velocity.
   Eigen::Vector2f robot_vel_;
   // Current robot angular speed.
   float robot_omega_;
-  // Odometry-reported robot location.
+  // Current odometry frame robot location (OdometryCallback).
   Eigen::Vector2f odom_loc_;
-  // Odometry-reported robot angle.
+  // Current odometry frame robot angle (OdometryCallback).
   float odom_angle_;
   // Newest odometry message received.
   Odom latest_odom_msg_;
