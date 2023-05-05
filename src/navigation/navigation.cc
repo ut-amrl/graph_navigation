@@ -699,7 +699,7 @@ void Navigation::Pause() {
   nav_state_ = NavigationState::kPaused;
 }
 
-void Navigation::GetNavState() {
+int Navigation::GetNavState() {
     return static_cast<int>(nav_state_);
 }
 
