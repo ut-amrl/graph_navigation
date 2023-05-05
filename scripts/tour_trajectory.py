@@ -4,7 +4,7 @@ import time
 from std_msgs.msg import Int64
 from geometry_msgs.msg import PoseStamped
 
-STOP_TIME = 45  # seconds
+STOP_TIME = 28  # seconds
 
 
 class TourTrajectory:
