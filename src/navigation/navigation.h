@@ -132,6 +132,7 @@ class Navigation {
   Eigen::Vector2f GetTarget();
   Eigen::Vector2f GetOverrideTarget();
   Eigen::Vector2f GetVelocity();
+  int GetNavState();
   float GetAngularVelocity();
   std::string GetNavStatus();
   std::vector<Eigen::Vector2f> GetPredictedCloud();

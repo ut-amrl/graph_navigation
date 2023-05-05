@@ -65,6 +65,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Int64.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -147,6 +148,7 @@ ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 image_transport::Publisher viz_img_pub_;
+ros::Publisher nav_state_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -808,6 +810,7 @@ int main(int argc, char** argv) {
   twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
       FLAGS_twist_drive_topic, 1);
   status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
+  nav_state_pub_ = n.advertise<std_msgs::Int64>("/_nav_state", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
@@ -862,6 +865,11 @@ int main(int argc, char** argv) {
     Vector2f cmd_vel(0, 0);
     float cmd_angle_vel(0);
     bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
+
+    int _nav_state = navigation_.GetNavState();
+    std_msgs::Int64 nav_state_msg;
+    nav_state_msg.data = _nav_state;
+    nav_state_pub_.publish(nav_state_msg);
 
     // Publish Nav Status
     PublishNavStatus();

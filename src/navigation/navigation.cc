@@ -699,6 +699,10 @@ void Navigation::Pause() {
   nav_state_ = NavigationState::kPaused;
 }
 
+void Navigation::GetNavState() {
+    return static_cast<int>(nav_state_);
+}
+
 void Navigation::SetMaxVel(const float vel) {
   params_.linear_limits.max_speed = vel;
 }
