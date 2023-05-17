@@ -285,6 +285,14 @@ void OverrideCallback(const amrl_msgs::Pose2Df& msg) {
   navigation_.SetOverride(loc, msg.theta);
 }
 
+void MidlineCallback(const nav_msgs::Path& msg) {
+  std::vector<Eigen::Vector2f> midline;
+  for (auto p : msg.poses) {
+    midline.emplace_back(p.pose.position.x, p.pose.position.y);
+  }
+  navigation_.UpdateMidline(midline)
+}
+
 void SignalHandler(int) {
   if (!run_) {
     printf("Force Exit.\n");
@@ -954,6 +962,7 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+  ros::Subscriber midline_sub = n.subscribe("midline", 1, &MidlineCallback);
   //ros::Subscriber path_sub = n.subscribe("/move_base/TrajectoryPlannerROS/global_plan",1,&PathCallback);
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time

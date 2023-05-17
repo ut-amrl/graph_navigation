@@ -124,6 +124,7 @@ struct PathEvaluatorBase {
                       const float new_ang_vel,
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud,
+                      const vector<Eigen::Vector2f>& new_midline,
                       const cv::Mat& new_image) {
     curr_loc = new_loc;
     curr_ang = new_ang;
@@ -131,6 +132,7 @@ struct PathEvaluatorBase {
     ang_vel = new_ang_vel;
     local_target = new_local_target;
     point_cloud = new_point_cloud;
+    midline = new_midline
     image = new_image;
   }
 
@@ -150,6 +152,8 @@ struct PathEvaluatorBase {
   Eigen::Vector2f local_target;
   // Obstacle point cloud.
   std::vector<Eigen::Vector2f> point_cloud;
+  // Midline.
+  std::vector<Eigen::Vector2f> midline;
   // Latest image observation.
   cv::Mat image;
 };

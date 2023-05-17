@@ -742,7 +742,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   }
 
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
-  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
+  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, midline_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (false && debug) {
     printf("%lu options\n", paths.size());
@@ -1002,6 +1002,10 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
+void UpdateMidline(const std::vector<Eigen::Vector2f>& midline) {
+  midline_ = midline;
+}
+
 
 bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
@@ -1138,6 +1142,6 @@ bool Navigation::Run(const double& time,
   }
 
   return true;
-}
+} 
 
 }  // namespace navigation

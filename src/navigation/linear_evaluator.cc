@@ -58,6 +58,7 @@ DEFINE_double(cw, -1, "Clearance weight");
 DEFINE_double(ow, 0.0, "Option clearance weight");
 DEFINE_double(fw, 0.0, "Free path weight");
 DEFINE_double(sw, 0.0, "Sharpness weight");
+DEFINE_double(mw, 0.0, "Midline weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 DEFINE_double(fpl_avg_window,
              0.1,
@@ -147,7 +148,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
       FLAGS_fw * best->Length() +
       FLAGS_ow * option_clearance[best_i] +
       FLAGS_cw * clearance[best_i] +
-      FLAGS_sw * best->AngularLength();;
+      FLAGS_sw * best->AngularLength();
   for (size_t i = 0; i < paths.size(); ++i) {
 
     if (paths[i]->Length() <= 0.0f) continue;
@@ -159,13 +160,26 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
       FLAGS_fw * paths[i]->Length() +
       FLAGS_ow * option_clearance[i] +
       FLAGS_cw * clearance[i] +
-      FLAGS_sw * paths[i]->AngularLength();
+      FLAGS_sw * paths[i]->AngularLength() +
+      FLAGS_mw * DistToMidline(paths[i]);
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
     }
   }
   return best;
+}
+
+float LinearEvaluator::DistToMidline(shared_ptr<PathRolloutBase> path) {
+  if (midline.size() == 0) return 0;
+  const auto endpoint = path->EndPoint().translation;
+  float min_dist = 1000000;
+  for(int i = 1; i < midline.size(); i++) {
+      Vector2f v1 = midline[i - 1];
+      Vector2f v2 = midline[i];
+      min_dist = std::min(min_dist, geometry::DistanceFromLineSegment(endpoint, v1, v2));
+  }
+  return min_dist;
 }
 
 void LinearEvaluator::SetCurveWeights() {
@@ -175,6 +189,7 @@ void LinearEvaluator::SetCurveWeights() {
 	 orig_ow = FLAGS_ow; 
 	 orig_cw = FLAGS_cw; 
 	 orig_sw = FLAGS_sw; 
+   orig_mw = FLAGS_mw;
 	 orig_weights_captured = true;
  }
  FLAGS_fw = FLAGS_c_fw; 
@@ -182,6 +197,7 @@ void LinearEvaluator::SetCurveWeights() {
  FLAGS_ow = FLAGS_c_ow; 
  FLAGS_cw = FLAGS_c_cw; 
  FLAGS_sw = FLAGS_c_sw; 
+ FLAGS_mw = FLAGS_mw;
 }
 
 void LinearEvaluator::SetOriginalWeights() {
@@ -209,6 +225,10 @@ float LinearEvaluator::GetFreePathWeight() {
   return FLAGS_fw;
 }
 
+float LinearEvaluator::GetMidlineWeight() {
+  return FLAGS_mw;
+}
+
 void LinearEvaluator::SetClearanceWeight(const float &weight) {
   FLAGS_cw = weight;
 }
@@ -223,6 +243,10 @@ void LinearEvaluator::SetOptionClearanceWeight(const float &weight) {
 
 void LinearEvaluator::SetFreePathWeight(const float &weight) {
   FLAGS_fw = weight;
+}
+
+void LinearEvaluator::SetMidlineWeight(const float &weight) {
+  FLAGS_mw = weight;
 }
 
 void LinearEvaluator::SetSubOpt(const float &threshold) {

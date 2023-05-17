@@ -35,11 +35,13 @@ struct LinearEvaluator :  PathEvaluatorBase {
   float GetClearanceWeight();
   float GetDistanceWeight();
   float GetFreePathWeight();
+  float GetMidlineWeight();
   float GetOptionClearanceWeight();
   void SetOptionClearanceWeight(const float& weight);
   void SetClearanceWeight(const float& weight);
   void SetDistanceWeight(const float& weight);
   void SetFreePathWeight(const float& weight);
+  void SetMidlineWeight(const float& weight);
   void SetSubOpt(const float& threshold);
 
   void SetCurveWeights();
@@ -51,6 +53,7 @@ struct LinearEvaluator :  PathEvaluatorBase {
   float orig_fw;
   float orig_ow;
   float orig_sw;
+  float orig_mw;
 };
 
 }  // namespace motion_primitives

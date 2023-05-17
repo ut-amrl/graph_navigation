@@ -145,6 +145,8 @@ class Navigation {
   void SetCarrotDist(const float dist);
   void SetClearanceWeight(const float weight);
 
+  void UpdateMidline(const std::vector<Eigen::Vector2f>& midline);
+
   // Getter
   GraphDomain GetDomain();
   Eigen::Vector2f GetTarget();
@@ -309,6 +311,8 @@ class Navigation {
   
   // Track evaluator.
   std::unique_ptr<motion_primitives::TrackEvaluator> track_evaluator_;
+
+  std::vector<Eigen::Vector2f> midline_;
 };
 
 }  // namespace navigation
