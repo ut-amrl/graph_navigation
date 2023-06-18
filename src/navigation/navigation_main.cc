@@ -72,6 +72,16 @@
 #include "motion_primitives.h"
 #include "navigation.h"
 
+// TODO: Edit CMakeLists.txt to include the zed_interfaces package
+//       You should be able to do this by just adding `zed_interfaces`
+//       to the `find_package()` line if it is set up properly
+// TODO: Might need to fix these includes as well
+#include <zed_wrapper/object_stamped.h>
+#include <zed_wrapper/objects.h>
+// Maybe try these if you're not using the ROS wrapper:
+// #include "zed_interfaces/Object.h"
+// #include "zed_interfaces/ObjectsStamped.h"
+
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -123,6 +133,7 @@ bool simulate_ = false;
 bool enabled_ = false;
 bool received_odom_ = false;
 bool received_laser_ = false;
+bool override_human_vel_ = false;
 Vector2f goal_ = {0, 0};
 Vector2f current_loc_ = {0, 0};
 Vector2f current_vel_ = {0, 0};
@@ -252,6 +263,19 @@ bool PlanServiceCb(graphNavSrv::Request &req,
 void OverrideCallback(const amrl_msgs::Pose2Df& msg) {
   const Vector2f loc(msg.x, msg.y);
   navigation_.SetOverride(loc, msg.theta);
+}
+
+void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
+  for(int i = 0; i < msg->objects.size(); i++) {
+    if (msg->objects[i].label_id == -1) continue;
+    auto velocity = msg->objects[i].velocity; // float32 array of size 3
+    if (velocity[0] > 0.5) { // TODO: Add your own logic here
+      override_human_vel_ = true;
+    }
+    else {
+      override_human_vel_ = false;
+    }
+  }
 }
 
 void SignalHandler(int) {
@@ -844,6 +868,8 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+  ros::Subscriber human_vel_sub = 
+      n.subscribe("/zed2i/zed_node/obj_det/objects", 1, &HumanCallback);
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
@@ -884,7 +910,9 @@ int main(int argc, char** argv) {
       }
 
       // Publish Commands
-      SendCommand(cmd_vel, cmd_angle_vel);
+      // TODO: set updated_human_vel accordingly
+      static float updated_human_vel = 0.5;
+      SendCommand(override_human_vel_ ? updated_human_vel : cmd_vel, cmd_angle_vel);
     }
     loop.Sleep();
   }
