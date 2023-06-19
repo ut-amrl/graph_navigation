@@ -76,11 +76,11 @@
 //       You should be able to do this by just adding `zed_interfaces`
 //       to the `find_package()` line if it is set up properly
 // TODO: Might need to fix these includes as well
-#include <zed_wrapper/object_stamped.h>
-#include <zed_wrapper/objects.h>
+// #include <zed_wrapper/object_stamped.h>
+// #include <zed_wrapper/objects.h>
 // Maybe try these if you're not using the ROS wrapper:
-// #include "zed_interfaces/Object.h"
-// #include "zed_interfaces/ObjectsStamped.h"
+#include "zed_interfaces/Object.h"
+#include "zed_interfaces/ObjectsStamped.h"
 
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
@@ -266,7 +266,7 @@ void OverrideCallback(const amrl_msgs::Pose2Df& msg) {
 }
 
 void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
-  for(int i = 0; i < msg->objects.size(); i++) {
+  for(size_t i = 0; i < msg->objects.size(); i++) {
     if (msg->objects[i].label_id == -1) continue;
     auto velocity = msg->objects[i].velocity; // float32 array of size 3
     if (velocity[0] > 0.5) { // TODO: Add your own logic here
@@ -912,7 +912,7 @@ int main(int argc, char** argv) {
       // Publish Commands
       // TODO: set updated_human_vel accordingly
       static float updated_human_vel = 0.5;
-      SendCommand(override_human_vel_ ? updated_human_vel : cmd_vel, cmd_angle_vel);
+      SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
     }
     loop.Sleep();
   }
