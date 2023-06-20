@@ -861,7 +861,7 @@ int main(int argc, char** argv) {
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
-      n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
+      n.subscribe("set_nav_target", 1, &GoToCallbackAMRL);
   ros::Subscriber enabler_sub =
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
