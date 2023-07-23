@@ -915,10 +915,8 @@ int main(int argc, char** argv) {
       // Publish Commands
       // TODO: set updated_human_vel accordingly
       static float updated_human_vel = 0.0;
-    //   SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
-    // }
-    effefefe
-    SendCommand(0.0, cmd_angle_vel)
+      SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
+    }
     loop.Sleep();
   }
   return 0;
