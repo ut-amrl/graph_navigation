@@ -38,7 +38,7 @@
 #include "config_reader/config_reader.h"
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
-#include "actionlib_msgs/GoalStatus.h"
+#include "amrl_msgs/NavStatusMsg.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
@@ -72,7 +72,17 @@
 #include "motion_primitives.h"
 #include "navigation.h"
 
-using actionlib_msgs::GoalStatus;
+// TODO: Edit CMakeLists.txt to include the zed_interfaces package
+//       You should be able to do this by just adding `zed_interfaces`
+//       to the `find_package()` line if it is set up properly
+// TODO: Might need to fix these includes as well
+// #include <zed_wrapper/object_stamped.h>
+// #include <zed_wrapper/objects.h>
+// Maybe try these if you're not using the ROS wrapper:
+#include "zed_interfaces/Object.h"
+#include "zed_interfaces/ObjectsStamped.h"
+
+using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using math_util::DegToRad;
@@ -123,6 +133,7 @@ bool simulate_ = false;
 bool enabled_ = false;
 bool received_odom_ = false;
 bool received_laser_ = false;
+bool override_human_vel_ = false;
 Vector2f goal_ = {0, 0};
 Vector2f current_loc_ = {0, 0};
 Vector2f current_vel_ = {0, 0};
@@ -141,7 +152,6 @@ ros::Publisher twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher map_lines_publisher_;
 ros::Publisher pose_marker_publisher_;
-ros::Publisher nav_status_pub_;
 ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
@@ -255,6 +265,19 @@ void OverrideCallback(const amrl_msgs::Pose2Df& msg) {
   navigation_.SetOverride(loc, msg.theta);
 }
 
+void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
+  for(size_t i = 0; i < msg->objects.size(); i++) {
+    if (msg->objects[i].label_id == -1) continue;
+    auto velocity = msg->objects[i].velocity; // float32 array of size 3
+    if (velocity[0] > 0.5) { // TODO: Add your own logic here
+      override_human_vel_ = true;
+    }
+    else {
+      override_human_vel_ = false;
+    }
+  }
+}
+
 void SignalHandler(int) {
   if (!run_) {
     printf("Force Exit.\n");
@@ -319,8 +342,9 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
 }
 
 void PublishNavStatus() {
-  GoalStatus status;
-  status.status = 1;
+  NavStatusMsg status;
+  status.stamp = ros::Time::now();
+  status.status = navigation_.GetNavStatusUint8();
 
   status_pub_.publish(status);
 }
@@ -807,7 +831,7 @@ int main(int argc, char** argv) {
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
       FLAGS_twist_drive_topic, 1);
-  status_pub_ = n.advertise<GoalStatus>("navigation_goal_status", 1);
+  status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
@@ -837,13 +861,15 @@ int main(int argc, char** argv) {
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
-      n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
+      n.subscribe("set_nav_target", 1, &GoToCallbackAMRL);
   ros::Subscriber enabler_sub =
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+  ros::Subscriber human_vel_sub = 
+      n.subscribe("/zed2i/zed_node/obj_det/objects", 1, &HumanCallback);
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
@@ -884,7 +910,9 @@ int main(int argc, char** argv) {
       }
 
       // Publish Commands
-      SendCommand(cmd_vel, cmd_angle_vel);
+      // TODO: set updated_human_vel accordingly
+      static float updated_human_vel = 0.5;
+      SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
     }
     loop.Sleep();
   }
