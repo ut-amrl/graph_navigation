@@ -269,10 +269,13 @@ void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
   for(size_t i = 0; i < msg->objects.size(); i++) {
     if (msg->objects[i].label_id == -1) continue;
     auto velocity = msg->objects[i].velocity; // float32 array of size 3
-    auto position = msg->objects[i].position; // float32 array of size 3
-    if (velocity[0] != 0 && msg->objects[i].label=="Person") { // TODO: Add your own logic here
+    auto position = msg->objects[i].position;
+    std::string label = msg->objects[i].label; 
+    // auto orientation = std::atan2(position[1], position[0]) * (180.0 / M_PI);
+    if (msg->objects[i].label=="Person") { // TODO: Add your own logic here
       override_human_vel_ = true;
-      fprintf(stderr,"Velocity: v0: (%f), v1: (%f)\n, Position: p0: (%f), p1: (%f)\n", velocity[0], velocity[1],position[0], position[1]);
+       fprintf(stderr, "Velocity: v0: (%f), v1: (%f)\nPosition: p0: (%f), p1: (%f)\nOrientation: (%f degrees)\nLabel: (%s)\n =================",
+            velocity[0], velocity[1], position[0], position[1], std::atan2(position[1], position[0]) * (180.0 / M_PI), label.c_str());
     }
     else {
       override_human_vel_ = false;
@@ -914,7 +917,7 @@ int main(int argc, char** argv) {
 
       // Publish Commands
       // TODO: set updated_human_vel accordingly
-      static float updated_human_vel = 0.5;
+      static float updated_human_vel = 0.25;
       SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
     }
     loop.Sleep();
