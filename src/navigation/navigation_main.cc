@@ -269,9 +269,10 @@ void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
   for(size_t i = 0; i < msg->objects.size(); i++) {
     if (msg->objects[i].label_id == -1) continue;
     auto velocity = msg->objects[i].velocity; // float32 array of size 3
+    auto position = msg->objects[i].position; // float32 array of size 3
     if (velocity[0] != 0 && msg->objects[i].label=="Person") { // TODO: Add your own logic here
       override_human_vel_ = true;
-      fprintf(stderr,"Velocity:\n v0: (%f), v1: (%f)\n", velocity[0], velocity[1]);
+      fprintf(stderr,"Velocity: v0: (%f), v1: (%f)\n, Position: p0: (%f), p1: (%f)\n", velocity[0], velocity[1],position[0], position[1]);
     }
     else {
       override_human_vel_ = false;
