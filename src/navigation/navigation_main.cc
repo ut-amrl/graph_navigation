@@ -272,14 +272,14 @@ void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
     auto position = msg->objects[i].position;
     std::string label = msg->objects[i].label; 
     // auto orientation = std::atan2(position[1], position[0]) * (180.0 / M_PI);
-    if (msg->objects[i].label=="Person") { // TODO: Add your own logic here
+    if (std::abs(position[0] - current_loc_[0])<2 && std::abs(position[1] - current_loc_[1])<2 && msg->objects[i].label=="Person") { // TODO: Add your own logic here
       override_human_vel_ = true;
        fprintf(stderr, "Velocity: v0: (%f), v1: (%f)\nPosition: p0: (%f), p1: (%f)\nOrientation: (%f degrees)\nLabel: (%s)\n =================",
             velocity[0], velocity[1], position[0], position[1], std::atan2(position[1], position[0]) * (180.0 / M_PI), label.c_str());
     }
     else {
       override_human_vel_ = false;
-      // fprintf(stderr, "ENTERED FALSE");
+      fprintf(stderr, "ENTERED FALSE");
     }
   }
 }
@@ -886,6 +886,7 @@ int main(int argc, char** argv) {
   
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
+
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
     ros::spinOnce();
@@ -917,7 +918,7 @@ int main(int argc, char** argv) {
 
       // Publish Commands
       // TODO: set updated_human_vel accordingly
-      static float updated_human_vel = 0.25;
+      static float updated_human_vel = 0.5;
       SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
     }
     loop.Sleep();
