@@ -7,7 +7,7 @@
 1. [glog](https://github.com/google/glog)
 1. [gflags](https://github.com/gflags/gflags)
 1. [Lua5.1](http://www.lua.org/)
-1. [LibTorch](https://pytorch.org/get-started/locally/): Requires the cxx11 ABI version libtorch. Unpack the libtorch zip
+1. [LibTorch](https://pytorch.org/cppdocs/installing.html): Requires the cxx11 ABI version libtorch. Unpack the libtorch zip
    file to `/opt/libtorch`.
 1. *Optional, if using libtorch with an Nvidia GPU*:   
    Install **both** [CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html) and [CuDNN](https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html) - these are separate installations.
