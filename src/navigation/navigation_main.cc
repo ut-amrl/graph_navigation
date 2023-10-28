@@ -26,6 +26,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <vector>
+#include <unordered_map>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
@@ -88,6 +89,7 @@ using ros_helpers::RosPoint;
 using ros_helpers::SetRosVector;
 using std::string;
 using std::vector;
+using std::unordered_map;
 using sensor_msgs::PointCloud;
 using Eigen::Vector2f;
 using graph_navigation::graphNavSrv;
@@ -104,7 +106,7 @@ DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
-CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
+CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
@@ -133,6 +135,13 @@ vector<Vector2f> point_cloud_;
 sensor_msgs::LaserScan last_laser_msg_;
 cv::Mat last_image_;
 Navigation navigation_;
+
+struct LaserCache {
+  double time = 0.0;
+  float dtheta = 0.0f;
+  float angle_min = 0.0f;
+  vector<Vector2f> rays;
+};
 
 // Publishers
 ros::Publisher ackermann_drive_pub_;
@@ -180,44 +189,51 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   navigation_.UpdateOdometry(odom_);
 }
 
-void LaserHandler(const sensor_msgs::LaserScan& msg) {
+void LaserHandler(const sensor_msgs::LaserScan& msg,
+                  const string& topic) {
   if (FLAGS_v > 2) {
-    printf("Laser t=%f, dt=%f\n",
+    printf("Laser topic=%s, t=%f, dt=%f\n",
+           topic.c_str(),
            msg.header.stamp.toSec(),
            GetWallTime() - msg.header.stamp.toSec());
   }
-  // Location of the laser on the robot. Assumes the laser is forward-facing.
-  const Vector2f kLaserLoc(CONFIG_laser_loc_x, CONFIG_laser_loc_x);
-  static float cached_dtheta_ = 0;
-  static float cached_angle_min_ = 0;
-  static size_t cached_num_rays_ = 0;
-  static vector<Vector2f> cached_rays_;
-  if (cached_angle_min_ != msg.angle_min ||
-      cached_dtheta_ != msg.angle_increment ||
-      cached_num_rays_ != msg.ranges.size()) {
-    cached_angle_min_ = msg.angle_min;
-    cached_dtheta_ = msg.angle_increment;
-    cached_num_rays_ = msg.ranges.size();
-    cached_rays_.resize(cached_num_rays_);
-    for (size_t i = 0; i < cached_num_rays_; ++i) {
-      const float a =
-          cached_angle_min_ + static_cast<float>(i) * cached_dtheta_;
-      cached_rays_[i] = Vector2f(cos(a), sin(a));
+
+  static unordered_map<string, LaserCache> laser_caches_;
+  laser_caches_.emplace(topic, LaserCache());
+  LaserCache& cache = laser_caches_[topic];
+
+  if (cache.dtheta != msg.angle_increment ||
+      cache.angle_min != msg.angle_min ||
+      cache.rays.size() != msg.ranges.size()) {
+    cache.dtheta = msg.angle_increment;
+    cache.angle_min = msg.angle_min;
+    cache.rays.resize(msg.ranges.size());
+    for (size_t i = 0; i < cache.rays.size(); ++i) {
+      const float a = cache.angle_min + static_cast<float>(i) * cache.dtheta;
+      cache.rays[i] = Vector2f(cos(a), sin(a));
     }
   }
-  CHECK_EQ(cached_rays_.size(), msg.ranges.size());
-  point_cloud_.resize(cached_rays_.size());
-  for (size_t i = 0; i < cached_num_rays_; ++i) {
+  CHECK_EQ(cache.rays.size(), msg.ranges.size());
+
+  size_t start_idx = point_cloud_.size();
+  point_cloud_.resize(start_idx + cache.rays.size());
+  // Location of the laser on the robot. Assumes the laser is forward-facing.
+  const Vector2f kLaserLoc(CONFIG_laser_loc_x, CONFIG_laser_loc_y);
+  for (size_t i = 0; i < cache.rays.size(); ++i) {
     const float r =
       ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
       msg.ranges[i] : msg.range_max);
-    point_cloud_[i] = r * cached_rays_[i] + kLaserLoc;
-  }
+    point_cloud_[start_idx + i] = r * cache.rays[i] + kLaserLoc;
+  } 
 }
 
-void LaserCallback(const sensor_msgs::LaserScan& msg) {
-  received_laser_ = true;
-  LaserHandler(msg);
+void LaserCallback(const sensor_msgs::LaserScan& msg,
+                   const string& topic) {
+  if (!received_laser_) {
+    point_cloud_.clear();
+    received_laser_ = true;
+  }
+  LaserHandler(msg, topic);
   navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
 }
 
@@ -238,7 +254,7 @@ void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
 }
 
 bool PlanServiceCb(graphNavSrv::Request &req,
-                 graphNavSrv::Response &res) {
+                   graphNavSrv::Response &res) {
   const Vector2f start(req.start.x, req.start.y);
   const Vector2f end(req.end.x, req.end.y);
   const vector<int> plan = navigation_.GlobalPlan(start, end);
@@ -830,8 +846,14 @@ int main(int argc, char** argv) {
       n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
   ros::Subscriber localization_sub =
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
-  ros::Subscriber laser_sub =
-      n.subscribe(CONFIG_laser_topic, 1, &LaserCallback);
+  vector<ros::Subscriber> laser_subs(CONFIG_laser_topics.size());
+  for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
+    laser_subs[i] = n.subscribe<sensor_msgs::LaserScan>(
+        CONFIG_laser_topics[i], 1,
+        [i](const sensor_msgs::LaserScan::ConstPtr& msg_ptr) {
+          LaserCallback(*msg_ptr, CONFIG_laser_topics[i]);
+        });
+  }
   ros::Subscriber img_sub = 
       n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
@@ -856,6 +878,7 @@ int main(int argc, char** argv) {
   while (run_ && ros::ok()) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
     visualization::ClearVisualizationMsg(global_viz_msg_);
+    received_laser_ = false;
     ros::spinOnce();
 
     // Run Navigation to get commands
