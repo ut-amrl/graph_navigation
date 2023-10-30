@@ -189,6 +189,13 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   plan_path_.clear();
 }
 
+void Navigation::ResetNavGoals() {
+  nav_state_ = NavigationState::kStopped;
+  nav_goal_loc_ = robot_loc_;
+  nav_goal_angle_ = robot_angle_;
+  local_target_.setZero();
+  plan_path_.clear();
+}
 
 void Navigation::SetOverride(const Vector2f& loc, float angle) {
   nav_state_ = NavigationState::kOverride;

@@ -65,6 +65,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Empty.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -235,6 +236,10 @@ void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
   navigation_.SetNavGoal(loc, msg.pose.theta);
   navigation_.Resume();
+}
+
+void ResetNavGoalsCallback(const std_msgs::Empty& msg) {
+  navigation_.ResetNavGoals();
 }
 
 bool PlanServiceCb(graphNavSrv::Request &req,
@@ -838,6 +843,8 @@ int main(int argc, char** argv) {
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
       n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
+  ros::Subscriber reset_nav_goals_sub =
+      n.subscribe("/reset_nav_goals", 1, &ResetNavGoalsCallback);
   ros::Subscriber enabler_sub =
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
@@ -870,8 +877,10 @@ int main(int argc, char** argv) {
       // Publish Visualizations
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
-      DrawTarget();
-      DrawPathOptions();
+      if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+        DrawTarget();
+        DrawPathOptions();
+      }
       PublishVisualizationMarkers();
       PublishPath();
       local_viz_msg_.header.stamp = ros::Time::now();
