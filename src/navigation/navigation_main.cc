@@ -251,7 +251,7 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
     const float r =
       ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
       msg.ranges[i] : msg.range_max);
-    point_cloud_[start_idx + i] = r * (frame_tf * cache.rays[i]).head<2>();
+    point_cloud_[start_idx + i] = (frame_tf * (r * cache.rays[i])).head<2>();
   } 
 }
 
