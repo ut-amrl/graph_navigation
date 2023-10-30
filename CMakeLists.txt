@@ -6,7 +6,7 @@ MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
 MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
-SET(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Werror")
+SET(CMAKE_CXX_FLAGS "-std=c++17 -Wall -Werror")
 SET(LIBRARY_NAME "graph_nav_lib"
     CACHE STRING "Name of compiled library")
 
