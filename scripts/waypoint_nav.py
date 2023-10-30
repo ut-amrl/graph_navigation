@@ -2,10 +2,10 @@
 import time
 import rospy
 import argparse
-from amrl_msgs.msg import NavStatusMsg, Localization2DMsg
-from std_msgs.msg import Empty
 import roslib
 roslib.load_manifest('amrl_msgs')
+from amrl_msgs.msg import NavStatusMsg, Localization2DMsg
+from std_msgs.msg import Empty
 
 
 class WaypointNav:
