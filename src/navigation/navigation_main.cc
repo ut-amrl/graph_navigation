@@ -107,12 +107,11 @@ DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
+CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
-CONFIG_FLOAT(laser_loc_x, "NavigationParameters.laser_loc.x");
-CONFIG_FLOAT(laser_loc_y, "NavigationParameters.laser_loc.y");
 
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
@@ -197,6 +196,11 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
            msg.header.stamp.toSec(),
            GetWallTime() - msg.header.stamp.toSec());
   }
+  ROS_WARN_COND(msg.header.frame_id != CONFIG_laser_frame,
+                "laser_topic=%s, frame_id=%s, expected=%s",
+                topic.c_str(),
+                msg.header.frame_id.c_str(),
+                CONFIG_laser_frame.c_str());
 
   static unordered_map<string, LaserCache> laser_caches_;
   laser_caches_.emplace(topic, LaserCache());
@@ -218,12 +222,11 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
   size_t start_idx = point_cloud_.size();
   point_cloud_.resize(start_idx + cache.rays.size());
   // Location of the laser on the robot. Assumes the laser is forward-facing.
-  const Vector2f kLaserLoc(CONFIG_laser_loc_x, CONFIG_laser_loc_y);
   for (size_t i = 0; i < cache.rays.size(); ++i) {
     const float r =
       ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
       msg.ranges[i] : msg.range_max);
-    point_cloud_[start_idx + i] = r * cache.rays[i] + kLaserLoc;
+    point_cloud_[start_idx + i] = r * cache.rays[i];
   } 
 }
 
