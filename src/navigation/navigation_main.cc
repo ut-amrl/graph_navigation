@@ -68,6 +68,7 @@
 #include "std_msgs/Bool.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
+#include "tf/transform_listener.h"
 #include "visualization/visualization.h"
 
 #include "motion_primitives.h"
@@ -92,6 +93,7 @@ using std::vector;
 using std::unordered_map;
 using sensor_msgs::PointCloud;
 using Eigen::Vector2f;
+using Eigen::Vector3f;
 using graph_navigation::graphNavSrv;
 using geometry_msgs::TwistStamped;
 using geometry::kEpsilon;
@@ -139,7 +141,7 @@ struct LaserCache {
   double time = 0.0;
   float dtheta = 0.0f;
   float angle_min = 0.0f;
-  vector<Vector2f> rays;
+  vector<Vector3f> rays;
 };
 
 // Publishers
@@ -188,6 +190,31 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   navigation_.UpdateOdometry(odom_);
 }
 
+void RetrieveTransform(const std_msgs::Header& msg,
+                       Eigen::Affine3f& frame_tf) {
+  static tf::TransformListener tf_listener;
+  tf::StampedTransform transform;
+  try {
+    tf_listener.waitForTransform(CONFIG_laser_frame,
+                                 msg.frame_id,
+                                 msg.stamp,
+                                 ros::Duration(0.1));
+    tf_listener.lookupTransform(CONFIG_laser_frame,
+                                msg.frame_id,
+                                msg.stamp,
+                                transform);
+    frame_tf = Eigen::Translation3f(transform.getOrigin().getX(),
+                                    transform.getOrigin().getY(),
+                                    transform.getOrigin().getZ()) *
+               Eigen::Quaternionf(transform.getRotation().getW(),
+                                  transform.getRotation().getX(),
+                                  transform.getRotation().getY(),
+                                  transform.getRotation().getZ());
+  } catch (tf::TransformException& ex) {
+    ROS_ERROR("%s", ex.what());
+  }
+}
+
 void LaserHandler(const sensor_msgs::LaserScan& msg,
                   const string& topic) {
   if (FLAGS_v > 2) {
@@ -196,11 +223,6 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
            msg.header.stamp.toSec(),
            GetWallTime() - msg.header.stamp.toSec());
   }
-  ROS_WARN_COND(msg.header.frame_id != CONFIG_laser_frame,
-                "laser_topic=%s, frame_id=%s, expected=%s",
-                topic.c_str(),
-                msg.header.frame_id.c_str(),
-                CONFIG_laser_frame.c_str());
 
   static unordered_map<string, LaserCache> laser_caches_;
   laser_caches_.emplace(topic, LaserCache());
@@ -214,19 +236,22 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
     cache.rays.resize(msg.ranges.size());
     for (size_t i = 0; i < cache.rays.size(); ++i) {
       const float a = cache.angle_min + static_cast<float>(i) * cache.dtheta;
-      cache.rays[i] = Vector2f(cos(a), sin(a));
+      cache.rays[i] = Vector3f(cos(a), sin(a), 0.0f);
     }
   }
   CHECK_EQ(cache.rays.size(), msg.ranges.size());
 
+  // Lookup tf transform from laser frame to base frame.
+  Eigen::Affine3f frame_tf;
+  RetrieveTransform(msg.header, frame_tf);
+
   size_t start_idx = point_cloud_.size();
   point_cloud_.resize(start_idx + cache.rays.size());
-  // Location of the laser on the robot. Assumes the laser is forward-facing.
   for (size_t i = 0; i < cache.rays.size(); ++i) {
     const float r =
       ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
       msg.ranges[i] : msg.range_max);
-    point_cloud_[start_idx + i] = r * cache.rays[i];
+    point_cloud_[start_idx + i] = r * (frame_tf * cache.rays[i]).head<2>();
   } 
 }
 
