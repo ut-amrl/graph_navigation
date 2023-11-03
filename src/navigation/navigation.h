@@ -98,6 +98,7 @@ class Navigation {
                          float* clearance,
                          Eigen::Vector2f* obstruction);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
+  void ResetNavGoals();
   void SetOverride(const Eigen::Vector2f& loc, float angle);
   void Resume();
   bool PlanStillValid();

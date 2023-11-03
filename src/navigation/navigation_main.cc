@@ -225,6 +225,11 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
   const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
   const float angle =
       2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
+  if (loc.x() == 1111.0 && loc.y() == 1111.0) {
+    printf("Resetting all nav goals.\n");
+    navigation_.ResetNavGoals();
+    return;
+  }
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
   navigation_.SetNavGoal(loc, angle);
   navigation_.Resume();
@@ -232,6 +237,11 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
 
 void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   const Vector2f loc(msg.pose.x, msg.pose.y);
+  if (loc.x() == 1111.0 && loc.y() == 1111.0 && msg.pose.theta == 1111.0) {
+    printf("Resetting all nav goals.\n");
+    navigation_.ResetNavGoals();
+    return;
+  }
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
   navigation_.SetNavGoal(loc, msg.pose.theta);
   navigation_.Resume();
@@ -870,8 +880,10 @@ int main(int argc, char** argv) {
       // Publish Visualizations
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
-      DrawTarget();
-      DrawPathOptions();
+      if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+        DrawTarget();
+        DrawPathOptions();
+      }
       PublishVisualizationMarkers();
       PublishPath();
       local_viz_msg_.header.stamp = ros::Time::now();
