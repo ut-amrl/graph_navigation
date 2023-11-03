@@ -65,6 +65,7 @@
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
 #include "std_msgs/Bool.h"
+#include "std_msgs/Empty.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "visualization/visualization.h"
@@ -225,11 +226,6 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
   const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
   const float angle =
       2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
-  if (loc.x() == 1111.0 && loc.y() == 1111.0) {
-    printf("Resetting all nav goals.\n");
-    navigation_.ResetNavGoals();
-    return;
-  }
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
   navigation_.SetNavGoal(loc, angle);
   navigation_.Resume();
@@ -237,14 +233,14 @@ void GoToCallback(const geometry_msgs::PoseStamped& msg) {
 
 void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   const Vector2f loc(msg.pose.x, msg.pose.y);
-  if (loc.x() == 1111.0 && loc.y() == 1111.0 && msg.pose.theta == 1111.0) {
-    printf("Resetting all nav goals.\n");
-    navigation_.ResetNavGoals();
-    return;
-  }
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
   navigation_.SetNavGoal(loc, msg.pose.theta);
   navigation_.Resume();
+}
+
+void ResetNavGoalsCallback(const std_msgs::Empty& msg) {
+  printf("Resetting all nav goals.\n");
+  navigation_.ResetNavGoals();
 }
 
 bool PlanServiceCb(graphNavSrv::Request &req,
@@ -848,6 +844,8 @@ int main(int argc, char** argv) {
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
       n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
+  ros::Subscriber reset_nav_goals_sub =
+      n.subscribe("/reset_nav_goals", 1, &ResetNavGoalsCallback);
   ros::Subscriber enabler_sub =
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
   ros::Subscriber halt_sub =
