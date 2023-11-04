@@ -95,6 +95,7 @@ using std::unordered_map;
 using sensor_msgs::PointCloud;
 using Eigen::Vector2f;
 using Eigen::Vector3f;
+using Eigen::Affine3f;
 using graph_navigation::graphNavSrv;
 using geometry_msgs::TwistStamped;
 using geometry::kEpsilon;
@@ -143,6 +144,7 @@ struct LaserCache {
   float dtheta = 0.0f;
   float angle_min = 0.0f;
   vector<Vector3f> rays;
+  Affine3f frame_tf = Affine3f::Identity();
 };
 
 // Publishers
@@ -199,7 +201,7 @@ void RetrieveTransform(const std_msgs::Header& msg,
     tf_listener.waitForTransform(CONFIG_laser_frame,
                                  msg.frame_id,
                                  msg.stamp,
-                                 ros::Duration(0.1));
+                                 ros::Duration(0.01));
     tf_listener.lookupTransform(CONFIG_laser_frame,
                                 msg.frame_id,
                                 msg.stamp,
@@ -214,10 +216,8 @@ void RetrieveTransform(const std_msgs::Header& msg,
   } catch (tf::TransformException& ex) {
     ROS_WARN("Failed to retrieve transform from '%s' to '%s': %s",
              msg.frame_id.c_str(), CONFIG_laser_frame.c_str(), ex.what());
-    ROS_INFO("Assuming '%s' frame is equal to '%s' frame;",
-             msg.frame_id.c_str(), CONFIG_laser_frame.c_str());
-    // Set frame_tf to identity as a fallback.
-    frame_tf = Eigen::Affine3f::Identity();
+    // Use previous transform (Identity if this is the first message)
+    ROS_INFO("Use previous transform");
   }
 }
 
@@ -248,7 +248,7 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
   CHECK_EQ(cache.rays.size(), msg.ranges.size());
 
   // Lookup tf transform from laser frame to base frame.
-  Eigen::Affine3f frame_tf;
+  Affine3f& frame_tf = cache.frame_tf;
   RetrieveTransform(msg.header, frame_tf);
 
   size_t start_idx = point_cloud_.size();
