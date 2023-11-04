@@ -212,7 +212,12 @@ void RetrieveTransform(const std_msgs::Header& msg,
                                   transform.getRotation().getY(),
                                   transform.getRotation().getZ());
   } catch (tf::TransformException& ex) {
-    ROS_ERROR("%s", ex.what());
+    ROS_WARN("Failed to retrieve transform from '%s' to '%s': %s",
+             msg.frame_id.c_str(), CONFIG_laser_frame.c_str(), ex.what());
+    ROS_INFO("Assuming '%s' frame is equal to '%s' frame;",
+             msg.frame_id.c_str(), CONFIG_laser_frame.c_str());
+    // Set frame_tf to identity as a fallback.
+    frame_tf = Eigen::Affine3f::Identity();
   }
 }
 
