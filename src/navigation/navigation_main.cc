@@ -266,6 +266,7 @@ void OverrideCallback(const amrl_msgs::Pose2Df& msg) {
 }
 
 void HumanCallback(const zed_interfaces::ObjectsStamped::ConstPtr& msg) {
+  if (msg->objects.size() == 0) override_human_vel_ = false;
   for(size_t i = 0; i < msg->objects.size(); i++) {
     if (msg->objects[i].label_id == -1) continue;
     auto velocity = msg->objects[i].velocity; // float32 array of size 3
@@ -918,7 +919,7 @@ int main(int argc, char** argv) {
 
       // Publish Commands
       // TODO: set updated_human_vel accordingly
-      static float updated_human_vel = 1.0;
+      static float updated_human_vel = 0.4;
       SendCommand(override_human_vel_ ? Eigen::Vector2f::Constant(updated_human_vel) : cmd_vel, cmd_angle_vel);
     }
     loop.Sleep();
