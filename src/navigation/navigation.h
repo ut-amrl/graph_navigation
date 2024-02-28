@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
+#include <costmap_2d/costmap_2d_ros.h>
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -265,6 +266,10 @@ class Navigation {
       last_options_;
   // Last PathOption taken
   std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
+
+  // Local 2D cost map
+  costmap_2d::Costmap2D costmap;
+
 };
 
 }  // namespace navigation

@@ -186,6 +186,7 @@ navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
 }
 
 void OdometryCallback(const nav_msgs::Odometry& msg) {
+  printf("odom callback\n");
   received_odom_ = true;
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
@@ -258,6 +259,7 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
 
 void LaserCallback(const sensor_msgs::LaserScan& msg,
                    const string& topic) {
+  printf("laser calback\n");
   if (!received_laser_) {
     point_cloud_.clear();
     received_laser_ = true;
@@ -920,6 +922,7 @@ int main(int argc, char** argv) {
     // Run Navigation to get commands
     Vector2f cmd_vel(0, 0);
     float cmd_angle_vel(0);
+
     bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status

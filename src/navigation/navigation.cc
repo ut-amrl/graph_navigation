@@ -24,6 +24,8 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <unordered_set>
+#include <unordered_map>
 
 #include "navigation.h"
 #include "geometry_msgs/PoseStamped.h"
@@ -38,6 +40,7 @@
 #include "eight_connected_domain.h"
 #include "graph_domain.h"
 #include "astar.h"
+#include "simple_queue.h"
 
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
@@ -58,6 +61,8 @@ using std::swap;
 using std::shared_ptr;
 using std::string;
 using std::vector;
+using std::unordered_set;
+using std::unordered_map;
 
 using namespace math_util;
 using namespace motion_primitives;
@@ -148,7 +153,8 @@ Navigation::Navigation() :
     enabled_(false),
     initialized_(false),
     sampler_(nullptr),
-    evaluator_(nullptr) {
+    evaluator_(nullptr),
+    costmap(100, 100, 0.1, -5, -5) { //TODO: parameters are (x/y size in cells, resolution, bottom left x/y origin coordinates)
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
 
@@ -184,6 +190,7 @@ void Navigation::Enable(bool enable) {
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_state_ = NavigationState::kGoto;
+  printf("set nav goal\n");
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   plan_path_.clear();
@@ -415,6 +422,7 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
                                    double time) {
   point_cloud_ = cloud;
   t_point_cloud_ = time;
+  printf("point cloud\n");
   PruneLatencyQueue();
 }
 
@@ -458,6 +466,78 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
   } else {
     printf("No path found!\n");
   }
+
+  // // TODO: Intermediate planner
+  // SimpleQueue<uint32_t, int> intermediate_queue; //<Location stored as index, cost>
+  // unordered_map<uint32_t, uint32_t> parent;
+  // unordered_map<uint32_t, int> cost;
+
+  // uint32_t mx = 0, my = 0;
+  // costmap.worldToMap(0, 0, mx, my);
+  // uint32_t robot_index = costmap.getIndex(mx, my);
+  // intermediate_queue.Push(robot_index, 0);
+
+  // //TODO: change goal
+  // Vector2f intermediate_goal = plan_path_[0].loc;
+
+  // size_t index = 1;
+  // double distance = 0;
+  // while (index < plan_path_.size() && distance <= 3){
+  //   intermediate_goal = plan_path_[index].loc;
+  //   index++;
+  // }
+
+  // costmap.worldToMap(intermediate_goal.x(), intermediate_goal.y(), mx, my);
+  // uint32_t goal_index = costmap.getIndex(mx, my);
+
+  //   while(!intermediate_queue.Empty()){
+  //   uint32_t current_index = intermediate_queue.Pop();
+  //   if(current_index == goal_index)
+  //     break;
+
+  //   costmap.indexToCells(current_index, mx, my);
+  //   vector<int> neighbors {-1, 0, 1, 0};
+  //   for(size_t i = 0; i < neighbors.size(); i++){
+  //     int new_row = mx + neighbors[i];
+  //     int new_col = my + neighbors[(i+1)%4];
+  //     uint32_t neighbor_index = costmap.getIndex(new_row, new_col);
+  //     if(new_row >= 0 && new_row < static_cast<int>(costmap.getSizeInCellsX())
+  //      && new_col >= 0 && new_col < static_cast<int>(costmap.getSizeInCellsY())
+  //      && (cost.count(neighbor_index) == 0 || cost[current_index] < cost[neighbor_index] - 1)){
+  //       cost[neighbor_index] = cost[current_index] + 1;
+  //       parent[neighbor_index] = current_index;
+  //       intermediate_queue.Push(neighbor_index, cost[neighbor_index]);
+  //     }
+
+  //   }
+  // }
+
+  // vector<Vector2f> intermediate_vector_path;
+  // vector<GraphDomain::State> intermediate_path;
+
+  // if(cost.count(goal_index) != 0){
+  //   uint32_t current_index = goal_index;
+  //   while(parent.count(current_index) > 0){
+  //     uint32_t row, col;
+  //     costmap.indexToCells(current_index, row, col);
+  //     intermediate_vector_path.push_back(Vector2f(row, col));
+  //     current_index = parent[current_index];
+  //   }
+  //   reverse(intermediate_vector_path.begin(), intermediate_vector_path.end());
+
+  //   planning_domain_.ResetDynamicStates();
+
+  //   for(size_t i = 0; i < intermediate_vector_path.size(); i++){
+  //     const uint64_t path_id = planning_domain_.AddDynamicState(intermediate_vector_path[i]);
+  //     intermediate_path.push_back(planning_domain_.states[path_id]);
+  //   }
+  //   return intermediate_path;
+  // }
+  // else{
+  //   printf("No intermediate planner path found\n");
+  // }
+
+
   return path;
 }
 
@@ -836,6 +916,7 @@ bool Navigation::Run(const double& time,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
+    printf("param not initialized\n");
     if (kDebug) printf("Parameters and maps not initialized\n");
     return false;
   }
@@ -862,10 +943,54 @@ bool Navigation::Run(const double& time,
     return true;
   }
 
+  // // Update local costmap with either point cloud or fp point cloud
+  // double world_inflation_size = 0.5f; //TODO: update based on robot params
+  // int cell_inflation_size = std::ceil(world_inflation_size/costmap.getResolution());
+  // int x_max = costmap.getSizeInCellsX(); 
+  // int y_max = costmap.getSizeInCellsY(); 
+
+  // // Reset map to empty from previous iteration
+  // costmap.resetMap(0, 0, x_max, y_max);
+
+  // unordered_set<uint64_t> filled_cells;
+
+  // for(size_t i = 0; i < point_cloud_.size(); i++){
+  //   uint32_t unsigned_mx = 0;
+  //   uint32_t unsigned_my = 0;
+  //   //may want to change to not automatically set to within legal bounds
+  //   bool in_map = costmap.worldToMap(point_cloud_[i].x(), point_cloud_[i].y(), unsigned_mx, unsigned_my); 
+
+  //   if(in_map){
+  //     int mx = static_cast<int>(unsigned_mx);
+  //     int my = static_cast<int>(unsigned_my);
+
+  //     for(int j = -1 * cell_inflation_size; j <= cell_inflation_size; j++){
+  //       for(int k = -1 * cell_inflation_size; k < cell_inflation_size; k++){
+  //         if((sqrt(pow(j, 2) + pow(k, 2)) <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) 
+  //         && (my + k >= 0) && (my + k < y_max)) 
+  //           filled_cells.insert(costmap.getIndex(mx + j, my + k));
+  //       }
+  //     }
+  //   }
+  // }
+
+  // for (const auto& index : filled_cells) {
+  //   uint32_t mx = 0;
+  //   uint32_t my = 0;
+  //   costmap.indexToCells(index, mx, my);
+  //   costmap.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
+  // }
+
   // Before swithcing states we need to update the local target.
+
+  
+
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
     // Recompute global plan as necessary.
+    if(PlanStillValid()){
+      printf("plan valid\n");
+    }
     if (!PlanStillValid()) {
       if (kDebug) printf("Replanning\n");
       plan_path_ = Plan(robot_loc_, nav_goal_loc_);
