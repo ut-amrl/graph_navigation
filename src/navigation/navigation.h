@@ -22,6 +22,7 @@
 #include <deque>
 #include <memory>
 #include <vector>
+#include <mutex>
 
 #include "eigen3/Eigen/Dense"
 #include <costmap_2d/costmap_2d_ros.h>
@@ -31,6 +32,14 @@
 #include "graph_domain.h"
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
+
+#include "amrl_msgs/Localization2DMsg.h"
+#include "amrl_msgs/VisualizationMsg.h"
+#include "visualization/visualization.h"
+#include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
+#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
+
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -145,6 +154,7 @@ class Navigation {
   const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
+  std::vector<Eigen::Vector2f> GetCostmapObstacles();
 
  private:
 
@@ -269,6 +279,16 @@ class Navigation {
 
   // Local 2D cost map
   costmap_2d::Costmap2D costmap;
+
+  // //Messages
+  // amrl_msgs::VisualizationMsg local_viz_msg_;
+  // amrl_msgs::VisualizationMsg global_viz_msg_;
+  // ros::Publisher viz_pub_;
+
+  //List of obstacle points in costmap
+  std::vector<Eigen::Vector2f> costmap_obstacles_;
+
+  std::mutex costmapMutex;
 
 };
 

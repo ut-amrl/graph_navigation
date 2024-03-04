@@ -26,6 +26,8 @@
 #include <string>
 #include <unordered_set>
 #include <unordered_map>
+#include <chrono>
+#include <iostream>
 
 #include "navigation.h"
 #include "geometry_msgs/PoseStamped.h"
@@ -47,6 +49,8 @@
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
+#include "amrl_msgs/NavStatusMsg.h"
+#include "amrl_msgs/Pose2Df.h"
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -154,7 +158,8 @@ Navigation::Navigation() :
     initialized_(false),
     sampler_(nullptr),
     evaluator_(nullptr),
-    costmap(100, 100, 0.1, -5, -5) { //TODO: parameters are (x/y size in cells, resolution, bottom left x/y origin coordinates)
+    // Publishers
+    costmap(60, 60, 0.5, -15, -15) { //parameters are (x/y size in cells, resolution, bottom left x/y origin coordinates)
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
 
@@ -422,7 +427,6 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
                                    double time) {
   point_cloud_ = cloud;
   t_point_cloud_ = time;
-  printf("point cloud\n");
   PruneLatencyQueue();
 }
 
@@ -463,80 +467,128 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
       Vector2f s2 = plan_path_[i].loc;
       s1 = s2;
     }
+    std::cout << "first print end" << std::endl;
   } else {
-    printf("No path found!\n");
+    std::cout << "No path found!" << std::endl;
+    // printf("No path found!\n");
   }
 
-  // // TODO: Intermediate planner
-  // SimpleQueue<uint32_t, int> intermediate_queue; //<Location stored as index, cost>
-  // unordered_map<uint32_t, uint32_t> parent;
-  // unordered_map<uint32_t, int> cost;
+  // TODO: Intermediate planner
+  SimpleQueue<uint32_t, int> intermediate_queue; //<Location stored as index, cost>
+  unordered_map<uint32_t, uint32_t> parent;
+  unordered_map<uint32_t, int> cost;
 
-  // uint32_t mx = 0, my = 0;
-  // costmap.worldToMap(0, 0, mx, my);
-  // uint32_t robot_index = costmap.getIndex(mx, my);
-  // intermediate_queue.Push(robot_index, 0);
+  uint32_t mx = 0, my = 0;
+  costmap.worldToMap(0, 0, mx, my);
+  uint32_t robot_index = costmap.getIndex(mx, my);
+  intermediate_queue.Push(robot_index, 0);
+  cost[robot_index] = 0;
 
-  // //TODO: change goal
-  // Vector2f intermediate_goal = plan_path_[0].loc;
+  //TODO: change goal
+  Vector2f intermediate_goal_global = path[0].loc;
 
-  // size_t index = 1;
-  // double distance = 0;
-  // while (index < plan_path_.size() && distance <= 3){
-  //   intermediate_goal = plan_path_[index].loc;
-  //   index++;
-  // }
+  size_t index = 1;
+  double distance = 0;
 
-  // costmap.worldToMap(intermediate_goal.x(), intermediate_goal.y(), mx, my);
-  // uint32_t goal_index = costmap.getIndex(mx, my);
+  while (index < path.size() && distance <= 5){
+    intermediate_goal_global = path[index].loc;
+    std::cout << "(" << intermediate_goal_global.x() << ", " << intermediate_goal_global.y() << ")" << std::endl;
+    distance += (path[index - 1].loc - path[index].loc).norm();
+    index++;
+  }
 
-  //   while(!intermediate_queue.Empty()){
-  //   uint32_t current_index = intermediate_queue.Pop();
-  //   if(current_index == goal_index)
-  //     break;
+  intermediate_goal_global = end;
 
-  //   costmap.indexToCells(current_index, mx, my);
-  //   vector<int> neighbors {-1, 0, 1, 0};
-  //   for(size_t i = 0; i < neighbors.size(); i++){
-  //     int new_row = mx + neighbors[i];
-  //     int new_col = my + neighbors[(i+1)%4];
-  //     uint32_t neighbor_index = costmap.getIndex(new_row, new_col);
-  //     if(new_row >= 0 && new_row < static_cast<int>(costmap.getSizeInCellsX())
-  //      && new_col >= 0 && new_col < static_cast<int>(costmap.getSizeInCellsY())
-  //      && (cost.count(neighbor_index) == 0 || cost[current_index] < cost[neighbor_index] - 1)){
-  //       cost[neighbor_index] = cost[current_index] + 1;
-  //       parent[neighbor_index] = current_index;
-  //       intermediate_queue.Push(neighbor_index, cost[neighbor_index]);
-  //     }
+  if(path.size() == 0){
+    std::cout << "path size is 0" << std::endl;
+    return path;
+  }
 
-  //   }
-  // }
+  std::cout << "Global Intermediate goal: (" << intermediate_goal_global.x() << ", " << intermediate_goal_global.y() << ")" << std::endl;
+  Vector2f intermediate_goal_robot = Rotation2Df(-robot_angle_) * (intermediate_goal_global - robot_loc_);
+  std::cout << "Relative Intermediate goal: (" << intermediate_goal_robot.x() << ", " << intermediate_goal_robot.y() << ")" << std::endl;
 
-  // vector<Vector2f> intermediate_vector_path;
-  // vector<GraphDomain::State> intermediate_path;
+  // TODO: consider changing bounds later
 
-  // if(cost.count(goal_index) != 0){
-  //   uint32_t current_index = goal_index;
-  //   while(parent.count(current_index) > 0){
-  //     uint32_t row, col;
-  //     costmap.indexToCells(current_index, row, col);
-  //     intermediate_vector_path.push_back(Vector2f(row, col));
-  //     current_index = parent[current_index];
-  //   }
-  //   reverse(intermediate_vector_path.begin(), intermediate_vector_path.end());
+  int goal_map_x, goal_map_y;
 
-  //   planning_domain_.ResetDynamicStates();
+  costmap.worldToMapEnforceBounds(intermediate_goal_robot.x(), intermediate_goal_robot.y(), goal_map_x, goal_map_y);
+  uint32_t goal_index = costmap.getIndex(goal_map_x, goal_map_y);
+  goal_index = goal_index;
 
-  //   for(size_t i = 0; i < intermediate_vector_path.size(); i++){
-  //     const uint64_t path_id = planning_domain_.AddDynamicState(intermediate_vector_path[i]);
-  //     intermediate_path.push_back(planning_domain_.states[path_id]);
-  //   }
-  //   return intermediate_path;
-  // }
-  // else{
-  //   printf("No intermediate planner path found\n");
-  // }
+  unordered_set<uint32_t> visited;
+  // seen.insert(robot_index);
 
+  while(!intermediate_queue.Empty()){
+    uint32_t current_index = intermediate_queue.Pop();
+    visited.insert(current_index);
+
+    if(current_index == goal_index){
+      std::cout << "intermediate goal found" << std::endl;
+      break;
+    }
+
+    costmap.indexToCells(current_index, mx, my);
+    vector<int> neighbors {-1, 0, 1, 0};
+    for(size_t i = 0; i < neighbors.size(); i++){
+      int new_row = mx + neighbors[i];
+      int new_col = my + neighbors[(i+1)%4];
+      uint32_t neighbor_index = costmap.getIndex(new_row, new_col);
+      
+      if(new_row >= 0 && new_row < static_cast<int>(costmap.getSizeInCellsX()) && new_col >= 0 
+      && new_col < static_cast<int>(costmap.getSizeInCellsY()) && (costmap.getCost(new_row, new_col) != costmap_2d::LETHAL_OBSTACLE)
+      && (cost.count(neighbor_index) == 0 || cost[current_index] + 1 < cost[neighbor_index])){
+        cost[neighbor_index] = cost[current_index] + 1;
+        parent[neighbor_index] = current_index;
+        intermediate_queue.Push(neighbor_index, -cost[neighbor_index]);
+      }
+
+    }
+  }
+
+  std::cout << "Finished intermediate search" << std::endl;
+
+  vector<Vector2f> intermediate_vector_path;
+  vector<GraphDomain::State> intermediate_path;
+
+  if(cost.count(goal_index) != 0){
+
+    uint32_t row, col;
+    costmap.indexToCells(robot_index, row, col);
+    double wx;
+    double wy;
+    costmap.mapToWorld(row, col, wx, wy);
+    Vector2f robot_location(wx, wy);
+
+    uint32_t current_index = goal_index;
+    while(parent.count(current_index) > 0){
+      costmap.indexToCells(current_index, row, col);
+      costmap.mapToWorld(row, col, wx, wy);
+      intermediate_vector_path.push_back(Vector2f(wx, wy) - robot_location);
+      current_index = parent[current_index];
+    }
+    reverse(intermediate_vector_path.begin(), intermediate_vector_path.end());
+
+    planning_domain_.ResetDynamicStates();
+
+    
+
+    std::cout << "Path: " << std::endl;
+
+    for(size_t i = 0; i < intermediate_vector_path.size(); i++){
+      Vector2f map_frame_position = Rotation2Df(robot_angle_) * intermediate_vector_path[i] + robot_loc_;
+      // std::cout << "Relative: (" << intermediate_vector_path[i].x() << ", " << intermediate_vector_path[i].y() << "), Global: (" <<
+      // map_frame_position.x() << ", " << map_frame_position.y() << ")" << std::endl;
+      const uint64_t path_id = planning_domain_.AddDynamicState(map_frame_position);
+      intermediate_path.push_back(planning_domain_.states[path_id]);
+    }
+    std::cout << "returning intermediate path" << std::endl;
+    reverse(intermediate_path.begin(), intermediate_path.end());
+    return intermediate_path;
+  }
+  else{
+    printf("No intermediate planner path found\n");
+  }
 
   return path;
 }
@@ -911,12 +963,16 @@ vector<GraphDomain::State> Navigation::GetPlanPath() {
   return plan_path_;
 }
 
+vector<Eigen::Vector2f> Navigation::GetCostmapObstacles(){
+  return costmap_obstacles_;
+}
+
+
 bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
-    printf("param not initialized\n");
     if (kDebug) printf("Parameters and maps not initialized\n");
     return false;
   }
@@ -924,6 +980,9 @@ bool Navigation::Run(const double& time,
     if (kDebug) printf("Odometry not initialized\n");
     return false;
   }
+
+  // visualization::ClearVisualizationMsg(local_viz_msg_);
+  // visualization::ClearVisualizationMsg(global_viz_msg_);
 
   ForwardPredict(time + params_.system_latency);
   if (FLAGS_test_toc) {
@@ -943,54 +1002,70 @@ bool Navigation::Run(const double& time,
     return true;
   }
 
-  // // Update local costmap with either point cloud or fp point cloud
-  // double world_inflation_size = 0.5f; //TODO: update based on robot params
-  // int cell_inflation_size = std::ceil(world_inflation_size/costmap.getResolution());
-  // int x_max = costmap.getSizeInCellsX(); 
-  // int y_max = costmap.getSizeInCellsY(); 
+  // auto start = std::chrono::high_resolution_clock::now();
 
-  // // Reset map to empty from previous iteration
-  // costmap.resetMap(0, 0, x_max, y_max);
+  // Update local costmap with either point cloud or fp point cloud
+  costmapMutex.lock();
 
-  // unordered_set<uint64_t> filled_cells;
+  double world_inflation_size = 0.5f; //TODO: update based on robot params
+  int cell_inflation_size = std::ceil(world_inflation_size/costmap.getResolution());
+  int x_max = costmap.getSizeInCellsX(); 
+  int y_max = costmap.getSizeInCellsY(); 
 
-  // for(size_t i = 0; i < point_cloud_.size(); i++){
-  //   uint32_t unsigned_mx = 0;
-  //   uint32_t unsigned_my = 0;
-  //   //may want to change to not automatically set to within legal bounds
-  //   bool in_map = costmap.worldToMap(point_cloud_[i].x(), point_cloud_[i].y(), unsigned_mx, unsigned_my); 
+  // Reset map to empty from previous iteration
+  costmap.resetMap(0, 0, x_max, y_max);
 
-  //   if(in_map){
-  //     int mx = static_cast<int>(unsigned_mx);
-  //     int my = static_cast<int>(unsigned_my);
+  unordered_set<uint64_t> filled_cells;
 
-  //     for(int j = -1 * cell_inflation_size; j <= cell_inflation_size; j++){
-  //       for(int k = -1 * cell_inflation_size; k < cell_inflation_size; k++){
-  //         if((sqrt(pow(j, 2) + pow(k, 2)) <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) 
-  //         && (my + k >= 0) && (my + k < y_max)) 
-  //           filled_cells.insert(costmap.getIndex(mx + j, my + k));
-  //       }
-  //     }
-  //   }
-  // }
+  for(size_t i = 0; i < point_cloud_.size(); i++){
+    uint32_t unsigned_mx = 0;
+    uint32_t unsigned_my = 0;
+    bool in_map = costmap.worldToMap(point_cloud_[i].x(), point_cloud_[i].y(), unsigned_mx, unsigned_my); 
 
-  // for (const auto& index : filled_cells) {
-  //   uint32_t mx = 0;
-  //   uint32_t my = 0;
-  //   costmap.indexToCells(index, mx, my);
-  //   costmap.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
-  // }
+    if(in_map){
+      int mx = static_cast<int>(unsigned_mx);
+      int my = static_cast<int>(unsigned_my);
 
-  // Before swithcing states we need to update the local target.
+      for(int j = -1 * cell_inflation_size; j <= cell_inflation_size; j++){
+        for(int k = -1 * cell_inflation_size; k < cell_inflation_size; k++){
+          if((sqrt(pow(j, 2) + pow(k, 2)) <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) 
+          && (my + k >= 0) && (my + k < y_max)){
+            // costmap.setCost(mx + j, my + k, costmap_2d::LETHAL_OBSTACLE);
+            filled_cells.insert(costmap.getIndex(mx + j, my + k));
+            // double wx;
+            // double wy;
+            // costmap.mapToWorld(mx + j, my + k, wx, wy);
+            // visualization::DrawPoint(Vector2f(wx, wy), 0x10E000, local_viz_msg_);
+          }
+        }
+      }
+    }
+  }
+
+  for (const auto& index : filled_cells) {
+    uint32_t mx = 0;
+    uint32_t my = 0;
+    costmap.indexToCells(index, mx, my);
+    costmap.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
+
+    double wx;
+    double wy;
+    costmap.mapToWorld(mx, my, wx, wy);
+    costmap_obstacles_.push_back(Vector2f(wx, wy));
+  }
+
+  // auto end = std::chrono::high_resolution_clock::now();
+  // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  // std::cout << "Time taken by code: " << duration.count() << " microseconds" << std::endl;
+
+
+  // Before switching states we need to update the local target.
 
   
 
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
     // Recompute global plan as necessary.
-    if(PlanStillValid()){
-      printf("plan valid\n");
-    }
     if (!PlanStillValid()) {
       if (kDebug) printf("Replanning\n");
       plan_path_ = Plan(robot_loc_, nav_goal_loc_);
@@ -1005,8 +1080,11 @@ bool Navigation::Run(const double& time,
       }
       // Local Navigation
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+      std::cout << "Local target: (" << local_target_.x() << ", " << local_target_.y() << ")" << std::endl;
     }
   }
+
+  costmapMutex.unlock();
 
   // Switch between navigation states.
   NavigationState prev_state = nav_state_;
@@ -1077,6 +1155,9 @@ bool Navigation::Run(const double& time,
     if (kDebug) printf("Reached Goal: TurnInPlace\n");
     TurnInPlace(cmd_vel, cmd_angle_vel);
   }
+
+  // viz_pub_.publish(local_viz_msg_);
+  // viz_pub_.publish(global_viz_msg_);
 
   return true;
 }

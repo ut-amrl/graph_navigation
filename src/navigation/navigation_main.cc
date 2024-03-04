@@ -186,7 +186,6 @@ navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
 }
 
 void OdometryCallback(const nav_msgs::Odometry& msg) {
-  printf("odom callback\n");
   received_odom_ = true;
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
@@ -259,7 +258,6 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
 
 void LaserCallback(const sensor_msgs::LaserScan& msg,
                    const string& topic) {
-  printf("laser calback\n");
   if (!received_laser_) {
     point_cloud_.clear();
     received_laser_ = true;
@@ -929,7 +927,12 @@ int main(int argc, char** argv) {
     PublishNavStatus();
 
     if(nav_succeeded) {
-      // Publish Visualizations
+      // // Publish Visualizations
+      // auto obstacles = navigation_.GetCostmapObstacles();
+      // for (const auto& vector : obstacles) {
+      //   visualization::DrawPoint(vector, 0x10E000, local_viz_msg_);
+      // }
+
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
       if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
