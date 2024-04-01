@@ -97,6 +97,26 @@ struct NavigationParameters {
 
   std::string model_path;
 
+  // Distance of carrot along intermediate path to compute local planner goal
+  float intermediate_carrot_dist;
+  // Robot buffer/inflation size
+  float local_costmap_inflation_size;
+  // Distance between grid locations in costmap
+  float local_costmap_resolution;
+  // Costmap size in each direction
+  float local_costmap_radius;
+
+  // Same as local costmap parameters but for global costmap
+  float global_costmap_inflation_size;
+  float global_costmap_resolution;
+  float global_costmap_radius;
+
+  // Lidar scan min range
+  float range_min;
+  // Lidar scan max range
+  float range_max;
+
+
   cv::Mat K;
   cv::Mat D;
   cv::Mat H;
@@ -121,7 +141,16 @@ struct NavigationParameters {
       target_vel_tolerance(0.1),
       target_angle_tolerance(0.05),
       use_kinect(true),
-      evaluator_type("cost_map") {
+      evaluator_type("cost_map"),
+      intermediate_carrot_dist(2),
+      local_costmap_inflation_size(0.5),
+      local_costmap_resolution(0.1),
+      local_costmap_radius(10),
+      global_costmap_inflation_size(0.5),
+      global_costmap_resolution(0.1),
+      global_costmap_radius(100),
+      range_min(0.1),
+      range_max(10){
       }
 };
 }  // namespace navigation

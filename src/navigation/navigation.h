@@ -23,6 +23,8 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <unordered_set>
+#include <set>
 
 #include "eigen3/Eigen/Dense"
 #include <costmap_2d/costmap_2d_ros.h>
@@ -112,13 +114,19 @@ class Navigation {
   void SetOverride(const Eigen::Vector2f& loc, float angle);
   void Resume();
   bool PlanStillValid();
+  bool IntermediatePlanStillValid();
+
   void Plan(Eigen::Vector2f goal_loc);
   std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,
                                        const Eigen::Vector2f& end);
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
                               const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> GetPlanPath();
-  bool GetCarrot(Eigen::Vector2f& carrot);
+  std::vector<GraphDomain::State> GetGlobalPath();
+
+  bool GetGlobalCarrot(Eigen::Vector2f& carrot);
+  bool GetIntermediateCarrot(Eigen::Vector2f& carrot);
+  bool GetCarrot(Eigen::Vector2f& carrot, bool global);
   // Enable or disable autonomy.
   void Enable(bool enable);
   // Indicates whether autonomy is enabled or not.
@@ -128,6 +136,9 @@ class Navigation {
   // Set parameters for navigation.
   void Initialize(const NavigationParameters& params,
                   const std::string& map_file);
+  // Map obstacles into global costmap
+  void LoadVectorMap(const std::string& map_file);
+
 
   // Allow client programs to configure navigation parameters
   void SetMaxVel(const float vel);
@@ -155,6 +166,9 @@ class Navigation {
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
   std::vector<Eigen::Vector2f> GetCostmapObstacles();
+  std::vector<Eigen::Vector2f> GetGlobalCostmapObstacles();
+
+  Eigen::Vector2f GetIntermediateGoal();
 
  private:
 
@@ -244,6 +258,8 @@ class Navigation {
 
   // Previously computed navigation plan.
   std::vector<GraphDomain::State> plan_path_;
+  // Previously computed global navigation plan.
+  std::vector<GraphDomain::State> global_plan_path_;
 
   // Local navigation target for obstacle avoidance planner, in the robot's
   // reference frame.
@@ -277,18 +293,24 @@ class Navigation {
   // Last PathOption taken
   std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
 
-  // Local 2D cost map
-  costmap_2d::Costmap2D costmap;
-
-  // //Messages
-  // amrl_msgs::VisualizationMsg local_viz_msg_;
-  // amrl_msgs::VisualizationMsg global_viz_msg_;
-  // ros::Publisher viz_pub_;
-
-  //List of obstacle points in costmap
+  // Local 2D cost map from lidar
+  costmap_2d::Costmap2D costmap_;
+  // List of obstacle points in local costmap for viewing/debugging
   std::vector<Eigen::Vector2f> costmap_obstacles_;
+  // List of locations of obstacles in previous costmap relative to robot
+  std::vector<Eigen::Vector2f> prev_obstacles_;
+  // Location of robot at last cost map generation
+  Eigen::Vector2f prev_robot_loc_;
+  // Global 2D cost map from loaded map
+  costmap_2d::Costmap2D global_costmap_;
+  // List of obstacle points in local costmap for viewing/debugging
+  std::vector<Eigen::Vector2f> global_costmap_obstacles_;
+  //
+  bool intermediate_path_found_;
 
-  std::mutex costmapMutex;
+
+
+  Eigen::Vector2f intermediate_goal_;
 
 };
 

@@ -248,6 +248,7 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
 
   size_t start_idx = point_cloud_.size();
   point_cloud_.resize(start_idx + cache.rays.size());
+
   for (size_t i = 0; i < cache.rays.size(); ++i) {
     const float r =
       ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
@@ -457,11 +458,22 @@ void PublishPath() {
       visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, 
           global_viz_msg_);
     }
+    const auto global_path = navigation_.GetGlobalPath();
+    for (size_t i = 1; i < global_path.size(); i++) {
+      visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, 
+          global_viz_msg_);
+    }
     Vector2f carrot;
-    bool foundCarrot = navigation_.GetCarrot(carrot);
+    bool foundCarrot = navigation_.GetIntermediateCarrot(carrot);
     if (foundCarrot) {
       carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
     }
+
+    bool foundGlobalCarrot = navigation_.GetGlobalCarrot(carrot);
+    if (foundGlobalCarrot) {
+      visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
+    }
+
   }
 }
 
@@ -469,6 +481,7 @@ void DrawTarget() {
   const float carrot_dist = navigation_.GetCarrotDist();
   const Eigen::Vector2f target = navigation_.GetTarget();
   auto msg_copy = global_viz_msg_;
+  visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
   visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
@@ -769,6 +782,15 @@ void LoadConfig(navigation::NavigationParameters* params) {
   STRING_PARAM(model_path);
   STRING_PARAM(evaluator_type);
   STRING_PARAM(camera_calibration_path);
+  REAL_PARAM(local_costmap_resolution)
+  REAL_PARAM(local_costmap_inflation_size)
+  REAL_PARAM(local_costmap_radius)
+  REAL_PARAM(global_costmap_resolution)
+  REAL_PARAM(global_costmap_inflation_size)
+  REAL_PARAM(global_costmap_radius)
+  REAL_PARAM(intermediate_carrot_dist);
+  REAL_PARAM(range_min);
+  REAL_PARAM(range_max);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -798,6 +820,15 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->use_kinect = CONFIG_use_kinect;
   params->model_path = CONFIG_model_path;
   params->evaluator_type = CONFIG_evaluator_type;
+  params->local_costmap_resolution = CONFIG_local_costmap_resolution;
+  params->local_costmap_inflation_size = CONFIG_local_costmap_inflation_size;
+  params->local_costmap_radius = CONFIG_local_costmap_radius;
+  params->global_costmap_resolution = CONFIG_global_costmap_resolution;
+  params->global_costmap_inflation_size = CONFIG_global_costmap_inflation_size;
+  params->global_costmap_radius = CONFIG_global_costmap_radius;
+  params->intermediate_carrot_dist = CONFIG_intermediate_carrot_dist;
+  params->range_min = CONFIG_range_min;
+  params->range_max = CONFIG_range_max;
 
   // TODO Rather than loading camera homography from a file, compute it from camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
@@ -927,11 +958,19 @@ int main(int argc, char** argv) {
     PublishNavStatus();
 
     if(nav_succeeded) {
-      // // Publish Visualizations
-      // auto obstacles = navigation_.GetCostmapObstacles();
-      // for (const auto& vector : obstacles) {
-      //   visualization::DrawPoint(vector, 0x10E000, local_viz_msg_);
-      // }
+      // Publish Visualizations
+      auto obstacles = navigation_.GetCostmapObstacles();
+      auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
+
+      for (const auto& vector : global_obstacles) {
+        // if(vector.y() < 2 && vector.x() < 6)
+          visualization::DrawPoint(vector, 0xdb34eb, global_viz_msg_);
+      }
+
+      for (const auto& vector : obstacles) {
+        // if(vector.y() < 2 && vector.x() < 6)
+          visualization::DrawPoint(vector, 0x10E000, global_viz_msg_);
+      }
 
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();

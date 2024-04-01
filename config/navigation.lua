@@ -4,11 +4,11 @@ end
 
 NavigationParameters = {
   laser_topics = {
-    "/velodyne_2dscan",
+    "/scan",
     "/kinect_laserscan",
   };
   laser_frame = "base_link";
-  odom_topic = "/jackal_velocity_controller/odom";
+  odom_topic = "/odom";
   localization_topic = "localization";
   image_topic = "/camera/rgb/image_raw/compressed";
   init_topic = "initialpose";
@@ -39,6 +39,15 @@ NavigationParameters = {
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "linear";
+  intermediate_carrot_dist = 2;
+  local_costmap_inflation_size = 0.4;
+  local_costmap_resolution = 0.1;
+  local_costmap_radius = 10;
+  global_costmap_inflation_size = 0.4;
+  global_costmap_resolution = 0.2;
+  global_costmap_radius = 100;
+  range_min = 0.1;
+  range_max = 10.0;
 };
 
 AckermannSampler = {
