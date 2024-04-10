@@ -176,7 +176,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   int local_costmap_size = 2*static_cast<int>(std::round(params_.local_costmap_radius/params_.local_costmap_resolution));
   costmap_ = costmap_2d::Costmap2D(local_costmap_size, local_costmap_size, params_.local_costmap_resolution, -params.local_costmap_radius, -params.local_costmap_radius);
   int global_costmap_size = 2*static_cast<int>(std::round(params_.global_costmap_radius/params_.global_costmap_resolution));
-  global_costmap_ = costmap_2d::Costmap2D(global_costmap_size, global_costmap_size, params_.global_costmap_resolution, -params.global_costmap_radius, -params.global_costmap_radius);
+  global_costmap_ = costmap_2d::Costmap2D(global_costmap_size, global_costmap_size, params_.global_costmap_resolution, params.global_costmap_origin_x, params.global_costmap_origin_y);
   planning_domain_ = GraphDomain(map_file, &params_);
 
   LoadVectorMap(map_file);
@@ -244,7 +244,6 @@ void Navigation::LoadVectorMap(const string& map_file){ //Assume map is given as
             if((sqrt(pow(j, 2) + pow(k, 2)) <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) 
             && (my + k >= 0) && (my + k < y_max)){
               inflation_cells.insert(global_costmap_.getIndex(mx + j, my + k));
-              // global_costmap_.setCost(mx + j, my + k, costmap_2d::LETHAL_OBSTACLE);
             }
           }
         }
@@ -601,6 +600,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
       
       if(new_row >= 0 && new_row < static_cast<int>(costmap_.getSizeInCellsX()) && new_col >= 0 
       && new_col < static_cast<int>(costmap_.getSizeInCellsY()) && (costmap_.getCost(new_row, new_col) != costmap_2d::LETHAL_OBSTACLE)
+      && (costmap_.getCost(new_row, new_col) != costmap_2d::INSCRIBED_INFLATED_OBSTACLE) 
       && (cost.count(neighbor_index) == 0 || cost[current_index] + 1 < cost[neighbor_index])){
         double wx, wy;
         costmap_.mapToWorld(new_row, new_col, wx, wy);
@@ -708,20 +708,28 @@ bool Navigation::IntermediatePlanStillValid(){
 }
 
 bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
-  return GetCarrot(carrot, true);
+  for(float carrot_dist = params_.carrot_dist; carrot_dist > params_.intermediate_carrot_dist; carrot_dist -= 0.5){
+    if(GetCarrot(carrot, true, carrot_dist)){
+      return true;
+    }
+  }
+  return false;
+  // return GetCarrot(carrot, true, params_.carrot_dist);
 }
 
 bool Navigation::GetIntermediateCarrot(Vector2f& carrot) {
-  return GetCarrot(carrot, false);
+  return GetCarrot(carrot, false, params_.intermediate_carrot_dist);
 }
 
-bool Navigation::GetCarrot(Vector2f& carrot, bool global) {
-  float carrot_dist = params_.intermediate_carrot_dist;
+bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
+  // float carrot_dist = params_.intermediate_carrot_dist;
+  // float carrot_dist = carrot_dist_test;
+
   vector<GraphDomain::State> plan_path = plan_path_;
-  if(global){
-    plan_path = global_plan_path_;
-    carrot_dist = params_.carrot_dist;
-  }
+  // if(global){
+  //   plan_path = global_plan_path_;
+  //   carrot_dist = params_.carrot_dist;
+  // }
   // const float kSqCarrotDist = Sq(params_.carrot_dist);
   const float kSqCarrotDist = Sq(carrot_dist);
 
@@ -1093,6 +1101,7 @@ bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
+  cout << "begin run" << endl;
   if (!initialized_) {
     if (kDebug) printf("Parameters and maps not initialized\n");
     return false;
@@ -1129,12 +1138,14 @@ bool Navigation::Run(const double& time,
   costmap_.resetMap(0, 0, x_max, y_max);
   costmap_obstacles_.clear();
 
-  unordered_set<uint64_t> inflation_cells;
-  unordered_set<uint64_t> obstacle_cells;
+  // True if distance is less than replan inflation size
+  // Assign different value for points within inflation size but farther than replan size
+  unordered_map<uint32_t, bool> inflation_cells;
+  unordered_set<uint32_t> obstacle_cells;
 
   // Map from costmap index to real coordinates relative to robot
-  unordered_map<uint64_t, float> index_to_x_coord;
-  unordered_map<uint64_t, float> index_to_y_coord;
+  unordered_map<uint32_t, float> index_to_x_coord;
+  unordered_map<uint32_t, float> index_to_y_coord;
 
   uint32_t robot_mx, robot_my;
   costmap_.worldToMap(0, 0, robot_mx, robot_my);
@@ -1145,8 +1156,13 @@ bool Navigation::Run(const double& time,
   costmap_.mapToWorld(robot_row, robot_col, robot_wx, robot_wy);
   Vector2f robot_location(robot_wx, robot_wy);
 
+  cout << "add points to costmap" << endl;
+
   // Add new points to costmap
   for (size_t i = 0; i < point_cloud_.size(); i++){
+    if(point_cloud_[i].x() < -0.5f && point_cloud_[i].y() > 0){
+      cout << "point: (" << point_cloud_[i].x() << ", " << point_cloud_[i].y() << ")" << endl;
+    }
     uint32_t unsigned_mx, unsigned_my;
     Vector2f relative_location_map_frame = Rotation2Df(robot_angle_) * point_cloud_[i];
     bool in_map = costmap_.worldToMap(relative_location_map_frame.x(), relative_location_map_frame.y(), unsigned_mx, unsigned_my); 
@@ -1216,7 +1232,7 @@ bool Navigation::Run(const double& time,
     iter++;
   }
 
-
+  // TODO: test
   // Add old obstacles that are still in map to new costmap
   for (const auto& point : prev_obstacles_) {
     uint32_t unsigned_mx, unsigned_my;
@@ -1240,23 +1256,42 @@ bool Navigation::Run(const double& time,
       for (int k = -cell_inflation_size; k <= cell_inflation_size; k++){
         if((sqrt(pow(j, 2) + pow(k, 2)) <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) 
         && (my + k >= 0) && (my + k < y_max)){
-          inflation_cells.insert(costmap_.getIndex(mx + j, my + k));
+          if((sqrt(pow(j, 2) + pow(k, 2)) <= params_.replan_inflation_size))
+            inflation_cells[costmap_.getIndex(mx + j, my + k)] = true;
+          else
+            inflation_cells[costmap_.getIndex(mx + j, my + k)] = false;
+          // inflation_cells.insert(costmap_.getIndex(mx + j, my + k));
         }
       }
     }
   }
 
-
-  for (const auto& index : inflation_cells) {
+  for (const auto& pair : inflation_cells) {
+    uint32_t index = pair.first;
+    bool obstacle_inflation = pair.second;
     uint32_t mx = 0;
     uint32_t my = 0;
     costmap_.indexToCells(index, mx, my);
-    costmap_.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
+    if(obstacle_inflation)
+      costmap_.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
+    else
+      costmap_.setCost(mx, my, costmap_2d::INSCRIBED_INFLATED_OBSTACLE);
 
     double wx, wy;
     costmap_.mapToWorld(mx, my, wx, wy);
     costmap_obstacles_.push_back(Vector2f(wx, wy) + robot_loc_);
   }
+
+  // for (const auto& index : inflation_cells) {
+  //   uint32_t mx = 0;
+  //   uint32_t my = 0;
+  //   costmap_.indexToCells(index, mx, my);
+  //   costmap_.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
+
+  //   double wx, wy;
+  //   costmap_.mapToWorld(mx, my, wx, wy);
+  //   costmap_obstacles_.push_back(Vector2f(wx, wy) + robot_loc_);
+  // }
 
   // Record last seen locations of points
   prev_robot_loc_ = robot_loc_;

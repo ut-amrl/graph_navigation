@@ -126,7 +126,7 @@ class Navigation {
 
   bool GetGlobalCarrot(Eigen::Vector2f& carrot);
   bool GetIntermediateCarrot(Eigen::Vector2f& carrot);
-  bool GetCarrot(Eigen::Vector2f& carrot, bool global);
+  bool GetCarrot(Eigen::Vector2f& carrot, bool global, float carrot_dist);
   // Enable or disable autonomy.
   void Enable(bool enable);
   // Indicates whether autonomy is enabled or not.

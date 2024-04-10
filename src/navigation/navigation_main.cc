@@ -487,7 +487,7 @@ void DrawTarget() {
   const Eigen::Vector2f target = navigation_.GetTarget();
   auto msg_copy = global_viz_msg_;
   visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
-  visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
+  // visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
@@ -787,12 +787,15 @@ void LoadConfig(navigation::NavigationParameters* params) {
   STRING_PARAM(model_path);
   STRING_PARAM(evaluator_type);
   STRING_PARAM(camera_calibration_path);
-  REAL_PARAM(local_costmap_resolution)
-  REAL_PARAM(local_costmap_inflation_size)
-  REAL_PARAM(local_costmap_radius)
-  REAL_PARAM(global_costmap_resolution)
-  REAL_PARAM(global_costmap_inflation_size)
-  REAL_PARAM(global_costmap_radius)
+  REAL_PARAM(local_costmap_resolution);
+  REAL_PARAM(local_costmap_inflation_size);
+  REAL_PARAM(local_costmap_radius);
+  REAL_PARAM(replan_inflation_size);
+  REAL_PARAM(global_costmap_resolution);
+  REAL_PARAM(global_costmap_inflation_size);
+  REAL_PARAM(global_costmap_radius);
+  REAL_PARAM(global_costmap_origin_x);
+  REAL_PARAM(global_costmap_origin_y);
   REAL_PARAM(intermediate_carrot_dist);
   REAL_PARAM(range_min);
   REAL_PARAM(range_max);
@@ -828,9 +831,12 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->local_costmap_resolution = CONFIG_local_costmap_resolution;
   params->local_costmap_inflation_size = CONFIG_local_costmap_inflation_size;
   params->local_costmap_radius = CONFIG_local_costmap_radius;
+  params->replan_inflation_size = CONFIG_replan_inflation_size;
   params->global_costmap_resolution = CONFIG_global_costmap_resolution;
   params->global_costmap_inflation_size = CONFIG_global_costmap_inflation_size;
   params->global_costmap_radius = CONFIG_global_costmap_radius;
+  params->global_costmap_origin_x = CONFIG_global_costmap_origin_x;
+  params->global_costmap_origin_y = CONFIG_global_costmap_origin_y;
   params->intermediate_carrot_dist = CONFIG_intermediate_carrot_dist;
   params->range_min = CONFIG_range_min;
   params->range_max = CONFIG_range_max;
@@ -967,14 +973,12 @@ int main(int argc, char** argv) {
       auto obstacles = navigation_.GetCostmapObstacles();
       auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
 
-      for (const auto& vector : global_obstacles) {
-        // if(vector.y() < 2 && vector.x() < 6)
-          visualization::DrawPoint(vector, 0xdb34eb, global_viz_msg_);
-      }
+      // for (const auto& vector : global_obstacles) {
+      //   visualization::DrawPoint(vector, 0xdb34eb, global_viz_msg_);
+      // }
 
       for (const auto& vector : obstacles) {
-        // if(vector.y() < 2 && vector.x() < 6)
-          visualization::DrawPoint(vector, 0x10E000, global_viz_msg_);
+        visualization::DrawPoint(vector, 0x10E000, global_viz_msg_);
       }
 
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());

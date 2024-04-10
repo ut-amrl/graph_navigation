@@ -4,7 +4,7 @@ end
 
 NavigationParameters = {
   laser_topics = {
-    "/scan",
+    "/velodyne_2dscan",
     "/kinect_laserscan",
   };
   laser_frame = "base_link";
@@ -45,7 +45,11 @@ NavigationParameters = {
   local_costmap_radius = 10;
   global_costmap_inflation_size = 0.4;
   global_costmap_resolution = 0.2;
-  global_costmap_radius = 100;
+  global_costmap_radius = 70;
+  -- global_costmap_origin_x_positive = false;
+  global_costmap_origin_x = -50;
+  -- global_costmap_origin_y_positive = false;
+  global_costmap_origin_y = -50;
   range_min = 0.1;
   range_max = 10.0;
 };

@@ -105,11 +105,15 @@ struct NavigationParameters {
   float local_costmap_resolution;
   // Costmap size in each direction
   float local_costmap_radius;
+  // Minimum inflation distance to change intermediate plan
+  float replan_inflation_size;
 
   // Same as local costmap parameters but for global costmap
   float global_costmap_inflation_size;
   float global_costmap_resolution;
   float global_costmap_radius;
+  float global_costmap_origin_x;
+  float global_costmap_origin_y;
 
   // Lidar scan min range
   float range_min;
@@ -146,9 +150,12 @@ struct NavigationParameters {
       local_costmap_inflation_size(0.5),
       local_costmap_resolution(0.1),
       local_costmap_radius(10),
+      replan_inflation_size(0.3),
       global_costmap_inflation_size(0.5),
       global_costmap_resolution(0.1),
       global_costmap_radius(100),
+      global_costmap_origin_x(-100),
+      global_costmap_origin_y(-100),
       range_min(0.1),
       range_max(10){
       }
