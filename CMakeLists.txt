@@ -42,7 +42,7 @@ SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 SET(libs roslib roscpp rosbag glog gflags amrl_shared_lib boost_system lua5.1
-    pthread)
+    pthread costmap_2d)
 
 ADD_LIBRARY(shared_library
             src/visualization/visualization.cc
