@@ -52,6 +52,7 @@ NavigationParameters = {
   range_min = 0.1;
   range_max = 10.0;
   replan_carrot_dist = 2;
+  object_lifespan = 5
 };
 
 AckermannSampler = {

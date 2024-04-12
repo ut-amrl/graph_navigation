@@ -1243,7 +1243,7 @@ bool Navigation::Run(const double& time,
     bool in_map = costmap_.worldToMap(new_relative_point.x(), new_relative_point.y(), unsigned_mx, unsigned_my);
     uint32_t index = costmap_.getIndex(unsigned_mx, unsigned_my);
     //TODO: change expiration time to parameter
-    if (in_map && empty_cells.count(index) == 0 && std::time(nullptr) - obs.last_seen < 5){
+    if (in_map && empty_cells.count(index) == 0 && std::time(nullptr) - obs.last_seen < params_.object_lifespan){
       obstacle_cells.insert(index);
       if(index_to_obstacle.count(index) == 0){
         SeenObstacle new_obs;

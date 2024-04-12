@@ -123,6 +123,9 @@ struct NavigationParameters {
   // Distance between intermediate goal and global carrot before replanning
   float replan_carrot_dist;
 
+  // How long an object should stay in the costmap if not continuously observed
+  float object_lifespan;
+
 
   cv::Mat K;
   cv::Mat D;
@@ -161,7 +164,8 @@ struct NavigationParameters {
       global_costmap_origin_y(-100),
       range_min(0.1),
       range_max(10),
-      replan_carrot_dist(2){
+      replan_carrot_dist(2),
+      object_lifespan(5){
       }
 };
 }  // namespace navigation
