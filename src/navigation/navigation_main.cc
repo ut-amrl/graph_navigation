@@ -799,6 +799,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(intermediate_carrot_dist);
   REAL_PARAM(range_min);
   REAL_PARAM(range_max);
+  REAL_PARAM(replan_carrot_dist);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -840,6 +841,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->intermediate_carrot_dist = CONFIG_intermediate_carrot_dist;
   params->range_min = CONFIG_range_min;
   params->range_max = CONFIG_range_max;
+  params->replan_carrot_dist = CONFIG_replan_carrot_dist;
 
   // TODO Rather than loading camera homography from a file, compute it from camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);

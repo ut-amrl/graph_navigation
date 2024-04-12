@@ -39,19 +39,19 @@ NavigationParameters = {
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "linear";
-  intermediate_carrot_dist = 2;
-  local_costmap_inflation_size = 0.4;
+  intermediate_carrot_dist = 1;
+  local_costmap_inflation_size = 0.5;
   local_costmap_resolution = 0.1;
   local_costmap_radius = 10;
-  global_costmap_inflation_size = 0.4;
+  replan_inflation_size = 0.3;
+  global_costmap_inflation_size = 0.5;
   global_costmap_resolution = 0.2;
-  global_costmap_radius = 70;
-  -- global_costmap_origin_x_positive = false;
-  global_costmap_origin_x = -50;
-  -- global_costmap_origin_y_positive = false;
-  global_costmap_origin_y = -50;
+  global_costmap_radius = 50;
+  global_costmap_origin_x = -10;
+  global_costmap_origin_y = 0;
   range_min = 0.1;
   range_max = 10.0;
+  replan_carrot_dist = 2;
 };
 
 AckermannSampler = {

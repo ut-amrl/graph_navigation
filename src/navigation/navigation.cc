@@ -598,6 +598,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
       int new_col = my + neighbors[(i+1)%4];
       uint32_t neighbor_index = costmap_.getIndex(new_row, new_col);
       
+      //TODO: fix when robot is in an obstacle in the costmap
       if(new_row >= 0 && new_row < static_cast<int>(costmap_.getSizeInCellsX()) && new_col >= 0 
       && new_col < static_cast<int>(costmap_.getSizeInCellsY()) && (costmap_.getCost(new_row, new_col) != costmap_2d::LETHAL_OBSTACLE)
       && (costmap_.getCost(new_row, new_col) != costmap_2d::INSCRIBED_INFLATED_OBSTACLE) 
@@ -683,16 +684,15 @@ bool Navigation::IntermediatePlanStillValid(){
 
   if (plan_path_.size() < 2 || !intermediate_path_found_) return false;
 
-  // TODO: Add parameter for when to look for new goal or use different heuristic
+  // TODO: Add parameter for when to look for new goal or use different heuristic, may not be necessary with carrot replan
   if ((nav_goal_loc_ - plan_path_[0].loc).norm() > sqrt(2 * params_.local_costmap_resolution) / 2 
   && (robot_loc_ - plan_path_[0].loc).norm() < 1){
     return false;
   }
 
-  // TODO: add parameter for distance between intermediate path and global carrot to replan
   Vector2f global_carrot;
   GetGlobalCarrot(global_carrot);
-  if((intermediate_goal_ - global_carrot).norm() > 2){
+  if((intermediate_goal_ - global_carrot).norm() > params_.replan_carrot_dist){
     return false;
   }
 
@@ -710,9 +710,16 @@ bool Navigation::IntermediatePlanStillValid(){
 bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
   for(float carrot_dist = params_.carrot_dist; carrot_dist > params_.intermediate_carrot_dist; carrot_dist -= 0.5){
     if(GetCarrot(carrot, true, carrot_dist)){
-      return true;
+      Vector2f robot_frame_carrot = carrot - robot_loc_;
+      uint32_t mx, my;
+      bool in_map = costmap_.worldToMap(robot_frame_carrot.x(), robot_frame_carrot.y(), mx, my);
+      if(in_map && costmap_.getCost(mx, my) != costmap_2d::LETHAL_OBSTACLE 
+      && costmap_.getCost(mx, my) != costmap_2d::INSCRIBED_INFLATED_OBSTACLE){
+        return true;
+      }
     }
   }
+
   return false;
   // return GetCarrot(carrot, true, params_.carrot_dist);
 }
@@ -722,15 +729,10 @@ bool Navigation::GetIntermediateCarrot(Vector2f& carrot) {
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
-  // float carrot_dist = params_.intermediate_carrot_dist;
-  // float carrot_dist = carrot_dist_test;
-
   vector<GraphDomain::State> plan_path = plan_path_;
-  // if(global){
-  //   plan_path = global_plan_path_;
-  //   carrot_dist = params_.carrot_dist;
-  // }
-  // const float kSqCarrotDist = Sq(params_.carrot_dist);
+  if(global){
+    plan_path = global_plan_path_;
+  }
   const float kSqCarrotDist = Sq(carrot_dist);
 
   CHECK_GE(plan_path.size(), 2u);
@@ -1101,7 +1103,6 @@ bool Navigation::Run(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
-  cout << "begin run" << endl;
   if (!initialized_) {
     if (kDebug) printf("Parameters and maps not initialized\n");
     return false;
@@ -1156,13 +1157,9 @@ bool Navigation::Run(const double& time,
   costmap_.mapToWorld(robot_row, robot_col, robot_wx, robot_wy);
   Vector2f robot_location(robot_wx, robot_wy);
 
-  cout << "add points to costmap" << endl;
 
   // Add new points to costmap
   for (size_t i = 0; i < point_cloud_.size(); i++){
-    if(point_cloud_[i].x() < -0.5f && point_cloud_[i].y() > 0){
-      cout << "point: (" << point_cloud_[i].x() << ", " << point_cloud_[i].y() << ")" << endl;
-    }
     uint32_t unsigned_mx, unsigned_my;
     Vector2f relative_location_map_frame = Rotation2Df(robot_angle_) * point_cloud_[i];
     bool in_map = costmap_.worldToMap(relative_location_map_frame.x(), relative_location_map_frame.y(), unsigned_mx, unsigned_my); 
@@ -1232,7 +1229,6 @@ bool Navigation::Run(const double& time,
     iter++;
   }
 
-  // TODO: test
   // Add old obstacles that are still in map to new costmap
   for (const auto& point : prev_obstacles_) {
     uint32_t unsigned_mx, unsigned_my;
@@ -1260,7 +1256,6 @@ bool Navigation::Run(const double& time,
             inflation_cells[costmap_.getIndex(mx + j, my + k)] = true;
           else
             inflation_cells[costmap_.getIndex(mx + j, my + k)] = false;
-          // inflation_cells.insert(costmap_.getIndex(mx + j, my + k));
         }
       }
     }
@@ -1281,17 +1276,6 @@ bool Navigation::Run(const double& time,
     costmap_.mapToWorld(mx, my, wx, wy);
     costmap_obstacles_.push_back(Vector2f(wx, wy) + robot_loc_);
   }
-
-  // for (const auto& index : inflation_cells) {
-  //   uint32_t mx = 0;
-  //   uint32_t my = 0;
-  //   costmap_.indexToCells(index, mx, my);
-  //   costmap_.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
-
-  //   double wx, wy;
-  //   costmap_.mapToWorld(mx, my, wx, wy);
-  //   costmap_obstacles_.push_back(Vector2f(wx, wy) + robot_loc_);
-  // }
 
   // Record last seen locations of points
   prev_robot_loc_ = robot_loc_;

@@ -120,6 +120,9 @@ struct NavigationParameters {
   // Lidar scan max range
   float range_max;
 
+  // Distance between intermediate goal and global carrot before replanning
+  float replan_carrot_dist;
+
 
   cv::Mat K;
   cv::Mat D;
@@ -157,7 +160,8 @@ struct NavigationParameters {
       global_costmap_origin_x(-100),
       global_costmap_origin_y(-100),
       range_min(0.1),
-      range_max(10){
+      range_max(10),
+      replan_carrot_dist(2){
       }
 };
 }  // namespace navigation
