@@ -1145,8 +1145,9 @@ bool Navigation::Run(const double& time,
   unordered_set<uint32_t> obstacle_cells;
 
   // Map from costmap index to real coordinates relative to robot
-  unordered_map<uint32_t, float> index_to_x_coord;
-  unordered_map<uint32_t, float> index_to_y_coord;
+  // unordered_map<uint32_t, float> index_to_x_coord;
+  // unordered_map<uint32_t, float> index_to_y_coord;
+  unordered_map<uint32_t, SeenObstacle> index_to_obstacle;
 
   uint32_t robot_mx, robot_my;
   costmap_.worldToMap(0, 0, robot_mx, robot_my);
@@ -1171,8 +1172,13 @@ bool Navigation::Run(const double& time,
       costmap_.mapToWorld(unsigned_mx, unsigned_my, wx, wy);
       obstacle_cells.insert(index);
 
-      index_to_x_coord[index] = wx - robot_location.x();
-      index_to_y_coord[index] = wy - robot_location.y();
+      SeenObstacle obs;
+      obs.location = Vector2f(wx - robot_location.x(), wy - robot_location.y());
+      obs.last_seen = std::time(nullptr);
+      index_to_obstacle[index] = obs;
+
+      // index_to_x_coord[index] = wx - robot_location.x();
+      // index_to_y_coord[index] = wy - robot_location.y();
     }
   }
 
@@ -1230,16 +1236,26 @@ bool Navigation::Run(const double& time,
   }
 
   // Add old obstacles that are still in map to new costmap
-  for (const auto& point : prev_obstacles_) {
+  for (const auto& obs : prev_obstacles_) {
+    Vector2f point = obs.location;
     uint32_t unsigned_mx, unsigned_my;
-
     Vector2f new_relative_point = point + prev_robot_loc_ - robot_loc_;
     bool in_map = costmap_.worldToMap(new_relative_point.x(), new_relative_point.y(), unsigned_mx, unsigned_my);
     uint32_t index = costmap_.getIndex(unsigned_mx, unsigned_my);
-    if (in_map && empty_cells.count(index) == 0){
+    //TODO: change expiration time to parameter
+    if (in_map && empty_cells.count(index) == 0 && std::time(nullptr) - obs.last_seen < 5){
       obstacle_cells.insert(index);
-      index_to_x_coord[index] = new_relative_point.x();
-      index_to_y_coord[index] = new_relative_point.y();
+      if(index_to_obstacle.count(index) == 0){
+        SeenObstacle new_obs;
+        new_obs.location = new_relative_point;
+        new_obs.last_seen = obs.last_seen;
+        index_to_obstacle[index] = new_obs;
+      }
+      else{
+        index_to_obstacle[index].location = new_relative_point;
+      }
+      // index_to_x_coord[index] = new_relative_point.x();
+      // index_to_y_coord[index] = new_relative_point.y();
     }
   }
 
@@ -1281,11 +1297,15 @@ bool Navigation::Run(const double& time,
   prev_robot_loc_ = robot_loc_;
   prev_obstacles_.clear();
 
-  for (const auto& pair : index_to_x_coord) {
-    uint32_t key = pair.first;
-    double x = pair.second;
-    double y = index_to_y_coord[key];
-    prev_obstacles_.push_back(Vector2f(x, y));
+  for (const auto& pair : index_to_obstacle) {
+    // uint32_t key = pair.first;
+    SeenObstacle obs = pair.second;
+    // double x = pair.second;
+    // double y = index_to_y_coord[key];
+    // SeenObstacle obs;
+    // obs.last_seen = std::time(nullptr);
+    // obs.location = Vector2f(x, y)
+    prev_obstacles_.push_back(obs);
   }
 
 

@@ -25,6 +25,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <set>
+#include <ctime>
 
 #include "eigen3/Eigen/Dense"
 #include <costmap_2d/costmap_2d_ros.h>
@@ -81,6 +82,11 @@ struct Odom {
   Eigen::Vector3f position;
   Eigen::Quaternionf orientation;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+};
+
+struct SeenObstacle {
+  Eigen::Vector2f location;
+  std::time_t last_seen;
 };
 
 enum class NavigationState {
@@ -298,7 +304,7 @@ class Navigation {
   // List of obstacle points in local costmap for viewing/debugging
   std::vector<Eigen::Vector2f> costmap_obstacles_;
   // List of locations of obstacles in previous costmap relative to robot
-  std::vector<Eigen::Vector2f> prev_obstacles_;
+  std::vector<SeenObstacle> prev_obstacles_;
   // Location of robot at last cost map generation
   Eigen::Vector2f prev_robot_loc_;
   // Global 2D cost map from loaded map
