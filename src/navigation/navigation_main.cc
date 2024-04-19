@@ -801,6 +801,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(range_max);
   REAL_PARAM(replan_carrot_dist);
   REAL_PARAM(object_lifespan);
+  REAL_PARAM(inflation_coeff);
+  REAL_PARAM(distance_weight);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -844,6 +846,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->range_max = CONFIG_range_max;
   params->replan_carrot_dist = CONFIG_replan_carrot_dist;
   params->object_lifespan = CONFIG_object_lifespan;
+  params->inflation_coeff = CONFIG_inflation_coeff;
+  params->distance_weight = CONFIG_distance_weight;
 
   // TODO Rather than loading camera homography from a file, compute it from camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
@@ -978,11 +982,11 @@ int main(int argc, char** argv) {
       auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
 
       // for (const auto& vector : global_obstacles) {
-      //   visualization::DrawPoint(vector, 0xdb34eb, global_viz_msg_);
+      //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
       // }
 
       for (const auto& vector : obstacles) {
-        visualization::DrawPoint(vector, 0x10E000, global_viz_msg_);
+        visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
       }
 
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());

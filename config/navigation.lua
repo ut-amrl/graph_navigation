@@ -4,7 +4,8 @@ end
 
 NavigationParameters = {
   laser_topics = {
-    "/velodyne_2dscan",
+    "/scan",
+    -- "/velodyne_2dscan",
     "/kinect_laserscan",
   };
   laser_frame = "base_link";
@@ -20,7 +21,7 @@ NavigationParameters = {
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
-  carrot_dist = 10;
+  carrot_dist = 15;
   system_latency = 0.24;
   obstacle_margin = 0.15;
   num_options = 31;
@@ -40,19 +41,21 @@ NavigationParameters = {
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "linear";
   intermediate_carrot_dist = 1;
-  local_costmap_inflation_size = 0.5;
+  local_costmap_inflation_size = 1;
   local_costmap_resolution = 0.1;
   local_costmap_radius = 10;
   replan_inflation_size = 0.3;
-  global_costmap_inflation_size = 0.5;
-  global_costmap_resolution = 0.2;
+  global_costmap_inflation_size = 1;
+  global_costmap_resolution = 0.1;
   global_costmap_radius = 50;
-  global_costmap_origin_x = -10;
-  global_costmap_origin_y = 0;
+  global_costmap_origin_x = -20;
+  global_costmap_origin_y = -20;
   range_min = 0.1;
   range_max = 10.0;
   replan_carrot_dist = 2;
-  object_lifespan = 5
+  object_lifespan = 5;
+  inflation_coeff = 7;
+  distance_weight = 2;
 };
 
 AckermannSampler = {

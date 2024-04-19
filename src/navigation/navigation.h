@@ -89,6 +89,11 @@ struct SeenObstacle {
   std::time_t last_seen;
 };
 
+struct ObstacleCost{
+  Eigen::Vector2f location;
+  unsigned char cost;
+};
+
 enum class NavigationState {
   kStopped = 0,
   kPaused = 1,
@@ -171,8 +176,8 @@ class Navigation {
   const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
-  std::vector<Eigen::Vector2f> GetCostmapObstacles();
-  std::vector<Eigen::Vector2f> GetGlobalCostmapObstacles();
+  std::vector<ObstacleCost> GetCostmapObstacles();
+  std::vector<ObstacleCost> GetGlobalCostmapObstacles();
 
   Eigen::Vector2f GetIntermediateGoal();
 
@@ -302,7 +307,7 @@ class Navigation {
   // Local 2D cost map from lidar
   costmap_2d::Costmap2D costmap_;
   // List of obstacle points in local costmap for viewing/debugging
-  std::vector<Eigen::Vector2f> costmap_obstacles_;
+  std::vector<ObstacleCost> costmap_obstacles_;
   // List of locations of obstacles in previous costmap relative to robot
   std::vector<SeenObstacle> prev_obstacles_;
   // Location of robot at last cost map generation
@@ -310,7 +315,7 @@ class Navigation {
   // Global 2D cost map from loaded map
   costmap_2d::Costmap2D global_costmap_;
   // List of obstacle points in local costmap for viewing/debugging
-  std::vector<Eigen::Vector2f> global_costmap_obstacles_;
+  std::vector<ObstacleCost> global_costmap_obstacles_;
   //
   bool intermediate_path_found_;
 

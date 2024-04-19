@@ -125,6 +125,10 @@ struct NavigationParameters {
 
   // How long an object should stay in the costmap if not continuously observed
   float object_lifespan;
+  
+  float inflation_coeff;
+
+  float distance_weight;
 
 
   cv::Mat K;
@@ -165,7 +169,9 @@ struct NavigationParameters {
       range_min(0.1),
       range_max(10),
       replan_carrot_dist(2),
-      object_lifespan(5){
+      object_lifespan(5),
+      inflation_coeff(5),
+      distance_weight(2){
       }
 };
 }  // namespace navigation
