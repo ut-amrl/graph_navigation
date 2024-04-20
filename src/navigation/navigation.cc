@@ -628,14 +628,15 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
         wy += robot_loc_.y();
         uint32_t global_mx, global_my;
         bool in_global_map = global_costmap_.worldToMap(wx, wy, global_mx, global_my);
+        unsigned char max_costmap_cost = costmap_.getCost(new_row, new_col);
         if(in_global_map){
-          unsigned char max_costmap_cost = std::max(costmap_.getCost(new_row, new_col), global_costmap_.getCost(global_mx, global_my));
-          float new_cost = cost[current_index] + params_.distance_weight + max_costmap_cost;
-          if(cost.count(neighbor_index) == 0 || new_cost < cost[neighbor_index]){
-            cost[neighbor_index] = new_cost;
-            parent[neighbor_index] = current_index;
-            intermediate_queue.Push(neighbor_index, -new_cost);
-          }
+          max_costmap_cost = std::max(costmap_.getCost(new_row, new_col), global_costmap_.getCost(global_mx, global_my));
+        }
+        float new_cost = cost[current_index] + params_.distance_weight + max_costmap_cost;
+        if(cost.count(neighbor_index) == 0 || new_cost < cost[neighbor_index]){
+          cost[neighbor_index] = new_cost;
+          parent[neighbor_index] = current_index;
+          intermediate_queue.Push(neighbor_index, -new_cost);
         }
       }   
     }
@@ -939,13 +940,11 @@ void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
 }
 
 void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
-  cout << "turn in place call" << endl;
   static const bool kDebug = false;
   const float kMaxLinearSpeed = 0.1;
   const float velocity = robot_vel_.x();
   cmd_angle_vel = 0;
 
-  cout << "turn in place test 1" << endl;
 
   if (fabs(velocity) > kMaxLinearSpeed) {
     Halt(cmd_vel, cmd_angle_vel);
@@ -961,7 +960,6 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   }
   if (kDebug) printf("dTheta: %f robot_angle: %f\n", RadToDeg(dTheta), RadToDeg(robot_angle_));
 
-  cout << "turn in place test 2" << endl;
   
   const float s = Sign(dTheta);
   if (robot_omega_ * dTheta < 0.0f) {
@@ -974,7 +972,6 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
       cmd_angle_vel = robot_omega_ - Sign(robot_omega_) * dv;
     }
   } else {
-    cout << "turn in place test 5" << endl;
     cmd_angle_vel = s * Run1DTimeOptimalControl(
         params_.angular_limits,
         0,
@@ -982,7 +979,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
         s * dTheta,
         0,
         params_.dt);
-    cout << "test5: angle_vel = " << cmd_angle_vel << endl;
+    cout << "turn in place test5: angle_vel = " << cmd_angle_vel << endl;
   }
   cmd_vel = {0, 0};
 }
@@ -1371,6 +1368,8 @@ bool Navigation::Run(const double& time,
       nav_state_ = NavigationState::kStopped;
     }
   } while (prev_state != nav_state_);
+
+  cout << "before switch" << endl;
 
   
   switch (nav_state_) {
