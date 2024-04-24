@@ -58,9 +58,8 @@ struct NavigationParameters {
   MotionLimits linear_limits;
   // Motion limits for angular motion.
   MotionLimits angular_limits;
-  // Distance of carrot from robot to compute local planner goal from
-  // global plan.
-  float carrot_dist;
+  // Distance along global plan to find intermediate goal
+  float intermediate_goal_dist;
   // System latency in seconds, including sensing latency, processing latency,
   // and actuation latency.
   float system_latency;
@@ -98,27 +97,27 @@ struct NavigationParameters {
   std::string model_path;
 
   // Distance of carrot along intermediate path to compute local planner goal
-  float intermediate_carrot_dist;
+  float carrot_dist;
   // Robot buffer/inflation size
-  float local_costmap_inflation_size;
+  float max_inflation_radius;
   // Distance between grid locations in costmap
   float local_costmap_resolution;
   // Costmap size in each direction
-  float local_costmap_radius;
+  float local_costmap_size;
   // Minimum inflation distance to change intermediate plan
-  float replan_inflation_size;
+  float min_inflation_radius;
 
   // Same as local costmap parameters but for global costmap
-  float global_costmap_inflation_size;
   float global_costmap_resolution;
-  float global_costmap_radius;
+  float global_costmap_size_x;
+  float global_costmap_size_y;
   float global_costmap_origin_x;
   float global_costmap_origin_y;
 
   // Lidar scan min range
-  float range_min;
+  float lidar_range_min;
   // Lidar scan max range
-  float range_max;
+  float lidar_range_max;
 
   // Distance between intermediate goal and global carrot before replanning
   float replan_carrot_dist;
@@ -140,7 +139,7 @@ struct NavigationParameters {
       dt(0.025),
       linear_limits(0.5, 0.5, 0.5),
       angular_limits(0.5, 0.5, 1.0),
-      carrot_dist(2.5),
+      intermediate_goal_dist(5),
       system_latency(0.24),
       obstacle_margin(0.15),
       num_options(41),
@@ -156,18 +155,18 @@ struct NavigationParameters {
       target_angle_tolerance(0.05),
       use_kinect(true),
       evaluator_type("cost_map"),
-      intermediate_carrot_dist(2),
-      local_costmap_inflation_size(0.5),
+      carrot_dist(2),
+      max_inflation_radius(1),
       local_costmap_resolution(0.1),
-      local_costmap_radius(10),
-      replan_inflation_size(0.3),
-      global_costmap_inflation_size(0.5),
+      local_costmap_size(20),
+      min_inflation_radius(0.3),
       global_costmap_resolution(0.1),
-      global_costmap_radius(100),
-      global_costmap_origin_x(-100),
-      global_costmap_origin_y(-100),
-      range_min(0.1),
-      range_max(10),
+      global_costmap_size_x(100),
+      global_costmap_size_y(100),
+      global_costmap_origin_x(-50),
+      global_costmap_origin_y(-50),
+      lidar_range_min(0.1),
+      lidar_range_max(10),
       replan_carrot_dist(2),
       object_lifespan(5),
       inflation_coeff(5),

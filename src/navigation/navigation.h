@@ -136,7 +136,7 @@ class Navigation {
   std::vector<GraphDomain::State> GetGlobalPath();
 
   bool GetGlobalCarrot(Eigen::Vector2f& carrot);
-  bool GetIntermediateCarrot(Eigen::Vector2f& carrot);
+  bool GetLocalCarrot(Eigen::Vector2f& carrot);
   bool GetCarrot(Eigen::Vector2f& carrot, bool global, float carrot_dist);
   // Enable or disable autonomy.
   void Enable(bool enable);

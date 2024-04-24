@@ -469,7 +469,7 @@ void PublishPath() {
           global_viz_msg_);
     }
     Vector2f carrot;
-    bool foundCarrot = navigation_.GetIntermediateCarrot(carrot);
+    bool foundCarrot = navigation_.GetLocalCarrot(carrot);
     if (foundCarrot) {
       carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
     }
@@ -768,7 +768,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_angular_accel);
   REAL_PARAM(max_angular_decel);
   REAL_PARAM(max_angular_speed);
-  REAL_PARAM(carrot_dist);
+  REAL_PARAM(intermediate_goal_dist);
   REAL_PARAM(system_latency);
   REAL_PARAM(obstacle_margin);
   NATURALNUM_PARAM(num_options);
@@ -788,17 +788,17 @@ void LoadConfig(navigation::NavigationParameters* params) {
   STRING_PARAM(evaluator_type);
   STRING_PARAM(camera_calibration_path);
   REAL_PARAM(local_costmap_resolution);
-  REAL_PARAM(local_costmap_inflation_size);
-  REAL_PARAM(local_costmap_radius);
-  REAL_PARAM(replan_inflation_size);
+  REAL_PARAM(max_inflation_radius);
+  REAL_PARAM(local_costmap_size);
+  REAL_PARAM(min_inflation_radius);
   REAL_PARAM(global_costmap_resolution);
-  REAL_PARAM(global_costmap_inflation_size);
-  REAL_PARAM(global_costmap_radius);
+  REAL_PARAM(global_costmap_size_x);
+  REAL_PARAM(global_costmap_size_y);
   REAL_PARAM(global_costmap_origin_x);
   REAL_PARAM(global_costmap_origin_y);
-  REAL_PARAM(intermediate_carrot_dist);
-  REAL_PARAM(range_min);
-  REAL_PARAM(range_max);
+  REAL_PARAM(carrot_dist);
+  REAL_PARAM(lidar_range_min);
+  REAL_PARAM(lidar_range_max);
   REAL_PARAM(replan_carrot_dist);
   REAL_PARAM(object_lifespan);
   REAL_PARAM(inflation_coeff);
@@ -814,7 +814,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
       CONFIG_max_angular_accel,
       CONFIG_max_angular_decel,
       CONFIG_max_angular_speed);
-  params->carrot_dist = CONFIG_carrot_dist;
+  params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
   params->system_latency = CONFIG_system_latency;
   params->obstacle_margin = CONFIG_obstacle_margin;
   params->num_options = CONFIG_num_options;
@@ -833,17 +833,17 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->model_path = CONFIG_model_path;
   params->evaluator_type = CONFIG_evaluator_type;
   params->local_costmap_resolution = CONFIG_local_costmap_resolution;
-  params->local_costmap_inflation_size = CONFIG_local_costmap_inflation_size;
-  params->local_costmap_radius = CONFIG_local_costmap_radius;
-  params->replan_inflation_size = CONFIG_replan_inflation_size;
+  params->max_inflation_radius = CONFIG_max_inflation_radius;
+  params->local_costmap_size = CONFIG_local_costmap_size;
+  params->min_inflation_radius = CONFIG_min_inflation_radius;
   params->global_costmap_resolution = CONFIG_global_costmap_resolution;
-  params->global_costmap_inflation_size = CONFIG_global_costmap_inflation_size;
-  params->global_costmap_radius = CONFIG_global_costmap_radius;
+  params->global_costmap_size_x = CONFIG_global_costmap_size_x;
+  params->global_costmap_size_y = CONFIG_global_costmap_size_y;
   params->global_costmap_origin_x = CONFIG_global_costmap_origin_x;
   params->global_costmap_origin_y = CONFIG_global_costmap_origin_y;
-  params->intermediate_carrot_dist = CONFIG_intermediate_carrot_dist;
-  params->range_min = CONFIG_range_min;
-  params->range_max = CONFIG_range_max;
+  params->carrot_dist = CONFIG_carrot_dist;
+  params->lidar_range_min = CONFIG_lidar_range_min;
+  params->lidar_range_max = CONFIG_lidar_range_max;
   params->replan_carrot_dist = CONFIG_replan_carrot_dist;
   params->object_lifespan = CONFIG_object_lifespan;
   params->inflation_coeff = CONFIG_inflation_coeff;
