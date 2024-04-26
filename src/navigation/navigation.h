@@ -135,6 +135,7 @@ class Navigation {
   std::vector<GraphDomain::State> GetPlanPath();
   std::vector<GraphDomain::State> GetGlobalPath();
 
+  Eigen::Vector2f GetPathGoal(float target_distance);
   bool GetGlobalCarrot(Eigen::Vector2f& carrot);
   bool GetLocalCarrot(Eigen::Vector2f& carrot);
   bool GetCarrot(Eigen::Vector2f& carrot, bool global, float carrot_dist);

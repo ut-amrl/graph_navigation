@@ -611,8 +611,6 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
     }
 
     costmap_.indexToCells(current_index, mx, my);
-    // vector<int> neighbors_x {-1, -1, -1, 0, 0, 1, 1, 1};
-    // vector<int> neighbors_y {-1, 0, 1, -1, 1, -1, 0, 1};
     vector<int> neighbors_x {-1, 0, 0, 1, -1, -1, 1, 1};
     vector<int> neighbors_y {0, -1, 1, 0, -1, 1, -1, 1};
     for(size_t i = 0; i < neighbors_x.size(); i++){
@@ -620,7 +618,6 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
       int new_col = my + neighbors_y[i];
       uint32_t neighbor_index = costmap_.getIndex(new_row, new_col);
       
-      //TODO: fix when robot is in an obstacle in the costmap
       if(new_row >= 0 && new_row < static_cast<int>(costmap_.getSizeInCellsX()) && new_col >= 0 
       && new_col < static_cast<int>(costmap_.getSizeInCellsY())) {
         double wx, wy;
@@ -637,7 +634,8 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
         if(cost.count(neighbor_index) == 0 || new_cost < cost[neighbor_index]){
           cost[neighbor_index] = new_cost;
           parent[neighbor_index] = current_index;
-          intermediate_queue.Push(neighbor_index, -new_cost);
+          float heuristic_cost = (Vector2f(goal_map_x, goal_map_y) - Vector2f(new_row, new_col)).norm();
+          intermediate_queue.Push(neighbor_index, -(new_cost + heuristic_cost));
         }
       }   
     }
@@ -728,6 +726,22 @@ bool Navigation::IntermediatePlanStillValid(){
     }
   }
   return true;
+}
+
+Vector2f Navigation::GetPathGoal(float target_distance){
+  CHECK_GE(plan_path_.size(), 2u);
+
+  float total_distance = 0.0;
+
+  for (int i = plan_path_.size() - 1; i >= 0; --i) {
+    if (i + 1 < static_cast<int>(plan_path_.size())) {
+      total_distance += (plan_path_[i].loc - plan_path_[i + 1].loc).norm();
+    }
+    if (total_distance > target_distance) {
+      return plan_path_[i].loc;
+    }
+  }
+  return plan_path_[0].loc;
 }
 
 bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
@@ -889,7 +903,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   }
   if (paths.size() == 0) {
     // No options, just stop.
-    Halt(vel_cmd, ang_vel_cmd);
+    // Halt(vel_cmd, ang_vel_cmd);
     if (debug) printf("No paths found\n");
     return;
   }
@@ -898,16 +912,23 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     if (debug) printf("No best path found\n");
     // No valid path found!
     // TODO: Change this to rotate instead of halt
-    Eigen::Vector2f local_target = local_target_;
-    Eigen::Vector2f temp_target;
-    GetCarrot(temp_target, false, params_.carrot_dist/2);
-    local_target = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
-    // local_target_ = Rotation2Df(-robot_angle_) * (plan_path_[plan_path_.size() - 1].loc - robot_loc_);
+    Eigen::Vector2f prev_local_target = local_target_;
+    Eigen::Vector2f temp_target = GetPathGoal(params_.carrot_dist/2);
+    local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
     TurnInPlace(vel_cmd, ang_vel_cmd);
-    local_target_ = local_target;
+    local_target_ = prev_local_target;
     // Halt(vel_cmd, ang_vel_cmd);
     return;
   }
+
+  // else if(best_path->FPL() < params_.target_dist_tolerance/2){
+  //   Eigen::Vector2f prev_local_target = local_target_;
+  //   Eigen::Vector2f temp_target = GetPathGoal(params_.carrot_dist/2);
+  //   local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
+  //   TurnInPlace(vel_cmd, ang_vel_cmd);
+  //   local_target_ = prev_local_target;
+  // }
+
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};
 

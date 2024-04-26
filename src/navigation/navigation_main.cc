@@ -985,9 +985,9 @@ int main(int argc, char** argv) {
       //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
       // }
 
-      for (const auto& vector : obstacles) {
-        visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
-      }
+      // for (const auto& vector : obstacles) {
+      //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
+      // }
 
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
