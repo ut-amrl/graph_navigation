@@ -799,10 +799,11 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(carrot_dist);
   REAL_PARAM(lidar_range_min);
   REAL_PARAM(lidar_range_max);
-  REAL_PARAM(replan_carrot_dist);
+  REAL_PARAM(replan_dist);
   REAL_PARAM(object_lifespan);
   REAL_PARAM(inflation_coeff);
   REAL_PARAM(distance_weight);
+  REAL_PARAM(recovery_carrot_dist);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -844,10 +845,11 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->carrot_dist = CONFIG_carrot_dist;
   params->lidar_range_min = CONFIG_lidar_range_min;
   params->lidar_range_max = CONFIG_lidar_range_max;
-  params->replan_carrot_dist = CONFIG_replan_carrot_dist;
+  params->replan_dist = CONFIG_replan_dist;
   params->object_lifespan = CONFIG_object_lifespan;
   params->inflation_coeff = CONFIG_inflation_coeff;
   params->distance_weight = CONFIG_distance_weight;
+  params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
 
   // TODO Rather than loading camera homography from a file, compute it from camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);

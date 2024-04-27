@@ -634,7 +634,13 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
         if(cost.count(neighbor_index) == 0 || new_cost < cost[neighbor_index]){
           cost[neighbor_index] = new_cost;
           parent[neighbor_index] = current_index;
-          float heuristic_cost = (Vector2f(goal_map_x, goal_map_y) - Vector2f(new_row, new_col)).norm();
+
+          float dx = abs(goal_map_x - new_row);
+          float dy = abs(goal_map_y - new_col);
+
+          float heuristic_cost = max(dx, dy) + (sqrt(2.0) - 1.0) * min(dx, dy);
+          
+          // float heuristic_cost = (Vector2f(goal_map_x, goal_map_y) - Vector2f(new_row, new_col)).norm();
           intermediate_queue.Push(neighbor_index, -(new_cost + heuristic_cost));
         }
       }   
@@ -713,7 +719,7 @@ bool Navigation::IntermediatePlanStillValid(){
 
   Vector2f global_carrot;
   GetGlobalCarrot(global_carrot);
-  if((intermediate_goal_ - global_carrot).norm() > params_.replan_carrot_dist){
+  if((intermediate_goal_ - global_carrot).norm() > params_.replan_dist){
     return false;
   }
 
@@ -903,7 +909,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   }
   if (paths.size() == 0) {
     // No options, just stop.
-    // Halt(vel_cmd, ang_vel_cmd);
+    Halt(vel_cmd, ang_vel_cmd);
     if (debug) printf("No paths found\n");
     return;
   }
@@ -911,9 +917,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");
     // No valid path found!
-    // TODO: Change this to rotate instead of halt
     Eigen::Vector2f prev_local_target = local_target_;
-    Eigen::Vector2f temp_target = GetPathGoal(params_.carrot_dist/2);
+    // Eigen::Vector2f temp_target = GetPathGoal(params_.carrot_dist/2);
+    Eigen::Vector2f temp_target = GetPathGoal(params_.recovery_carrot_dist);
     local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
     TurnInPlace(vel_cmd, ang_vel_cmd);
     local_target_ = prev_local_target;

@@ -120,14 +120,17 @@ struct NavigationParameters {
   float lidar_range_max;
 
   // Distance between intermediate goal and global carrot before replanning
-  float replan_carrot_dist;
+  float replan_dist;
 
   // How long an object should stay in the costmap if not continuously observed
   float object_lifespan;
   
+  // Coefficient for exponential inflation cost
   float inflation_coeff;
-
+  // Weight for distance cost vs. inflation cost
   float distance_weight;
+  // Distance of carrot when using turn in place recovery
+  float recovery_carrot_dist;
 
 
   cv::Mat K;
@@ -167,10 +170,11 @@ struct NavigationParameters {
       global_costmap_origin_y(-50),
       lidar_range_min(0.1),
       lidar_range_max(10),
-      replan_carrot_dist(2),
+      replan_dist(2),
       object_lifespan(5),
       inflation_coeff(5),
-      distance_weight(2){
+      distance_weight(2),
+      recovery_carrot_dist(0.5){
       }
 };
 }  // namespace navigation
