@@ -28,6 +28,7 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
+#include <queue>
 
 #include "navigation.h"
 #include "geometry_msgs/PoseStamped.h"
@@ -140,6 +141,21 @@ struct GraphVisualizer {
   }
 
   const bool kVisualize;
+};
+
+struct PointCost {
+    int index;
+    double cost;
+    
+    // Constructor
+    PointCost(int k, double c) : index(k), cost(c) {}
+};
+
+struct CompareCost {
+    bool operator()(const PointCost& lhs, const PointCost& rhs) const {
+        // Using > for max heap (change to < for min heap)
+        return lhs.cost < rhs.cost;
+    }
 };
 
 }  // namespace
@@ -571,14 +587,16 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
     printf("No path found!\n");
   }
 
-  SimpleQueue<uint32_t, float> intermediate_queue; //<Location stored as <index, cost>
+  // SimpleQueue<uint32_t, float> intermediate_queue; //<Location stored as <index, cost>
+  std::priority_queue<PointCost, std::vector<PointCost>, CompareCost> intermediate_queue; //<Location stored as <index, cost>
+
   unordered_map<uint32_t, uint32_t> parent;
   unordered_map<uint32_t, float> cost;
 
   uint32_t mx = 0, my = 0;
   costmap_.worldToMap(0, 0, mx, my);
   uint32_t robot_index = costmap_.getIndex(mx, my);
-  intermediate_queue.Push(robot_index, 0);
+  intermediate_queue.push(PointCost(robot_index, 0));
   cost[robot_index] = 0;
 
   global_plan_path_ = path;
@@ -602,8 +620,13 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
 
   unordered_set<uint32_t> visited;
 
-  while(!intermediate_queue.Empty()){
-    uint32_t current_index = intermediate_queue.Pop();
+  while(!intermediate_queue.empty()){
+    uint32_t current_index = intermediate_queue.top().index;
+    intermediate_queue.pop();
+    if(visited.count(current_index) > 0){
+      continue;
+    }
+
     visited.insert(current_index);
 
     if(current_index == goal_index){
@@ -641,7 +664,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
           float heuristic_cost = max(dx, dy) + (sqrt(2.0) - 1.0) * min(dx, dy);
           
           // float heuristic_cost = (Vector2f(goal_map_x, goal_map_y) - Vector2f(new_row, new_col)).norm();
-          intermediate_queue.Push(neighbor_index, -(new_cost + heuristic_cost));
+          intermediate_queue.push(PointCost(neighbor_index, new_cost + heuristic_cost));
         }
       }   
     }
