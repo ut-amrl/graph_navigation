@@ -154,7 +154,7 @@ struct PointCost {
 struct CompareCost {
     bool operator()(const PointCost& lhs, const PointCost& rhs) const {
         // Using > for max heap (change to < for min heap)
-        return lhs.cost < rhs.cost;
+        return lhs.cost > rhs.cost;
     }
 };
 
@@ -274,10 +274,6 @@ void Navigation::LoadVectorMap(const string& map_file){ //Assume map is given as
               global_costmap_.setCost(mx + j, my + k, std::max(cost, global_costmap_.getCost(mx + j, my + k)));
               inflation_cells[global_costmap_.getIndex(mx + j, my + k)] = std::max(cost, global_costmap_.getCost(mx + j, my + k));
             }
-            // if((sqrt(pow(j, 2) + pow(k, 2)) <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) 
-            // && (my + k >= 0) && (my + k < y_max)){
-            //   inflation_cells.insert(global_costmap_.getIndex(mx + j, my + k));
-            // }
           }
         }
       }
@@ -307,7 +303,6 @@ void Navigation::Enable(bool enable) {
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
-  cout << "set nav goal goto" << endl;
   nav_state_ = NavigationState::kGoto;
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
@@ -587,7 +582,6 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
     printf("No path found!\n");
   }
 
-  // SimpleQueue<uint32_t, float> intermediate_queue; //<Location stored as <index, cost>
   std::priority_queue<PointCost, std::vector<PointCost>, CompareCost> intermediate_queue; //<Location stored as <index, cost>
 
   unordered_map<uint32_t, uint32_t> parent;
@@ -662,8 +656,6 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
           float dy = abs(goal_map_y - new_col);
 
           float heuristic_cost = max(dx, dy) + (sqrt(2.0) - 1.0) * min(dx, dy);
-          
-          // float heuristic_cost = (Vector2f(goal_map_x, goal_map_y) - Vector2f(new_row, new_col)).norm();
           intermediate_queue.push(PointCost(neighbor_index, new_cost + heuristic_cost));
         }
       }   
@@ -907,10 +899,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   const bool debug = FLAGS_v > 1;
 
-  if(debug){
-    printf("Running obstacle avoidance\n");
-  }
-
   // Handling potential carrot overrides from social nav
   Vector2f local_target = local_target_;
   if (nav_state_ == NavigationState::kOverride) {
@@ -1035,7 +1023,6 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
         s * dTheta,
         0,
         params_.dt);
-    cout << "turn in place test5: angle_vel = " << cmd_angle_vel << endl;
   }
   cmd_vel = {0, 0};
 }
@@ -1422,9 +1409,6 @@ bool Navigation::Run(const double& time,
       nav_state_ = NavigationState::kStopped;
     }
   } while (prev_state != nav_state_);
-
-  cout << "before switch" << endl;
-
   
   switch (nav_state_) {
     case NavigationState::kStopped: {
@@ -1472,7 +1456,6 @@ bool Navigation::Run(const double& time,
         TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
         if (kDebug) printf("ObstAv\n");
-        cout << "running obstacle avoidance original" << endl;
         RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
       }
     }
