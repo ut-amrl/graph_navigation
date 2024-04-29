@@ -929,22 +929,15 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     if (debug) printf("No best path found\n");
     // No valid path found!
     Eigen::Vector2f prev_local_target = local_target_;
-    // Eigen::Vector2f temp_target = GetPathGoal(params_.carrot_dist/2);
-    Eigen::Vector2f temp_target = GetPathGoal(params_.recovery_carrot_dist);
+    Eigen::Vector2f temp_target;
+    GetCarrot(temp_target, false, params_.recovery_carrot_dist);
+    // Eigen::Vector2f temp_target = GetPathGoal(params_.recovery_carrot_dist);
     local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
     TurnInPlace(vel_cmd, ang_vel_cmd);
     local_target_ = prev_local_target;
-    // Halt(vel_cmd, ang_vel_cmd);
     return;
   }
 
-  // else if(best_path->FPL() < params_.target_dist_tolerance/2){
-  //   Eigen::Vector2f prev_local_target = local_target_;
-  //   Eigen::Vector2f temp_target = GetPathGoal(params_.carrot_dist/2);
-  //   local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
-  //   TurnInPlace(vel_cmd, ang_vel_cmd);
-  //   local_target_ = prev_local_target;
-  // }
 
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};

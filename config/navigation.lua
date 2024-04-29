@@ -43,7 +43,7 @@ NavigationParameters = {
   intermediate_goal_dist = 10; 
   max_inflation_radius = 1;
   min_inflation_radius = 0.3;
-  local_costmap_resolution = 0.2;
+  local_costmap_resolution = 0.05;
   local_costmap_size = 20;
   global_costmap_resolution = 0.1;
   global_costmap_size_x = 100;
@@ -56,7 +56,7 @@ NavigationParameters = {
   object_lifespan = 15;
   inflation_coeff = 8;
   distance_weight = 3;
-  recovery_carrot_dist = 0.5;
+  recovery_carrot_dist = 0.7;
 };
 
 AckermannSampler = {
