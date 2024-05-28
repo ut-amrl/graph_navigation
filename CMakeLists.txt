@@ -91,37 +91,21 @@ target_precompile_headers(navigation
 ADD_EXECUTABLE(navigation_tests
     src/navigation/navigation_tests.cc
     src/navigation/motion_primitives.cc
+    src/navigation/load_model_test.cc
 )
 TARGET_LINK_LIBRARIES(navigation_tests
     gtest
     gtest_main
-    ${libs})
-
-ROSBUILD_ADD_EXECUTABLE(social_nav
-                        src/navigation/social_nav.cc
-                        src/navigation/social_main.cc
-                        src/navigation/motion_primitives.cc
-                        src/navigation/ackermann_motion_primitives.cc
-                        src/navigation/constant_curvature_arcs.cc
-                        src/navigation/image_tiler.cc
-                        src/navigation/linear_evaluator.cc
-                        src/navigation/deep_cost_map_evaluator.cc
-                        src/navigation/image_based_evaluator.cc
-                        src/navigation/navigation.cc
-                        src/navigation/terrain_evaluator.cc)
-TARGET_LINK_LIBRARIES(social_nav
-  shared_library
-  ${libs}
-  ${TORCH_LIBRARIES}
-  ${OpenCV_LIBS}
-  ${Boost_LIBRARIES}
-)
-target_precompile_headers(social_nav
+    ${TORCH_LIBRARIES}
+    ${OpenCV_LIBS}
+      ${libs})
+target_precompile_headers(navigation
   PRIVATE
     <torch/torch.h>
     <torch/script.h>
     <opencv2/opencv.hpp>
 )
 
+
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})
-add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})
+add_dependencies(navigation_tests ${catkin_EXPORTED_TARGETS})
