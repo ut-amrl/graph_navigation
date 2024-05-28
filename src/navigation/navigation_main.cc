@@ -860,11 +860,11 @@ int main(int argc, char** argv) {
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
   cv_bridge::CvImage viz_img;
-  if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain") {
+  if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain" || params.evaluator_type == "terrain2") {
     viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
   }
   cv_bridge::CvImage cost_img;
-  if (params.evaluator_type == "terrain") {
+  if (params.evaluator_type == "terrain" || params.evaluator_type == "terrain2") {
     cost_img = cv_bridge::CvImage(std_msgs::Header(), sensor_msgs::image_encodings::RGB8, navigation_.GetCostMapImage());
   }
   
@@ -895,11 +895,11 @@ int main(int argc, char** argv) {
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
-      if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain") {
+      if (params.evaluator_type == "cost_map" || params.evaluator_type == "terrain" || params.evaluator_type == "terrain2") {
         viz_img.image = navigation_.GetVisualizationImage();
         viz_img_pub_.publish(viz_img.toImageMsg());
       }
-      if (params.evaluator_type == "terrain") {
+      if (params.evaluator_type == "terrain" || params.evaluator_type == "terrain2") {
         cost_img.image = navigation_.GetCostMapImage();
         cost_img_pub_.publish(cost_img.toImageMsg());
       }

@@ -45,6 +45,7 @@
 #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
 #include "terrain_evaluator.h"
+#include "terrain_evaluator2.h"
 
 using Eigen::Rotation2Df;
 using Eigen::Vector2f;
@@ -167,6 +168,10 @@ void Navigation::Initialize(const NavigationParameters& params,
     evaluator_ = cost_map_evaluator;
   } else if (params_.evaluator_type == "terrain") {
     auto terrain_evaluator = std::make_shared<TerrainEvaluator>();
+    terrain_evaluator->LoadModel();
+    evaluator_ = terrain_evaluator;
+  } else if (params_.evaluator_type == "terrain2") {
+    auto terrain_evaluator = std::make_shared<CustomTerrainEvaluator>();
     terrain_evaluator->LoadModel();
     evaluator_ = terrain_evaluator;
   } else if (params_.evaluator_type == "linear") {
@@ -809,7 +814,7 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
 const cv::Mat& Navigation::GetVisualizationImage() {
   if (params_.evaluator_type == "cost_map") {
     return std::dynamic_pointer_cast<DeepCostMapEvaluator>(evaluator_)->latest_vis_image_;
-  } else if (params_.evaluator_type == "terrain") {
+  } else if (params_.evaluator_type == "terrain" || params_.evaluator_type == "terrain2") {
     return std::dynamic_pointer_cast<TerrainEvaluator>(evaluator_)->latest_vis_image_;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;

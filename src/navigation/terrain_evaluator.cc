@@ -43,8 +43,13 @@ bool TerrainEvaluator::LoadModel() {
   }
 
   try {
+    std::cout << "Loading model" << std::endl;
     cost_model_ = torch::jit::load(cost_model_path_, torch_device_);
     cost_model_.eval();
+
+    // print done loading 
+    std::cout << "Done loading model" << std::endl;
+
 
     return true;
   } catch (const c10::Error& e) {
@@ -57,6 +62,8 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
     const std::vector<std::shared_ptr<PathRolloutBase>>& paths) {
   // This reassignment is simply to reduce ambiguity.
   const cv::Mat3b& latest_bev_image = image;
+  // print the shape
+  std::cout << "latest bev image " << latest_bev_image.rows << " " << latest_bev_image.cols << std::endl;
 
   if (latest_bev_image.rows == 0) {
     // cannot plan if the image is not initialized
@@ -174,11 +181,22 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   }
 
   DrawPathCosts(paths, best_path);
+  // save the image to a file
+  // latest vis from rgb to bgr
+  cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_RGB2BGR);
+  cv::imwrite("latest_vis.png", latest_vis_image_);
+  cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_BGR2RGB);
+  cv::imwrite("latest_cost.png", latest_cost_image_);
+  exit(0);
+
 
   return best_path;
 }
 
 cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
+  // print old get scalar cost image
+  std::cout << "Old GetScalarCostImage" << std::endl;
+
   std::vector<torch::Tensor> bev_patch_tensors;
   std::vector<cv::Rect> bev_patch_rects;
 
@@ -357,12 +375,12 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
         color[1] = 255.0 * (2 - 2 * normalized_path_costs[i]);
       }
 
-      int thickness = 2;
+      int thickness = 0.5;
       if (paths[i] == best_path) {
         // a negative thickness value fills in the drawn circle
         thickness = -thickness;
       }
-      cv::circle(latest_vis_image_, cv::Point(P_image_state.x(), P_image_state.y()), 8, color,
+      cv::circle(latest_vis_image_, cv::Point(P_image_state.x(), P_image_state.y()), 2, color,
                  thickness, cv::LineTypes::LINE_AA);
     }
   }
@@ -370,6 +388,7 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
   const Eigen::Vector2f P_image_goal = GetImageLocation(latest_vis_image_, local_target);
   cv::drawMarker(latest_vis_image_, cv::Point(P_image_goal.x(), P_image_goal.y()), {255, 255, 255},
                  cv::MARKER_TILTED_CROSS, 32, 4, cv::LineTypes::LINE_AA);
+
 }
 
 }  // namespace motion_primitives
