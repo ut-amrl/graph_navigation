@@ -183,11 +183,11 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   DrawPathCosts(paths, best_path);
   // save the image to a file
   // latest vis from rgb to bgr
-  cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_RGB2BGR);
-  cv::imwrite("latest_vis.png", latest_vis_image_);
-  cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_BGR2RGB);
-  cv::imwrite("latest_cost.png", latest_cost_image_);
-  exit(0);
+  // cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_RGB2BGR);
+  // cv::imwrite("latest_vis.png", latest_vis_image_);
+  // cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_BGR2RGB);
+  // cv::imwrite("latest_cost.png", latest_cost_image_);
+  // exit(0);
 
 
   return best_path;
