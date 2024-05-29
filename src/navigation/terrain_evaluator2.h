@@ -7,7 +7,7 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
  torch::Tensor context_tensor_;
   CustomTerrainEvaluator() : TerrainEvaluator() {
     // todo: store the context as private variable
-    torch::jit::script::Module tensors = torch::jit::load("terrain_models/context.pt");
+    torch::jit::script::Module tensors = torch::jit::load("../terrain_models/context.pt");
     context_tensor_ = tensors.run_method("return_tensor").toTensor();
   }
 
@@ -87,11 +87,10 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
     torch::NoGradGuard no_grad;
 
     // Run the model with the inputs
-    auto output = cost_model_.forward(inputs).toTensor().to(torch::kCPU);
-    // auto output = cost_model_.run_method("forward_w_encoded_patches", inputs).toTensor();
+    auto output = cost_model_.forward(inputs).toTensor();
 
     // apply sigmoid to the output
-    output = torch::sigmoid(output);
+    output = torch::sigmoid(output).to(torch::kCPU);
 
     
     // Print the shape of the output

@@ -4,8 +4,7 @@ end
 
 NavigationParameters = {
   laser_topic = "velodyne_2dscan_highbeams";
-  odom_topic = "/odom";
-  -- odom_topic = "/odometry/filtered";
+  odom_topic = "/odometry/filtered";
   localization_topic = "localization";
   image_topic = "/bev/single/compressed";
   init_topic = "initialpose";
@@ -61,7 +60,7 @@ TerrainEvaluator = {
   -- discount_factor = 0.8; -- ahg demo
   rollout_density = 10;
 
-  model_path = "/home/dev/graph_navigation/terrain_models/model.pt";
+  model_path = "../terrain_models/model.pt";
 
   -- dist_to_goal_weight = -0.2;
   -- dist_to_goal_weight = -0.7;
