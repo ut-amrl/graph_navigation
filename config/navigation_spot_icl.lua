@@ -4,7 +4,7 @@ end
 
 NavigationParameters = {
   laser_topic = "velodyne_2dscan_highbeams";
-  odom_topic = "/odometry/filtered";
+  odom_topic = "/odom";
   localization_topic = "localization";
   image_topic = "/bev/single/compressed";
   init_topic = "initialpose";

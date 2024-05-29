@@ -81,13 +81,13 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
 
 
     std::vector<torch::jit::IValue> inputs;
-    inputs.push_back(context_tensor_);
-    inputs.push_back(img_tensor);
+    inputs.push_back(context_tensor_.to(torch_device_));
+    inputs.push_back(img_tensor.to(torch_device_));
 
     torch::NoGradGuard no_grad;
 
     // Run the model with the inputs
-    auto output = cost_model_.forward(inputs).toTensor();
+    auto output = cost_model_.forward(inputs).toTensor().to(torch::kCPU);
     // auto output = cost_model_.run_method("forward_w_encoded_patches", inputs).toTensor();
 
     // apply sigmoid to the output
