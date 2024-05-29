@@ -14,7 +14,7 @@ docker_all: docker_build_q
 	docker run --rm --volume "$(shell pwd)":/home/dev/graph_navigation graph_navigation "cd graph_navigation && make -j"
 
 docker_shell: docker_build_q
-	if [ $(shell docker ps -a -f name=graph_navigation_shell | wc -l) -ne 2 ]; then docker run -dit --name graph_navigation_shell --volume "$(shell pwd)":/home/dev/graph_navigation --workdir /home/dev/graph_navigation -p 10272:10272 graph_navigation; fi
+	if [ $(shell docker ps -a -f name=graph_navigation_shell | wc -l) -ne 2 ]; then xhost +local:root; docker run -dit --name graph_navigation_shell --volume "$(shell pwd)":/home/dev/graph_navigation --workdir /home/dev/graph_navigation -p 10272:10272 -e DISPLAY=$(DISPLAY) -v /tmp/.X11-unix:/tmp/.X11-unix graph_navigation; fi
 	docker exec -it graph_navigation_shell bash -l
 
 docker_stop:

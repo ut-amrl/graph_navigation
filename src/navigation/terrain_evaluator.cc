@@ -187,7 +187,12 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   // cv::imwrite("latest_vis.png", latest_vis_image_);
   // cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_BGR2RGB);
   // cv::imwrite("latest_cost.png", latest_cost_image_);
-  // exit(0);
+  // static int functionCallCount = 0;
+  // functionCallCount++;
+  // if (functionCallCount > 1) {
+  //   std::cout << "Exiting here" << std::endl;
+  //   exit(0);
+  // }
 
 
   return best_path;
@@ -375,19 +380,25 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
         color[1] = 255.0 * (2 - 2 * normalized_path_costs[i]);
       }
 
-      int thickness = 0.5;
+      int thickness = 2;
       if (paths[i] == best_path) {
         // a negative thickness value fills in the drawn circle
         thickness = -thickness;
       }
-      cv::circle(latest_vis_image_, cv::Point(P_image_state.x(), P_image_state.y()), 2, color,
+      cv::circle(latest_vis_image_, cv::Point(P_image_state.x(), P_image_state.y()), 8, color,
                  thickness, cv::LineTypes::LINE_AA);
     }
+
+    // print normalized path costs[i]
+    std::cout << "Normalized path costs " << normalized_path_costs[i] << std::endl;
   }
 
   const Eigen::Vector2f P_image_goal = GetImageLocation(latest_vis_image_, local_target);
   cv::drawMarker(latest_vis_image_, cv::Point(P_image_goal.x(), P_image_goal.y()), {255, 255, 255},
-                 cv::MARKER_TILTED_CROSS, 32, 4, cv::LineTypes::LINE_AA);
+                 cv::MARKER_TILTED_CROSS, 32, 8, cv::LineTypes::LINE_AA);
+  
+  // print he best path and its cost
+  std::cout << "Best path " << best_path << " " << normalized_path_costs[0] << std::endl;
 
 }
 

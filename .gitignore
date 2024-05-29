@@ -12,6 +12,7 @@ src/graph_navigation/__init__.py
 terrain_models
 terrain_models/*
 *.bag
+*.png
 
 # Prerequisites
 *.d

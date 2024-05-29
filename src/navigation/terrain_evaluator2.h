@@ -20,12 +20,34 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
 
   cv::Mat1f GetScalarCostImage(const cv::Mat3b& bev_image) override {
     // print here
-    std::cout << "Custom GetScalarCostImage" << std::endl;
+    // std::cout << "Custom GetScalarCostImage" << std::endl;
     cv::Mat3b latest_bev_image = image.clone();
     // print the shape
     std::cout << "latest bev image " << latest_bev_image.rows << " " << latest_bev_image.cols << std::endl;
+    int rows = latest_bev_image.rows;
+    int cols = latest_bev_image.cols;
     // print the number of channels
     std::cout << "latest bev image channels " << latest_bev_image.channels() << std::endl;
+
+    // // for debugging
+    // cv::Mat1f scalar_cost_map(rows, cols);
+    // // make the left half of the image black and the right half white
+    // for (int i = 0; i < scalar_cost_map.rows; i++) {
+    //   for (int j = 0; j < scalar_cost_map.cols; j++) {
+    //     if (j < scalar_cost_map.cols / 2) {
+    //       scalar_cost_map.at<float>(i, j) = 0;
+    //     } else {
+    //       scalar_cost_map.at<float>(i, j) = 1;
+    //     }
+    //   }
+    // }
+
+    // // write the latest_bev_image to a file
+    // cv::imwrite("latest_bev_image.png", latest_bev_image);
+    // // write the scalar_cost_map to a file
+    // cv::imwrite("scalar_cost_map.png", scalar_cost_map*255);
+    // return scalar_cost_map;
+
 
     // resize the image
     cv::resize(latest_bev_image, latest_bev_image, cv::Size(256, 128));
@@ -39,18 +61,18 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
     img_tensor = img_tensor / 255.0;
 
     // print the context shape
-    std::cout << "Context shape: ";
-    for (auto& size : context_tensor_.sizes()) {
-    std::cout << size << " ";
-    }
-    std::cout << std::endl;
+    // std::cout << "Context shape: ";
+    // for (auto& size : context_tensor_.sizes()) {
+    // std::cout << size << " ";
+    // }
+    // std::cout << std::endl;
     
 
     // print the shape
-    std::cout << "Image shape: ";
-    for (auto& size : img_tensor.sizes()) {
-    std::cout << size << " ";
-    }
+    // std::cout << "Image shape: ";
+    // for (auto& size : img_tensor.sizes()) {
+    // std::cout << size << " ";
+    // }
 
     // print the min and max
     std::cout << std::endl;
@@ -71,6 +93,7 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
     // apply sigmoid to the output
     output = torch::sigmoid(output);
 
+    
     // Print the shape of the output
     std::cout << "Output shape: ";
     for (auto& size : output.sizes()) {
@@ -86,13 +109,18 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
     cv::Mat1f scalar_cost_map(output.size(2), output.size(3));
     std::memcpy(scalar_cost_map.data, output.data_ptr(), output.numel() * sizeof(float));
 
+    // resize the scalar_cost_map to the original size
+    cv::resize(scalar_cost_map, scalar_cost_map, cv::Size(cols, rows));
+    // print the new size
+    // std::cout << "Scalar cost map size: " << scalar_cost_map.rows << " " << scalar_cost_map.cols << std::endl;
+
     // todo: out-of-view cost
 
 
 
-    // write the latest_bev_image to a file
+    // // write the latest_bev_image to a file
     // cv::imwrite("latest_bev_image.png", latest_bev_image);
-    // write the scalar_cost_map to a file
+    // // write the scalar_cost_map to a file
     // cv::imwrite("scalar_cost_map.png", scalar_cost_map*255);
 
     // return the output

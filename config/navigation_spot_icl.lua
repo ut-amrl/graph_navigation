@@ -4,7 +4,8 @@ end
 
 NavigationParameters = {
   laser_topic = "velodyne_2dscan_highbeams";
-  odom_topic = "odom";
+  odom_topic = "/odom";
+  -- odom_topic = "/odometry/filtered";
   localization_topic = "localization";
   image_topic = "/bev/single/compressed";
   init_topic = "initialpose";
@@ -24,13 +25,14 @@ NavigationParameters = {
   carrot_dist = 250;  -- large carrot distance so the goal does not latch onto the map
   system_latency = 0.24;
   obstacle_margin = 0.15;
-  num_options = 31;
+  num_options = 11;
   -- num_options = 15;
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
-  -- max_free_path_length = 4.0;
-  max_free_path_length = 3.5;  -- ahg demo
+  max_free_path_length = 4.0;
+  -- max_free_path_length = 3.5;  -- ahg demo
+  -- max_free_path_length = 1;  -- ahg demo
   max_clearance = 1.0;
   can_traverse_stairs = false;
   evaluator_type = "terrain2";
@@ -46,11 +48,12 @@ NavigationParameters = {
 
 AckermannSampler = {
   max_curvature = 2.5;
+  -- max_curvature = 5;
   clearance_path_clip_fraction = 0.8;
 };
 
 TerrainEvaluator = {
-  patch_size_pixels = 64;
+  patch_size_pixels = 1;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
   max_cost = 1;
@@ -62,7 +65,8 @@ TerrainEvaluator = {
 
   -- dist_to_goal_weight = -0.2;
   -- dist_to_goal_weight = -0.7;
-  dist_to_goal_weight = -2.0;
+  -- dist_to_goal_weight = -2.0;
+  dist_to_goal_weight = 0;
 
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;
