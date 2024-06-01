@@ -1,13 +1,16 @@
 #include "terrain_evaluator.h"
 
 namespace motion_primitives {
+CONFIG_STRING(context_path, "Context.context_path");
+
+
 
 class CustomTerrainEvaluator : public TerrainEvaluator {
  public:
  torch::Tensor context_tensor_;
   CustomTerrainEvaluator() : TerrainEvaluator() {
     // todo: store the context as private variable
-    torch::jit::script::Module tensors = torch::jit::load("../terrain_models/context.pt");
+    torch::jit::script::Module tensors = torch::jit::load(CONFIG_context_path);
     context_tensor_ = tensors.run_method("return_tensor").toTensor();
   }
 

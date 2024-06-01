@@ -51,6 +51,10 @@ AckermannSampler = {
   clearance_path_clip_fraction = 0.8;
 };
 
+Context = {
+  context_path="terrain_models/context.pt";
+}
+
 TerrainEvaluator = {
   patch_size_pixels = 1;
   bev_pixels_per_meter = 150;
