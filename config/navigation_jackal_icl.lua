@@ -61,6 +61,7 @@ TerrainEvaluator = {
   rollout_density = 10;
 
   model_path = "../terrain_models/model.pt";
+  context_path="../terrain_models/context.pt";
 
   -- dist_to_goal_weight = -0.2;
   -- dist_to_goal_weight = -0.7;
