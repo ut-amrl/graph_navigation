@@ -34,7 +34,7 @@ NavigationParameters = {
   -- max_free_path_length = 1;  -- ahg demo
   max_clearance = 1.0;
   can_traverse_stairs = false;
-  evaluator_type = "terrain2";
+  evaluator_type = "terrain";
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "";
   local_fov = deg2rad(180);  -- do not turn in place when the goal is behind the robot
@@ -52,7 +52,7 @@ AckermannSampler = {
 };
 
 TerrainEvaluator = {
-  patch_size_pixels = 1;
+  patch_size_pixels = 64;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
   max_cost = 1;
@@ -60,7 +60,7 @@ TerrainEvaluator = {
   -- discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  model_path = "../terrain_models/model.pt";
+  model_path = "../terrain_models/sterling_model.pt";
 
   -- dist_to_goal_weight = -0.2;
   -- dist_to_goal_weight = -0.7;

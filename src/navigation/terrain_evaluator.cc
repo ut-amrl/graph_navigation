@@ -390,7 +390,7 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
     }
 
     // print normalized path costs[i]
-    std::cout << "Normalized path costs " << normalized_path_costs[i] << std::endl;
+    // std::cout << "Normalized path costs " << normalized_path_costs[i] << std::endl;
   }
 
   const Eigen::Vector2f P_image_goal = GetImageLocation(latest_vis_image_, local_target);
@@ -398,7 +398,7 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
                  cv::MARKER_TILTED_CROSS, 32, 8, cv::LineTypes::LINE_AA);
   
   // print he best path and its cost
-  std::cout << "Best path " << best_path << " " << normalized_path_costs[0] << std::endl;
+  // std::cout << "Best path " << best_path << " " << normalized_path_costs[0] << std::endl;
 
 }
 
