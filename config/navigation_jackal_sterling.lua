@@ -17,7 +17,7 @@ NavigationParameters = {
   max_linear_accel = 0.5;
   max_linear_decel = 0.5;
   -- max_linear_speed = 1.4;
-  max_linear_speed = 1.5;
+  max_linear_speed = 0.8;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
@@ -63,9 +63,9 @@ TerrainEvaluator = {
   model_path = "../terrain_models/sterling_model.pt";
 
   -- dist_to_goal_weight = -0.2;
-  -- dist_to_goal_weight = -0.7;
+  dist_to_goal_weight = -0.7;
   -- dist_to_goal_weight = -2.0;
-  dist_to_goal_weight = 0;
+  --  dist_to_goal_weight = 0;
 
   clearance_weight = 0; -- -0.25;
   fpl_weight = 0; -- -0.75;

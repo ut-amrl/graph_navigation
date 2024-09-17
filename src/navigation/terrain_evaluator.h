@@ -12,7 +12,7 @@ namespace motion_primitives {
 
 class TerrainEvaluator : public PathEvaluatorBase {
  public:
-  TerrainEvaluator();
+  TerrainEvaluator(const navigation::NavigationParameters& params);
 
   bool LoadModel();
 
@@ -34,11 +34,12 @@ class TerrainEvaluator : public PathEvaluatorBase {
 
  protected:
   /**
-   * Returns whether the specified [x, y] image coordinate is a valid pixel of the
-   * specified image.
+   * Returns whether the specified [x, y] image coordinate is a valid pixel of
+   * the specified image.
    */
   template <typename ScalarT>
-  bool ImageBoundCheck(const cv::Mat& image, const Eigen::Matrix<ScalarT, 2, 1>& P_image) {
+  bool ImageBoundCheck(const cv::Mat& image,
+                       const Eigen::Matrix<ScalarT, 2, 1>& P_image) {
     return 0 <= P_image.x() && P_image.x() < image.cols && 0 <= P_image.y() &&
            P_image.y() < image.rows;
   }
@@ -47,13 +48,15 @@ class TerrainEvaluator : public PathEvaluatorBase {
    * Return the approximate pixel location of a coordinate in the robot's local
    * reference frame.
    */
-  Eigen::Vector2f GetImageLocation(const cv::Mat3b& img, const Eigen::Vector2f& P_robot);
+  Eigen::Vector2f GetImageLocation(const cv::Mat3b& img,
+                                   const Eigen::Vector2f& P_robot);
 
   /**
    * Get the binned (multiple of patch size) patch bounding image coordinates
    * corresponding to a coordinate in the robot's local reference frame.
    */
-  cv::Rect GetPatchRectAtLocation(const cv::Mat3b& img, const Eigen::Vector2f& P_robot);
+  cv::Rect GetPatchRectAtLocation(const cv::Mat3b& img,
+                                  const Eigen::Vector2f& P_robot);
 
   /**
    * Annotates the latest_vis_image with intermediate points along each path
@@ -67,10 +70,12 @@ class TerrainEvaluator : public PathEvaluatorBase {
                      std::shared_ptr<PathRolloutBase> best_path);
 
  public:
-  // TODO: this is public to match DeepCostMapEvaluator: perhaps an accessor method
-  // is more appropriate.
-  cv::Mat3b latest_vis_image_ = cv::Mat3b::zeros(8, 8);  // has trajectory rollouts
-  cv::Mat3b latest_cost_image_ = cv::Mat3b::zeros(8, 8);  // does not have trajectory rollouts
+  // TODO: this is public to match DeepCostMapEvaluator: perhaps an accessor
+  // method is more appropriate.
+  cv::Mat3b latest_vis_image_ =
+      cv::Mat3b::zeros(8, 8);  // has trajectory rollouts
+  cv::Mat3b latest_cost_image_ =
+      cv::Mat3b::zeros(8, 8);  // does not have trajectory rollouts
 
   std::vector<float> path_costs_;
 
@@ -80,6 +85,7 @@ class TerrainEvaluator : public PathEvaluatorBase {
   std::string cost_model_path_;
   torch::jit::Module cost_model_;
   torch::Device torch_device_;
+  const navigation::NavigationParameters& params_;
 
   // Use CONFIG_* macros directly for automatic lua script reloading.
   /*

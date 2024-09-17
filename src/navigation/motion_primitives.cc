@@ -19,6 +19,8 @@
 */
 //========================================================================
 
+#include "motion_primitives.h"
+
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -27,32 +29,27 @@
 #include <memory>
 #include <vector>
 
+#include "eigen3/Eigen/Dense"
 #include "math/line2d.h"
 #include "math/poses_2d.h"
-#include "eigen3/Eigen/Dense"
-
-#include "shared/math/math_util.h"
-#include "motion_primitives.h"
 #include "navigation_parameters.h"
+#include "shared/math/math_util.h"
 
 using Eigen::Vector2f;
+using navigation::MotionLimits;
 using std::max;
 using std::min;
 using std::shared_ptr;
 using std::string;
 using std::vector;
-using navigation::MotionLimits;
 using namespace math_util;
 using namespace geometry;
 
 namespace motion_primitives {
 
-float Run1DTimeOptimalControl(const MotionLimits& limits, 
-                              const float x_now, 
-                              const float v_now, 
-                              const float x_final, 
-                              const float v_final,
-                              const float dt) {
+float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now,
+                              const float v_now, const float x_final,
+                              const float v_final, const float dt) {
   // Non-zero final vel not yet implemented.
   CHECK_EQ(v_final, 0.0f) << "Non-zero final vel not yet implemented!";
   static FILE* fid = nullptr;
@@ -70,10 +67,9 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
       (speed + 0.5 * dv_a) * dt +
       Sq(speed + dv_a) / (2.0 * limits.max_deceleration);
   float cruise_stopping_dist =
-      speed * dt +
-      Sq(speed) / (2.0 * limits.max_deceleration);
+      speed * dt + Sq(speed) / (2.0 * limits.max_deceleration);
   char phase = '?';
-  if (dist_left >  0) {
+  if (dist_left > 0) {
     if (speed > limits.max_speed) {
       // Over max speed, slow down.
       phase = 'O';
@@ -96,35 +92,23 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
     velocity_cmd = max<float>(0, speed - dv_d);
   }
   if (kTest) {
-    printf("%c x:%f dist_left:%f a_dist:%f c_dist:%f v:%f cmd:%f\n",
-           phase,
-           x_now,
-           dist_left,
-           accel_stopping_dist,
-           cruise_stopping_dist,
-           v_now,
+    printf("%c x:%f dist_left:%f a_dist:%f c_dist:%f v:%f cmd:%f\n", phase,
+           x_now, dist_left, accel_stopping_dist, cruise_stopping_dist, v_now,
            velocity_cmd);
     if (fid != nullptr) {
-      fprintf(fid, "%f %f %f %f %f %f\n",
-              x_now,
-              dist_left,
-              accel_stopping_dist,
-              cruise_stopping_dist,
-              v_now,
-              velocity_cmd);
+      fprintf(fid, "%f %f %f %f %f %f\n", x_now, dist_left, accel_stopping_dist,
+              cruise_stopping_dist, v_now, velocity_cmd);
       fflush(fid);
     }
   }
   return velocity_cmd;
 }
 
-
-float StraightLineClearance(const Line2f& l, 
-                            const vector<Vector2f>& points) {
+float StraightLineClearance(const Line2f& l, const vector<Vector2f>& points) {
   const Vector2f d = l.Dir();
   const float len = l.Length();
   float clearance = FLT_MAX;
-  for (const Vector2f& p  : points) {
+  for (const Vector2f& p : points) {
     const float x = d.dot(p - l.p0);
     if (x < 0.0f || x > len) continue;
     clearance = min<float>(clearance, l.Distance(p));

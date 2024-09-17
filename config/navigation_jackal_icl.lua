@@ -3,37 +3,38 @@ function deg2rad(deg)
 end
 
 NavigationParameters = {
-  laser_topic = "velodyne_2dscan_highbeams";
+  laser_topic = "/velodyne_2dscan_lowbeam";
   odom_topic = "/odometry/filtered";
   localization_topic = "localization";
   image_topic = "/bev/single/compressed";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
   laser_loc = {
-    x = 0.065;
-    y = 0;
+    x = 0.095;
+    y = 0.1;
   };
   dt = 0.025;
-  max_linear_accel = 0.5;
-  max_linear_decel = 0.5;
+  max_linear_accel = 0.3;
+  max_linear_decel = 0.3;
   -- max_linear_speed = 1.4;
-  max_linear_speed = 1.5;
+  max_linear_speed = 1.0;
   max_angular_accel = 0.5;
-  max_angular_decel = 0.5;
+  max_angular_decel = 0.3; -- 0.5
   max_angular_speed = 1.0;
   carrot_dist = 250;  -- large carrot distance so the goal does not latch onto the map
-  system_latency = 0.24;
-  obstacle_margin = 0.15;
-  num_options = 31;
+  system_latency = 0.24; -- 0.24
+  obstacle_margin = 0.2; -- 0.15
+  num_options = 21;
   -- num_options = 15;
-  robot_width = 0.44;
-  robot_length = 0.5;
+  robot_width = 0.2;
+  robot_length = 0.4;
   base_link_offset = 0;
-  max_free_path_length = 4.0;
+  max_free_path_length = 7.5;
   -- max_free_path_length = 3.5;  -- ahg demo
   -- max_free_path_length = 1;  -- ahg demo
   max_clearance = 1.0;
   can_traverse_stairs = false;
+  -- evaluator_type = "linear";
   evaluator_type = "terrain2";
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "";
@@ -46,29 +47,28 @@ NavigationParameters = {
 };
 
 AckermannSampler = {
-  max_curvature = 2.5;
+  max_curvature = 0.5;
   -- max_curvature = 5;
   clearance_path_clip_fraction = 0.8;
 };
+
+Context = {
+  context_path="../terrain_models/realistic_context.pt";
+}
 
 TerrainEvaluator = {
   patch_size_pixels = 1;
   bev_pixels_per_meter = 150;
   min_cost = 0.0;
-  max_cost = 1;
+  max_cost = 1.0;
   discount_factor = 0.9;
   -- discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
   model_path = "../terrain_models/model.pt";
-  context_path="../terrain_models/context.pt";
 
-  -- dist_to_goal_weight = -0.2;
-  -- dist_to_goal_weight = -0.7;
-  -- dist_to_goal_weight = -2.0;
-  dist_to_goal_weight = 0;
-
-  clearance_weight = 0; -- -0.25;
-  fpl_weight = 0; -- -0.75;
-  terrain_weight = 4.0;
+  dist_to_goal_weight = 0.0;
+  clearance_weight = -0.25; -- [0, max_clearance] 
+  fpl_weight = -0.1; -- [0, max_free_path_length] -> [0, -0.75]
+  terrain_weight = 0.0; -- [0, 1] Usually <1 due to discounting factor + norm cost
 }

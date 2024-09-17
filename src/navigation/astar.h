@@ -33,6 +33,7 @@
 
 // Project headers.
 #include "shared/math/math_util.h"
+#include "shared/util/timer.h"
 #include "simple_queue.h"
 
 #ifndef A_STAR_H
@@ -92,10 +93,8 @@ struct NodeHash {
 
 template <class Domain, class Visualizer>
 bool AStar(const typename Domain::State& start,
-           const typename Domain::State& goal,
-           const Domain& domain,
-           Visualizer* const viz,
-           std::vector<typename Domain::State>* path) {
+           const typename Domain::State& goal, const Domain& domain,
+           Visualizer* const viz, std::vector<typename Domain::State>* path) {
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   static const uint64_t kMaxEdgeExpansions = 1000;
@@ -127,10 +126,8 @@ bool AStar(const typename Domain::State& start,
     // Get the node with the highest priority.
     const uint64_t k_current = queue.Pop();
     if (kDebug) {
-      printf("Add to closed: %5lu  g:%8.3f h:%8.3f\n",
-             k_current,
-             g_values_[k_current],
-             domain.Heuristic(k_current, k_goal));
+      printf("Add to closed: %5lu  g:%8.3f h:%8.3f\n", k_current,
+             g_values_[k_current], domain.Heuristic(k_current, k_goal));
     }
     closed_set_.insert(k_current);
     // Get all neighbors.
@@ -182,7 +179,6 @@ bool AStar(const typename Domain::State& start,
   // Priority queue is exhausted, but path not found. No path exists.
   return false;
 }
-
 
 }  // namespace navigation
 #endif  // A_STAR_H

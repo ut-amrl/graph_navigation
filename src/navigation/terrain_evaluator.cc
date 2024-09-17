@@ -27,9 +27,11 @@ CONFIG_FLOAT(clearance_weight, "TerrainEvaluator.clearance_weight");
 CONFIG_FLOAT(fpl_weight, "TerrainEvaluator.fpl_weight");
 CONFIG_FLOAT(terrain_weight, "TerrainEvaluator.terrain_weight");
 
-TerrainEvaluator::TerrainEvaluator()
+TerrainEvaluator::TerrainEvaluator(
+    const navigation::NavigationParameters& params)
     : cost_model_path_(CONFIG_model_path),
-      torch_device_(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {}
+      torch_device_(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
+      params_(params) {}
 
 bool TerrainEvaluator::LoadModel() {
   // Following the pytorch tutorial:
@@ -47,9 +49,8 @@ bool TerrainEvaluator::LoadModel() {
     cost_model_ = torch::jit::load(cost_model_path_, torch_device_);
     cost_model_.eval();
 
-    // print done loading 
+    // print done loading
     std::cout << "Done loading model" << std::endl;
-
 
     return true;
   } catch (const c10::Error& e) {
@@ -62,8 +63,12 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
     const std::vector<std::shared_ptr<PathRolloutBase>>& paths) {
   // This reassignment is simply to reduce ambiguity.
   const cv::Mat3b& latest_bev_image = image;
-  // print the shape
-  std::cout << "latest bev image " << latest_bev_image.rows << " " << latest_bev_image.cols << std::endl;
+
+  if (FLAGS_v > 3) {
+    // print the shape
+    std::cout << "latest bev image " << latest_bev_image.rows << " "
+              << latest_bev_image.cols << std::endl;
+  }
 
   if (latest_bev_image.rows == 0) {
     // cannot plan if the image is not initialized
@@ -83,16 +88,16 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   latest_cost_image_ = GetRGBCostImage(cost_image);
   latest_cost_image_.copyTo(latest_vis_image_);
 
-  // TODO(eyang): skipped a bunch of code dealing with other factors: distance to goal,
-  // clearance, progress, etc.
+  // TODO(eyang): skipped a bunch of code dealing with other factors: distance
+  // to goal, clearance, progress, etc.
 
   // Don't consider paths with endpoints that are blocked from the goal.
   std::vector<float> endpoint_clearance_to_goal(paths.size(), 0.0f);
   std::vector<float> endpoint_dist_to_goal(paths.size(), local_target.norm());
   for (size_t i = 0; i < paths.size(); ++i) {
     const Eigen::Vector2f path_endpoint = paths[i]->EndPoint().translation;
-    endpoint_clearance_to_goal[i] =
-        StraightLineClearance(geometry::Line2f(path_endpoint, local_target), point_cloud);
+    endpoint_clearance_to_goal[i] = StraightLineClearance(
+        geometry::Line2f(path_endpoint, local_target), point_cloud);
     // TODO(eyang): should this be a hyperparameter?
     if (endpoint_clearance_to_goal[i] > 0.05) {
       endpoint_dist_to_goal[i] = (path_endpoint - local_target).norm();
@@ -105,17 +110,19 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
     float weight_sum = 0.0f;
 
     for (int j = 0; j <= CONFIG_rollout_density; j++) {
-      const pose_2d::Pose2Df state =
-          paths[i]->GetIntermediateState(static_cast<float>(j) / CONFIG_rollout_density);
+      const pose_2d::Pose2Df state = paths[i]->GetIntermediateState(
+          static_cast<float>(j) / CONFIG_rollout_density);
       const Eigen::Vector2i P_image_state =
           GetImageLocation(latest_bev_image, state.translation).cast<int>();
 
       // TODO: eventually in this case, ascribe the "out-of-view point" cost
       if (!ImageBoundCheck(cost_image, P_image_state)) {
-        LOG(ERROR) << "Cost image query point is outside the bounds of the image.";
+        LOG(ERROR)
+            << "Cost image query point is outside the bounds of the image.";
       }
 
-      const float center_cost = cost_image.at<float>(P_image_state.y(), P_image_state.x());
+      const float center_cost =
+          cost_image.at<float>(P_image_state.y(), P_image_state.x());
       if (center_cost > CONFIG_max_cost) {
         // indicates this point is not visible
         continue;
@@ -125,9 +132,8 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
       float cost = 0;
       int num_valid_wheels = 0;
 
-      // TODO(eyang): use the robot width and length from config
-      const float robot_length = 0.6;
-      const float robot_width = 0.6;
+      const float robot_length = params_.robot_length;
+      const float robot_width = params_.robot_width;
       const Eigen::Rotation2Df state_rotation(state.angle);
 
       for (int i = 0; i < 4; i++) {
@@ -135,9 +141,12 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
         const int x_side = 1 - (i & 0b10);
         const int y_side = 1 - 2 * (i & 0b1);
 
-        const Eigen::Vector2f P_robot_corner(x_side * robot_length / 2, y_side * robot_width / 2);
+        const Eigen::Vector2f P_robot_corner(x_side * robot_length / 2,
+                                             y_side * robot_width / 2);
         const Eigen::Vector2i P_image_corner =
-            GetImageLocation(latest_bev_image, state.translation + state_rotation * P_robot_corner)
+            GetImageLocation(
+                latest_bev_image,
+                state.translation + state_rotation * P_robot_corner)
                 .cast<int>();
 
         if (ImageBoundCheck(cost_image, P_image_corner)) {
@@ -152,7 +161,8 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
         cost = CONFIG_max_cost;
       }
 
-      const float weight = std::pow(CONFIG_discount_factor, state.translation.norm());
+      const float weight =
+          std::pow(CONFIG_discount_factor, state.translation.norm());
       terrain_costs[i] += weight * cost;
       weight_sum += weight;
     }
@@ -170,9 +180,22 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   path_costs_ = std::vector<float>(paths.size(), best_path_cost);
   for (size_t i = 0; i < paths.size(); ++i) {
     const float path_progress = local_target.norm() - endpoint_dist_to_goal[i];
-    path_costs_[i] =
-        CONFIG_dist_to_goal_weight * path_progress + CONFIG_clearance_weight * paths[i]->FPL() +
-        CONFIG_clearance_weight * paths[i]->Clearance() + CONFIG_terrain_weight * terrain_costs[i];
+    path_costs_[i] = CONFIG_dist_to_goal_weight * path_progress +
+                     CONFIG_fpl_weight * paths[i]->FPL() +
+                     CONFIG_clearance_weight * paths[i]->Clearance() +
+                     CONFIG_terrain_weight * terrain_costs[i];
+    if (FLAGS_v > 3) {
+      printf("--- PRINTING PATH %ld COSTS ---\n", i);
+      printf("Progress: %f Progress Weight: %f\n", path_progress,
+             CONFIG_dist_to_goal_weight);
+      printf("Clearance: %f Clearance Weight: %f\n", paths[i]->Clearance(),
+             CONFIG_clearance_weight);
+      printf("FPL: %f FPL Weight: %f\n", paths[i]->FPL(), CONFIG_fpl_weight);
+      printf("Terrain: %f Terrain Weight: %f\n", terrain_costs[i],
+             CONFIG_terrain_weight);
+      printf("Total Cost: %f\n", path_costs_[i]);
+      printf("Best Path Cost: %f\n\n", best_path_cost);
+    }
 
     if (path_costs_[i] < best_path_cost) {
       best_path_cost = path_costs_[i];
@@ -183,8 +206,8 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   DrawPathCosts(paths, best_path);
   // save the image to a file
   // latest vis from rgb to bgr
-  // cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_RGB2BGR);
-  // cv::imwrite("latest_vis.png", latest_vis_image_);
+  cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_RGB2BGR);
+  cv::imwrite("latest_vis.png", latest_vis_image_);
   // cv::cvtColor(latest_vis_image_, latest_vis_image_, cv::COLOR_BGR2RGB);
   // cv::imwrite("latest_cost.png", latest_cost_image_);
   // static int functionCallCount = 0;
@@ -193,7 +216,6 @@ std::shared_ptr<PathRolloutBase> TerrainEvaluator::FindBest(
   //   std::cout << "Exiting here" << std::endl;
   //   exit(0);
   // }
-
 
   return best_path;
 }
@@ -211,7 +233,8 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
     for (int col = 0; col + CONFIG_patch_size_pixels <= bev_image.cols;
          col += CONFIG_patch_size_pixels) {
       // x, y, width, height
-      const cv::Rect bev_patch_roi(col, row, CONFIG_patch_size_pixels, CONFIG_patch_size_pixels);
+      const cv::Rect bev_patch_roi(col, row, CONFIG_patch_size_pixels,
+                                   CONFIG_patch_size_pixels);
 
       // Need to clone the patch into its own Mat because the underlying data
       // pointer of the submat is of the original image. The old code didn't
@@ -234,7 +257,8 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
       }
 
       torch::Tensor bev_patch_tensor = torch::from_blob(
-          bev_patch.data, {bev_patch.rows, bev_patch.cols, bev_patch.channels()}, torch::kByte);
+          bev_patch.data,
+          {bev_patch.rows, bev_patch.cols, bev_patch.channels()}, torch::kByte);
 
       // Clone the tensor to take ownership of the underlying cv::Mat3b patch
       // data that will go out of scope.
@@ -243,10 +267,11 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
       // This conversion might be necessary if the model's forward does not
       // convert the tensor to float. The model's expected behavior should be
       // standardized.
-      // bev_patch_tensor = bev_patch_tensor.to(torch::kFloat);
+      bev_patch_tensor = bev_patch_tensor.to(torch::kFloat);
 
-      bev_patch_tensor = bev_patch_tensor.flip(2);  // BGR -> RGB
-
+      // bev_patch_tensor = bev_patch_tensor.flip(2);  // BGR -> RGB
+      // normalize
+      bev_patch_tensor = bev_patch_tensor.to(torch::kFloat32) / 255.0;
       bev_patch_tensor = bev_patch_tensor.permute({2, 0, 1});
 
       bev_patch_tensors.push_back(bev_patch_tensor);
@@ -254,25 +279,29 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
     }
   }
 
-  torch::Tensor all_input_tensors = torch::stack(bev_patch_tensors).to(torch_device_);
+  torch::Tensor all_input_tensors =
+      torch::stack(bev_patch_tensors).to(torch_device_);
 
   torch::NoGradGuard no_grad;
   const size_t BATCH_SIZE = 32;
-  const int N_BATCHES = (bev_patch_tensors.size() + BATCH_SIZE - 1) / BATCH_SIZE;
+  const int N_BATCHES =
+      (bev_patch_tensors.size() + BATCH_SIZE - 1) / BATCH_SIZE;
   std::vector<torch::Tensor> batch_outputs;
 
   for (int batch = 0; batch < N_BATCHES; ++batch) {
     int batch_start_idx = batch * BATCH_SIZE;
-    int batch_end_idx = std::min(batch_start_idx + BATCH_SIZE, bev_patch_tensors.size());
+    int batch_end_idx =
+        std::min(batch_start_idx + BATCH_SIZE, bev_patch_tensors.size());
 
-    torch::Tensor batch_tensor =
-        all_input_tensors.index({torch::indexing::Slice(batch_start_idx, batch_end_idx)});
+    torch::Tensor batch_tensor = all_input_tensors.index(
+        {torch::indexing::Slice(batch_start_idx, batch_end_idx)});
 
     // Type conversion to a vector of IValues is necessary for Module::forward
     std::vector<torch::jit::IValue> model_inputs;
     model_inputs.push_back(batch_tensor);
 
-    batch_outputs.push_back(cost_model_.forward(model_inputs).toTensor().to(torch::kCPU));
+    batch_outputs.push_back(
+        cost_model_.forward(model_inputs).toTensor().to(torch::kCPU));
   }
 
   torch::Tensor model_output_tensor = torch::cat(batch_outputs, 0).squeeze();
@@ -290,21 +319,26 @@ cv::Mat1f TerrainEvaluator::GetScalarCostImage(const cv::Mat3b& bev_image) {
   return cost_image;
 }
 
-cv::Mat3b TerrainEvaluator::GetRGBCostImage(const cv::Mat1f& scalar_cost_image) {
-  cv::Mat3b rgb_cost_image = cv::Mat3b(scalar_cost_image.rows, scalar_cost_image.cols);
+cv::Mat3b TerrainEvaluator::GetRGBCostImage(
+    const cv::Mat1f& scalar_cost_image) {
+  cv::Mat3b rgb_cost_image =
+      cv::Mat3b(scalar_cost_image.rows, scalar_cost_image.cols);
 
-  cv::Mat1f intensity = (scalar_cost_image - CONFIG_min_cost) / (CONFIG_max_cost - CONFIG_min_cost);
+  cv::Mat1f intensity = (scalar_cost_image - CONFIG_min_cost) /
+                        (CONFIG_max_cost - CONFIG_min_cost);
   // Clamp the intensity values
   cv::min(intensity, 1.f, intensity);
   cv::max(intensity, 0.f, intensity);
   // Convert to byte range
   intensity *= 255;
 
-  // TODO(eyang): there might be a builtin function that can do this copy more effiently
+  // TODO(eyang): there might be a builtin function that can do this copy more
+  // effiently
   for (int row = 0; row < rgb_cost_image.rows; ++row) {
     for (int col = 0; col < rgb_cost_image.cols; ++col) {
       if (scalar_cost_image(row, col) <= CONFIG_max_cost) {
-        rgb_cost_image.at<cv::Vec3b>(row, col) = cv::Vec3b::all(intensity(row, col));
+        rgb_cost_image.at<cv::Vec3b>(row, col) =
+            cv::Vec3b::all(intensity(row, col));
       } else {
         rgb_cost_image.at<cv::Vec3b>(row, col) = cv::Vec3b(255, 0, 0);
       }
@@ -314,14 +348,14 @@ cv::Mat3b TerrainEvaluator::GetRGBCostImage(const cv::Mat1f& scalar_cost_image) 
   return rgb_cost_image;
 }
 
-Eigen::Vector2f TerrainEvaluator::GetImageLocation(const cv::Mat3b& img,
-                                                   const Eigen::Vector2f& P_robot) {
+Eigen::Vector2f TerrainEvaluator::GetImageLocation(
+    const cv::Mat3b& img, const Eigen::Vector2f& P_robot) {
   // TODO(eyang): de-hardcode
   // TODO(eyang): For a single image, the robot's location is assumed to at the
   // center-bottom of the image. Eventually a fused BEV image may be used, where
   // the robot's location will be the center of the image.
-  // TODO(eyang): maybe some latched msg or configuration for the center would be appropriate?
-  // Location of the Robot's (0, 0) in the image
+  // TODO(eyang): maybe some latched msg or configuration for the center would
+  // be appropriate? Location of the Robot's (0, 0) in the image
   const Eigen::Vector2f P_image_robot(img.cols / 2, img.rows - 1);
 
   // Relative image coordinates of the query point.
@@ -333,29 +367,31 @@ Eigen::Vector2f TerrainEvaluator::GetImageLocation(const cv::Mat3b& img,
   return P_image;
 }
 
-cv::Rect TerrainEvaluator::GetPatchRectAtLocation(const cv::Mat3b& img,
-                                                  const Eigen::Vector2f& P_robot) {
+cv::Rect TerrainEvaluator::GetPatchRectAtLocation(
+    const cv::Mat3b& img, const Eigen::Vector2f& P_robot) {
   const Eigen::Vector2f P_image = GetImageLocation(img, P_robot);
 
   // Top-left coordinates of patch
-  int patch_tl_x =
-      static_cast<int>(P_image.x() / CONFIG_patch_size_pixels) * CONFIG_patch_size_pixels;
-  int patch_tl_y =
-      static_cast<int>(P_image.y() / CONFIG_patch_size_pixels) * CONFIG_patch_size_pixels;
+  int patch_tl_x = static_cast<int>(P_image.x() / CONFIG_patch_size_pixels) *
+                   CONFIG_patch_size_pixels;
+  int patch_tl_y = static_cast<int>(P_image.y() / CONFIG_patch_size_pixels) *
+                   CONFIG_patch_size_pixels;
 
-  return {patch_tl_x, patch_tl_y, CONFIG_patch_size_pixels, CONFIG_patch_size_pixels};
+  return {patch_tl_x, patch_tl_y, CONFIG_patch_size_pixels,
+          CONFIG_patch_size_pixels};
 }
 
-void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
-                                     std::shared_ptr<PathRolloutBase> best_path) {
+void TerrainEvaluator::DrawPathCosts(
+    const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
+    std::shared_ptr<PathRolloutBase> best_path) {
   // TODO(eyang): perhaps have some toggle between the cost map image and the
   // BEV image? might be useful to have both options. Maybe this toggle should
   // be in FindBest, because that's where the latest_vis_image_ is set.
 
   // Normalize all costs linearly to be within [0, 1]
   std::vector<float> normalized_path_costs(path_costs_);
-  const auto minmax_costs =
-      std::minmax_element(normalized_path_costs.begin(), normalized_path_costs.end());
+  const auto minmax_costs = std::minmax_element(normalized_path_costs.begin(),
+                                                normalized_path_costs.end());
   const float min_cost = *minmax_costs.first;
   const float max_cost = *minmax_costs.second;
   for (float& cost : normalized_path_costs) {
@@ -364,11 +400,13 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
 
   for (size_t i = 0; i < paths.size(); i++) {
     for (int j = 0; j < CONFIG_rollout_density; j++) {
-      const pose_2d::Pose2Df state =
-          paths[i]->GetIntermediateState(static_cast<float>(j) / CONFIG_rollout_density);
-      const Eigen::Vector2f P_image_state = GetImageLocation(latest_vis_image_, state.translation);
+      const pose_2d::Pose2Df state = paths[i]->GetIntermediateState(
+          static_cast<float>(j) / CONFIG_rollout_density);
+      const Eigen::Vector2f P_image_state =
+          GetImageLocation(latest_vis_image_, state.translation);
 
-      // Scale the color from green to yellow to red based on the normalized cost
+      // Scale the color from green to yellow to red based on the normalized
+      // cost
       cv::Scalar color;  // RGB
       if (normalized_path_costs[i] < 0.5) {
         // green set to 255, increasing red changes color from green to yellow
@@ -385,21 +423,25 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
         // a negative thickness value fills in the drawn circle
         thickness = -thickness;
       }
-      cv::circle(latest_vis_image_, cv::Point(P_image_state.x(), P_image_state.y()), 8, color,
+      cv::circle(latest_vis_image_,
+                 cv::Point(P_image_state.x(), P_image_state.y()), 8, color,
                  thickness, cv::LineTypes::LINE_AA);
     }
 
     // print normalized path costs[i]
-    // std::cout << "Normalized path costs " << normalized_path_costs[i] << std::endl;
+    // std::cout << "Normalized path costs " << normalized_path_costs[i] <<
+    // std::endl;
   }
 
-  const Eigen::Vector2f P_image_goal = GetImageLocation(latest_vis_image_, local_target);
-  cv::drawMarker(latest_vis_image_, cv::Point(P_image_goal.x(), P_image_goal.y()), {255, 255, 255},
+  const Eigen::Vector2f P_image_goal =
+      GetImageLocation(latest_vis_image_, local_target);
+  cv::drawMarker(latest_vis_image_,
+                 cv::Point(P_image_goal.x(), P_image_goal.y()), {255, 255, 255},
                  cv::MARKER_TILTED_CROSS, 32, 8, cv::LineTypes::LINE_AA);
-  
-  // print he best path and its cost
-  // std::cout << "Best path " << best_path << " " << normalized_path_costs[0] << std::endl;
 
+  // print he best path and its cost
+  // std::cout << "Best path " << best_path << " " << normalized_path_costs[0]
+  // << std::endl;
 }
 
 }  // namespace motion_primitives
