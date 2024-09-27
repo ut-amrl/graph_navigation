@@ -172,6 +172,15 @@ void Navigation::Initialize(const NavigationParameters& params,
     exit(1);
   }
   evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
+
+  const char* verbosity = std::getenv("VERBOSE");
+  if(verbosity == nullptr) verbose_logging = false;
+  else {
+    std::string verbosity_str = std::string(verbosity);
+    if(verbosity_str == "1") verbose_logging=true;
+    else verbose_logging=false;
+  }
+
 }
 
 bool Navigation::Enabled() const {
@@ -962,11 +971,13 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
   auto end_run_loop = std::chrono::system_clock::now();
   std::chrono::duration<double, std::milli> time_diff = end_run_loop - start_run_loop;
 
-  printf(
-    "LOOP: %ld,%f\n", 
-    std::chrono::duration_cast<std::chrono::milliseconds>(start_run_loop.time_since_epoch()).count(),
-    time_diff.count()
-  );
+  if(verbose_logging) {
+    printf(
+      "LOOP: %ld,%f\n", 
+      std::chrono::duration_cast<std::chrono::milliseconds>(start_run_loop.time_since_epoch()).count(),
+      time_diff.count()
+    );
+  }
   return retval;
 }
 

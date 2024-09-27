@@ -146,7 +146,8 @@ class Navigation {
   const cv::Mat& GetVisualizationImage();
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
-
+  bool verbose_logging;
+  
  private:
 
   // Test 1D TOC motion in a straight line.
