@@ -173,7 +173,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   }
   evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
 
-  const char* verbosity = std::getenv("VERBOSE");
+  const char* verbosity = std::getenv("VERBOSE_LOGGING");
   if(verbosity == nullptr) verbose_logging = false;
   else {
     std::string verbosity_str = std::string(verbosity);
