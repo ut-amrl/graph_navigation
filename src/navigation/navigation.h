@@ -91,6 +91,8 @@ class Navigation {
                          double time);
   void ObserveImage(cv::Mat image, double time);
   bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  bool RunInternal(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+
   void GetStraightFreePathLength(float* free_path_length,
                                  float* clearance);
   void GetFreePathLength(float curvature,
