@@ -213,6 +213,14 @@ void Navigation::Initialize(const NavigationParameters& params,
     exit(1);
   }
   evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
+
+  const char* verbosity = std::getenv("VERBOSE_LOGGING");
+  if(verbosity == nullptr) verbose_logging = false;
+  else {
+    std::string verbosity_str = std::string(verbosity);
+    if(verbosity_str == "1") verbose_logging=true;
+    else verbose_logging=false;
+  }
 }
 
 void Navigation::LoadVectorMap(const string& map_file){ //Assume map is given as MAP.navigation.json
@@ -1166,7 +1174,7 @@ Eigen::Vector2f Navigation::GetIntermediateGoal(){
 }
 
 
-bool Navigation::Run(const double& time,
+bool Navigation::RunInternal(const double& time,
                      Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
@@ -1461,6 +1469,22 @@ bool Navigation::Run(const double& time,
   // viz_pub_.publish(global_viz_msg_);
 
   return true;
+}
+
+bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel) {
+  auto start_run_loop = std::chrono::system_clock::now();
+  bool retval = Navigation::RunInternal(time, cmd_vel, cmd_angle_vel);
+  auto end_run_loop = std::chrono::system_clock::now();
+  std::chrono::duration<double, std::milli> time_diff = end_run_loop - start_run_loop;
+
+  if(verbose_logging) {
+    printf(
+      "LOOP: %ld,%f\n", 
+      std::chrono::duration_cast<std::chrono::milliseconds>(start_run_loop.time_since_epoch()).count(),
+      time_diff.count()
+    );
+  }
+  return retval;
 }
 
 }  // namespace navigation

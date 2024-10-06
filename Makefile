@@ -20,5 +20,5 @@ clean:
 
 build/CMakeLists.txt.copy: CMakeLists.txt Makefile srv
 	mkdir -p build
-	cd build && cmake -DCMAKE_BUILD_TYPE=$(build_type) ..
+	cd build && cmake -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=$(build_type) ..
 	cp CMakeLists.txt build/CMakeLists.txt.copy
