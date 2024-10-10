@@ -253,6 +253,7 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
 
   size_t start_idx = point_cloud_.size();
   point_cloud_.resize(start_idx + cache.rays.size());
+
   for (size_t i = 0; i < cache.rays.size(); ++i) {
     const float r =
       ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
@@ -462,11 +463,22 @@ void PublishPath() {
       visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, 
           global_viz_msg_);
     }
+    const auto global_path = navigation_.GetGlobalPath();
+    for (size_t i = 1; i < global_path.size(); i++) {
+      visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, 
+          global_viz_msg_);
+    }
     Vector2f carrot;
-    bool foundCarrot = navigation_.GetCarrot(carrot);
+    bool foundCarrot = navigation_.GetLocalCarrot(carrot);
     if (foundCarrot) {
       carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
     }
+
+    bool foundGlobalCarrot = navigation_.GetGlobalCarrot(carrot);
+    if (foundGlobalCarrot) {
+      visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
+    }
+
   }
 }
 
@@ -474,7 +486,8 @@ void DrawTarget() {
   const float carrot_dist = navigation_.GetCarrotDist();
   const Eigen::Vector2f target = navigation_.GetTarget();
   auto msg_copy = global_viz_msg_;
-  visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
+  visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
+  // visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
   visualization::DrawArc(
       Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
   viz_pub_.publish(msg_copy);
@@ -755,7 +768,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_angular_accel);
   REAL_PARAM(max_angular_decel);
   REAL_PARAM(max_angular_speed);
-  REAL_PARAM(carrot_dist);
+  REAL_PARAM(intermediate_goal_dist);
   REAL_PARAM(system_latency);
   REAL_PARAM(obstacle_margin);
   NATURALNUM_PARAM(num_options);
@@ -774,6 +787,23 @@ void LoadConfig(navigation::NavigationParameters* params) {
   STRING_PARAM(model_path);
   STRING_PARAM(evaluator_type);
   STRING_PARAM(camera_calibration_path);
+  REAL_PARAM(local_costmap_resolution);
+  REAL_PARAM(max_inflation_radius);
+  REAL_PARAM(local_costmap_size);
+  REAL_PARAM(min_inflation_radius);
+  REAL_PARAM(global_costmap_resolution);
+  REAL_PARAM(global_costmap_size_x);
+  REAL_PARAM(global_costmap_size_y);
+  REAL_PARAM(global_costmap_origin_x);
+  REAL_PARAM(global_costmap_origin_y);
+  REAL_PARAM(carrot_dist);
+  REAL_PARAM(lidar_range_min);
+  REAL_PARAM(lidar_range_max);
+  REAL_PARAM(replan_dist);
+  REAL_PARAM(object_lifespan);
+  REAL_PARAM(inflation_coeff);
+  REAL_PARAM(distance_weight);
+  REAL_PARAM(recovery_carrot_dist);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->dt = CONFIG_dt;
@@ -785,7 +815,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
       CONFIG_max_angular_accel,
       CONFIG_max_angular_decel,
       CONFIG_max_angular_speed);
-  params->carrot_dist = CONFIG_carrot_dist;
+  params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
   params->system_latency = CONFIG_system_latency;
   params->obstacle_margin = CONFIG_obstacle_margin;
   params->num_options = CONFIG_num_options;
@@ -803,6 +833,23 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->use_kinect = CONFIG_use_kinect;
   params->model_path = CONFIG_model_path;
   params->evaluator_type = CONFIG_evaluator_type;
+  params->local_costmap_resolution = CONFIG_local_costmap_resolution;
+  params->max_inflation_radius = CONFIG_max_inflation_radius;
+  params->local_costmap_size = CONFIG_local_costmap_size;
+  params->min_inflation_radius = CONFIG_min_inflation_radius;
+  params->global_costmap_resolution = CONFIG_global_costmap_resolution;
+  params->global_costmap_size_x = CONFIG_global_costmap_size_x;
+  params->global_costmap_size_y = CONFIG_global_costmap_size_y;
+  params->global_costmap_origin_x = CONFIG_global_costmap_origin_x;
+  params->global_costmap_origin_y = CONFIG_global_costmap_origin_y;
+  params->carrot_dist = CONFIG_carrot_dist;
+  params->lidar_range_min = CONFIG_lidar_range_min;
+  params->lidar_range_max = CONFIG_lidar_range_max;
+  params->replan_dist = CONFIG_replan_dist;
+  params->object_lifespan = CONFIG_object_lifespan;
+  params->inflation_coeff = CONFIG_inflation_coeff;
+  params->distance_weight = CONFIG_distance_weight;
+  params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
 
   // TODO Rather than loading camera homography from a file, compute it from camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
@@ -925,6 +972,7 @@ int main(int argc, char** argv) {
     // Run Navigation to get commands
     Vector2f cmd_vel(0, 0);
     float cmd_angle_vel(0);
+
     bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status
@@ -932,6 +980,17 @@ int main(int argc, char** argv) {
 
     if(nav_succeeded) {
       // Publish Visualizations
+      auto obstacles = navigation_.GetCostmapObstacles();
+      auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
+
+      // for (const auto& vector : global_obstacles) {
+      //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
+      // }
+
+      // for (const auto& vector : obstacles) {
+      //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
+      // }
+
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
       if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
