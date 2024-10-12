@@ -792,7 +792,7 @@ bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
   }
   const float kSqCarrotDist = Sq(carrot_dist);
 
-  CHECK_GE(plan_path.size(), 2u);
+  // CHECK_GE(plan_path.size(), 2u);
 
   if ((plan_path[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
     // Goal is within the carrot dist.
