@@ -39,6 +39,7 @@ jobs:
           sudo apt install python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
           sudo rosdep init
           rosdep update
+          sudo apt install ros-noetic-costmap-2d
 
       # Install libtorch
       - name: Install libtorch

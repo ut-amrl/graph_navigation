@@ -52,6 +52,8 @@ struct MotionLimits {
 };
 
 struct NavigationParameters {
+  // whether to use intermediate planning or not
+  bool do_intermed;
   // Control period in seconds.
   double dt;
   // Motion limits for linear motion.
