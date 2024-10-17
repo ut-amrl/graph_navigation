@@ -24,6 +24,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <std_msgs/String.h>
+#include <sstream>
+#include <iomanip>
 #include <inttypes.h>
 #include <vector>
 #include <unordered_map>
@@ -160,6 +163,7 @@ ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 image_transport::Publisher viz_img_pub_;
+ros::Publisher navloop_timer_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -917,6 +921,7 @@ int main(int argc, char** argv) {
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
+  navloop_timer_pub_ = n.advertise<std_msgs::String>("navloop_timing_info", 10);
 
   // Messages
   local_viz_msg_ = visualization::NewVisualizationMessage(
@@ -975,7 +980,25 @@ int main(int argc, char** argv) {
     Vector2f cmd_vel(0, 0);
     float cmd_angle_vel(0);
 
+    auto start_run_loop_sys = std::chrono::system_clock::now();  // System clock timing
+    ros::Time start_run_loop_ros = ros::Time::now();  // ROS time timing
+
     bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
+
+    auto end_run_loop_sys = std::chrono::system_clock::now();
+    ros::Time end_run_loop_ros = ros::Time::now();
+    std::chrono::duration<double, std::milli> sys_time_diff = end_run_loop_sys - start_run_loop_sys;
+    ros::Duration ros_time_diff = end_run_loop_ros - start_run_loop_ros;
+    std_msgs::String msg;
+    std::stringstream ss;
+    auto sys_start_ms = std::chrono::duration_cast<std::chrono::nanoseconds>(start_run_loop_sys.time_since_epoch()).count();
+    ss << std::fixed << std::setprecision(3);
+    ss << "LOOP: System Start(ns)=" << sys_start_ms
+       << ", ROS Start(ns)=" << start_run_loop_ros.toNSec()
+       << ", System Time(ms)=" << sys_time_diff.count()
+       << ", ROS Time(ms)=" << ros_time_diff.toSec() * 1000;  // Convert to milliseconds
+    msg.data = ss.str();
+    navloop_timer_pub_.publish(msg);
 
     // Publish Nav Status
     PublishNavStatus();
