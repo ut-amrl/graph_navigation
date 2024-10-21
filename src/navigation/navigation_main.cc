@@ -118,15 +118,15 @@ CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 
-DEFINE_string(map, "UT_Campus", "Name of navigation map file");
-DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
+DEFINE_string(map, "AHG2v2", "Name of navigation map file");
+DEFINE_string(twist_drive_topic, "/navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
 
 // DECLARE_int32(v);
 
 bool run_ = true;
 bool simulate_ = false;
-bool enabled_ = false;
+bool enabled_ = true;
 bool received_odom_ = false;
 bool received_laser_ = false;
 Vector2f goal_ = {0, 0};
