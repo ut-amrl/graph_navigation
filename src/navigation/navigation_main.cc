@@ -112,6 +112,7 @@ DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
+DEFINE_double(dt, -0.01, "Time step value for control loop; use config value if not specified");  // override default value in config file
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
@@ -812,7 +813,11 @@ void LoadConfig(navigation::NavigationParameters* params) {
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->do_intermed = !FLAGS_no_intermed;
-  params->dt = CONFIG_dt;
+  if (FLAGS_dt > 0) {
+    params->dt = FLAGS_dt;
+  } else {
+    params->dt = CONFIG_dt;
+  }
   params->linear_limits = MotionLimits(
       CONFIG_max_linear_accel,
       CONFIG_max_linear_decel,
@@ -905,6 +910,7 @@ int main(int argc, char** argv) {
   navigation::NavigationParameters params;
   LoadConfig(&params);
   navigation_.Initialize(params, map_path);
+  printf("[INFO] FLAGS_no_intermed: %d, params.do_intermed: %d\n", FLAGS_no_intermed, params.do_intermed);
 
   // Publishers
   local_viz_msg_ = visualization::NewVisualizationMessage(
