@@ -885,7 +885,6 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
 }
 
 int main(int argc, char** argv) {
-  printf("MADARCHOD\n");
   google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
   signal(SIGINT, SignalHandler);
@@ -999,7 +998,6 @@ int main(int argc, char** argv) {
     ros::Duration ros_time_diff = end_run_loop_ros - start_run_loop_ros;
     std_msgs::String msg;
     auto sys_start_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(start_run_loop_sys.time_since_epoch()).count();
-
 
     std::stringstream ss_sys_time, ss_ros_time;
     ss_sys_time << std::fixed << std::setprecision(3) << sys_time_diff.count();
