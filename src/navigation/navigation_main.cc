@@ -77,6 +77,7 @@
 
 #include "motion_primitives.h"
 #include "navigation.h"
+#include <nlohmann/json.hpp>
 
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
@@ -884,6 +885,7 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
 }
 
 int main(int argc, char** argv) {
+  printf("MADARCHOD\n");
   google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
   signal(SIGINT, SignalHandler);
@@ -996,14 +998,22 @@ int main(int argc, char** argv) {
     std::chrono::duration<double, std::milli> sys_time_diff = end_run_loop_sys - start_run_loop_sys;
     ros::Duration ros_time_diff = end_run_loop_ros - start_run_loop_ros;
     std_msgs::String msg;
-    std::stringstream ss;
-    auto sys_start_ms = std::chrono::duration_cast<std::chrono::nanoseconds>(start_run_loop_sys.time_since_epoch()).count();
-    ss << std::fixed << std::setprecision(3);
-    ss << "LOOP: System Start(ns)=" << sys_start_ms
-       << ", ROS Start(ns)=" << start_run_loop_ros.toNSec()
-       << ", System Time(ms)=" << sys_time_diff.count()
-       << ", ROS Time(ms)=" << ros_time_diff.toSec() * 1000;  // Convert to milliseconds
-    msg.data = ss.str();
+    auto sys_start_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(start_run_loop_sys.time_since_epoch()).count();
+
+
+    std::stringstream ss_sys_time, ss_ros_time;
+    ss_sys_time << std::fixed << std::setprecision(3) << sys_time_diff.count();
+    ss_ros_time << std::fixed << std::setprecision(3) << ros_time_diff.toSec() * 1000;
+      
+    json nav_log;
+    nav_log["start_ns_sys"] = sys_start_ns;
+    nav_log["start_ns_ros"] = start_run_loop_ros.toNSec();
+    nav_log["loop_time_ms_sys"] = ss_sys_time.str();
+    nav_log["loop_time_ms_ros"] = ss_ros_time.str();
+
+    std::cout << "LOOP: System Start (ns)=" << sys_start_ns << ", System Time (ms)=" << sys_time_diff.count() << std::endl;  // Convert to milliseconds
+
+    msg.data = nav_log.dump();
     navloop_timer_pub_.publish(msg);
 
     // Publish Nav Status
