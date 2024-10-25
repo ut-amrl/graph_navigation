@@ -1009,7 +1009,7 @@ int main(int argc, char** argv) {
     nav_log["loop_time_ms_sys"] = ss_sys_time.str();
     nav_log["loop_time_ms_ros"] = ss_ros_time.str();
 
-    std::cout << "LOOP: System Start (ns)=" << sys_start_ns << ", System Time (ms)=" << sys_time_diff.count() << std::endl;  // Convert to milliseconds
+    // std::cout << "LOOP: System Start (ns)=" << sys_start_ns << ", System Time (ms)=" << sys_time_diff.count() << std::endl;  // Convert to milliseconds
 
     msg.data = nav_log.dump();
     navloop_timer_pub_.publish(msg);
