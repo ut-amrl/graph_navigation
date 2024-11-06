@@ -1,5 +1,8 @@
 PROJECT(graph_navigation)
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
+
+# Add the custom `cmake` folder to `CMAKE_MODULE_PATH`
+LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 MESSAGE(STATUS "Compiling Navigation")
 MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
@@ -25,9 +28,13 @@ ROSBUILD_INIT()
 SET(ROS_BUILD_STATIC_LIBS true)
 SET(ROS_BUILD_SHARED_LIBS false)
 
+# Link directories
+LINK_DIRECTORIES(${LibOSRM_LIBRARY_DIRS})
+
 LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
 FIND_PACKAGE(Torch REQUIRED)
 FIND_PACKAGE(OpenCV REQUIRED)
+FIND_PACKAGE(LibOSRM REQUIRED)
 
 IF(NOT ROS_BUILD_TYPE)
   SET(ROS_BUILD_TYPE Release)
@@ -37,6 +44,8 @@ MESSAGE(STATUS "ROS-Overrride Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "CXX Flags: ${CMAKE_CXX_FLAGS}")
 MESSAGE(STATUS "LibTorch location: ${TORCH_INCLUDE_DIRS}")
 MESSAGE(STATUS "LibTorch libraries: ${TORCH_LIBRARIES}")
+MESSAGE(STATUS "OSRM location: ${LibOSRM_INCLUDE_DIRS}")
+MESSAGE(STATUS "OSRM libraries: ${LibOSRM_LIBRARIES}")
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
@@ -54,6 +63,7 @@ INCLUDE_DIRECTORIES(src/config_reader/include)
 INCLUDE_DIRECTORIES(src/third_party)
 INCLUDE_DIRECTORIES(src)
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(${LibOSRM_INCLUDE_DIRS})
 
 ROSBUILD_GENMSG()
 ROSBUILD_GENSRV()
@@ -72,8 +82,18 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/image_based_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
-    shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+    shared_library 
+    ${libs} 
+    ${TORCH_LIBRARIES} 
+    ${OpenCV_LIBS} 
+    ${LibOSRM_LIBRARIES} 
+    ${LibOSRM_DEPENDENT_LIBRARIES})
 
+ADD_EXECUTABLE(streetmap_test src/navigation/streetmap_planner.cc)
+TARGET_LINK_LIBRARIES(streetmap_test 
+    ${libs} 
+    ${LibOSRM_LIBRARIES} 
+    ${LibOSRM_DEPENDENT_LIBRARIES})
 
 ADD_EXECUTABLE(navigation_tests
     src/navigation/navigation_tests.cc
@@ -82,7 +102,9 @@ ADD_EXECUTABLE(navigation_tests
 TARGET_LINK_LIBRARIES(navigation_tests
     gtest
     gtest_main
-    ${libs})
+    ${libs}
+    ${LibOSRM_LIBRARIES} 
+    ${LibOSRM_DEPENDENT_LIBRARIES})
 
 ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/social_nav.cc
@@ -95,7 +117,13 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
                         src/navigation/navigation.cc)
-TARGET_LINK_LIBRARIES(social_nav shared_library ${libs} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(social_nav 
+  shared_library 
+  ${libs} 
+  ${TORCH_LIBRARIES} 
+  ${OpenCV_LIBS}
+  ${LibOSRM_LIBRARIES} 
+  ${LibOSRM_DEPENDENT_LIBRARIES})
 
 
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})

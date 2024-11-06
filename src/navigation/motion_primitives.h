@@ -23,11 +23,10 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
-#include "opencv2/core/mat.hpp"
-
 #include "math/line2d.h"
 #include "math/poses_2d.h"
 #include "navigation_parameters.h"
+#include "opencv2/core/mat.hpp"
 
 #ifndef MOTION_PRIMITIVES_H
 #define MOTION_PRIMITIVES_H
@@ -41,12 +40,12 @@ struct PathRolloutBase {
 
   // Length of the path rollout -- this is the cumulative distance traverdsed
   // along the path, $\int ||v(t)||dt$ where $v(t)$ is the instantaneous
-  // velocity. 
+  // velocity.
   virtual float Length() const = 0;
 
-  // Free path length of the rollout -- this is the cumulative free space distance along the direction of the rollout
-  // along the path, $\int ||v(t)||dt$ where $v(t)$ is the instantaneous
-  // velocity. 
+  // Free path length of the rollout -- this is the cumulative free space
+  // distance along the direction of the rollout along the path, $\int
+  // ||v(t)||dt$ where $v(t)$ is the instantaneous velocity.
   virtual float FPL() const = 0;
 
   // Angular Length of the path rollout -- this is cumulative angular distance
@@ -57,7 +56,8 @@ struct PathRolloutBase {
   // The pose of the robot at the end of the path rollout.
   virtual pose_2d::Pose2Df EndPoint() const = 0;
 
-  // Return the pose the robot would be at for fraction f into the path rollout. f \in [0, 1]
+  // Return the pose the robot would be at for fraction f into the path rollout.
+  // f \in [0, 1]
   virtual pose_2d::Pose2Df GetIntermediateState(float f) const = 0;
 
   // The obstacle clearance along the path.
@@ -68,14 +68,12 @@ struct PathRolloutBase {
   // period.
   virtual void GetControls(const navigation::MotionLimits& linear_limits,
                            const navigation::MotionLimits& angular_limits,
-                           const float dt,
-                           const Eigen::Vector2f& linear_vel,
-                           const float angular_vel,
-                           Eigen::Vector2f& vel_cmd,
+                           const float dt, const Eigen::Vector2f& linear_vel,
+                           const float angular_vel, Eigen::Vector2f& vel_cmd,
                            float& ang_vel_cmd) const = 0;
 };
 
-// Path rollout sampler. 
+// Path rollout sampler.
 struct PathRolloutSamplerBase {
   virtual ~PathRolloutSamplerBase() = default;
 
@@ -86,8 +84,7 @@ struct PathRolloutSamplerBase {
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
-  virtual void Update(const Eigen::Vector2f& new_vel, 
-                      const float new_ang_vel, 
+  virtual void Update(const Eigen::Vector2f& new_vel, const float new_ang_vel,
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud,
                       const cv::Mat& new_image) {
@@ -126,10 +123,8 @@ struct PathEvaluatorBase {
   // Update the local navigation state, including current velocity, local
   // navigation target, obstacle point cloud, and any other factors relevant for
   // local navigation planning.
-  virtual void Update(const Eigen::Vector2f& new_loc, 
-                      const float new_ang,
-                      const Eigen::Vector2f& new_vel, 
-                      const float new_ang_vel, 
+  virtual void Update(const Eigen::Vector2f& new_loc, const float new_ang,
+                      const Eigen::Vector2f& new_vel, const float new_ang_vel,
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud,
                       const cv::Mat& new_image) {
@@ -163,17 +158,14 @@ struct PathEvaluatorBase {
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,
-                              const float x_init, 
-                              const float v_init, 
-                              const float x_final, 
-                              const float v_final,
+                              const float x_init, const float v_init,
+                              const float x_final, const float v_final,
                               const float dt);
 
 // Compute the clearance along the line l with respect to the points.
-float StraightLineClearance(const geometry::Line2f& l, 
+float StraightLineClearance(const geometry::Line2f& l,
                             const std::vector<Eigen::Vector2f>& points);
 
 }  // namespace motion_primitives
-
 
 #endif  // MOTION_PRIMITIVES_H

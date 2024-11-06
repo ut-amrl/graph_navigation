@@ -979,8 +979,8 @@ int main(int argc, char** argv) {
 
     // Publish Nav Status
     PublishNavStatus();
-
     if(nav_succeeded) {
+      printf("Navigation Succeeded\n");
       if (!FLAGS_no_intermed) {
         // Publish Visualizations
         auto obstacles = navigation_.GetCostmapObstacles();
@@ -994,7 +994,7 @@ int main(int argc, char** argv) {
         //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
         // }
       }
-
+      
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
       if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {

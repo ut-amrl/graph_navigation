@@ -19,41 +19,38 @@
 */
 //========================================================================
 
+#include "navigation.h"
+
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <deque>
+#include <fstream>
+#include <iostream>
 #include <memory>
+#include <queue>
 #include <string>
 #include <unordered_map>
-#include <chrono>
-#include <iostream>
-#include <fstream>
-#include <queue>
 
-#include "navigation.h"
-#include "geometry_msgs/PoseStamped.h"
-#include "gflags/gflags.h"
+#include "ackermann_motion_primitives.h"
+#include "amrl_msgs/NavStatusMsg.h"
+#include "amrl_msgs/Pose2Df.h"
+#include "astar.h"
+#include "deep_cost_map_evaluator.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
+#include "eight_connected_domain.h"
+#include "geometry_msgs/PoseStamped.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "graph_domain.h"
+#include "linear_evaluator.h"
+#include "motion_primitives.h"
+#include "nlohmann/json.hpp"
 #include "shared/math/math_util.h"
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
-#include "shared/util/timer.h"
-#include "eight_connected_domain.h"
-#include "graph_domain.h"
-#include "astar.h"
 #include "simple_queue.h"
-
-#include "motion_primitives.h"
-#include "constant_curvature_arcs.h"
-#include "ackermann_motion_primitives.h"
-#include "deep_cost_map_evaluator.h"
-#include "linear_evaluator.h"
-#include "amrl_msgs/NavStatusMsg.h"
-#include "amrl_msgs/Pose2Df.h"
-
-#include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
 using Eigen::Rotation2Df;
@@ -65,13 +62,13 @@ using std::atan2;
 using std::deque;
 using std::max;
 using std::min;
-using std::swap;
+using std::set;
 using std::shared_ptr;
 using std::string;
-using std::vector;
-using std::unordered_set;
+using std::swap;
 using std::unordered_map;
-using std::set;
+using std::unordered_set;
+using std::vector;
 
 using namespace math_util;
 using namespace motion_primitives;
@@ -98,19 +95,14 @@ DEFINE_int32(num_options, 41, "Number of options to consider");
 // TODO(jaholtz) figure out how to handle this visualization without
 // having astar contain ros dependencies
 struct EightGridVisualizer {
-  EightGridVisualizer(bool visualize) :
-             kVisualize(visualize) { }
+  EightGridVisualizer(bool visualize) : kVisualize(visualize) {}
 
   void DrawEdge(const navigation::EightConnectedDomain::State& s1,
                 const navigation::EightConnectedDomain::State& s2) {
     if (!kVisualize) return;
     static const bool kDebug = false;
     if (kDebug) {
-      printf("%7.2f,%7.2f -> %7.2f,%7.2f\n",
-            s1.x(),
-            s1.y(),
-            s2.x(),
-            s2.y());
+      printf("%7.2f,%7.2f -> %7.2f,%7.2f\n", s1.x(), s1.y(), s2.x(), s2.y());
     }
     // visualization::DrawLine(s1, s2, 0x606060, global_viz_msg_);
     // viz_pub_.publish(global_viz_msg_);
@@ -121,19 +113,15 @@ struct EightGridVisualizer {
 };
 
 struct GraphVisualizer {
-  GraphVisualizer(bool visualize) :
-             kVisualize(visualize) { }
+  GraphVisualizer(bool visualize) : kVisualize(visualize) {}
 
   void DrawEdge(const navigation::GraphDomain::State& s1,
                 const navigation::GraphDomain::State& s2) {
     if (!kVisualize) return;
     static const bool kDebug = false;
     if (kDebug) {
-      printf("%7.2f,%7.2f -> %7.2f,%7.2f\n",
-            s1.loc.x(),
-            s1.loc.y(),
-            s2.loc.x(),
-            s2.loc.y());
+      printf("%7.2f,%7.2f -> %7.2f,%7.2f\n", s1.loc.x(), s1.loc.y(), s2.loc.x(),
+             s2.loc.y());
     }
     // visualization::DrawLine(s1.loc, s2.loc, 0xC0C0C0, global_viz_msg_);
     // viz_pub_.publish(global_viz_msg_);
@@ -144,44 +132,46 @@ struct GraphVisualizer {
 };
 
 struct PointCost {
-    int index;
-    double cost;
-    
-    // Constructor
-    PointCost(int k, double c) : index(k), cost(c) {}
+  int index;
+  double cost;
+
+  // Constructor
+  PointCost(int k, double c) : index(k), cost(c) {}
 };
 
 struct CompareCost {
-    bool operator()(const PointCost& lhs, const PointCost& rhs) const {
-        // Using > for max heap (change to < for min heap)
-        return lhs.cost > rhs.cost;
-    }
+  bool operator()(const PointCost& lhs, const PointCost& rhs) const {
+    // Using > for max heap (change to < for min heap)
+    return lhs.cost > rhs.cost;
+  }
 };
 
 }  // namespace
 
 namespace navigation {
 
-Navigation::Navigation() :
-    robot_loc_(0, 0),
-    robot_angle_(0),
-    robot_vel_(0, 0),
-    robot_omega_(0),
-    nav_state_(NavigationState::kStopped),
-    nav_goal_loc_(0, 0),
-    nav_goal_angle_(0),
-    odom_initialized_(false),
-    loc_initialized_(false),
-    t_point_cloud_(0),
-    t_odometry_(0),
-    enabled_(false),
-    initialized_(false),
-    sampler_(nullptr),
-    evaluator_(nullptr),
-    costmap_(60, 60, 0.5, -15, -15),
-    global_costmap_(200, 200, 0.5, -50, -50),
-    intermediate_path_found_(false),
-    intermediate_goal_(0, 0){ //parameters are (x/y size in cells, resolution, bottom left x/y origin coordinates)
+Navigation::Navigation()
+    : robot_loc_(0, 0),
+      robot_angle_(0),
+      robot_vel_(0, 0),
+      robot_omega_(0),
+      nav_state_(NavigationState::kStopped),
+      nav_goal_loc_(0, 0),
+      nav_goal_angle_(0),
+      odom_initialized_(false),
+      loc_initialized_(false),
+      t_point_cloud_(0),
+      t_odometry_(0),
+      enabled_(false),
+      initialized_(false),
+      sampler_(nullptr),
+      evaluator_(nullptr),
+      costmap_(60, 60, 0.5, -15, -15),
+      global_costmap_(200, 200, 0.5, -50, -50),
+      intermediate_path_found_(false),
+      intermediate_goal_(0,
+                         0) {  // parameters are (x/y size in cells, resolution,
+                               // bottom left x/y origin coordinates)
   sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
 
@@ -189,11 +179,20 @@ void Navigation::Initialize(const NavigationParameters& params,
                             const string& map_file) {
   // Initialize status message
   params_ = params;
-  int local_costmap_size = 2*static_cast<int>(std::round(params_.local_costmap_size/params_.local_costmap_resolution));
-  costmap_ = costmap_2d::Costmap2D(local_costmap_size, local_costmap_size, params_.local_costmap_resolution, -params.local_costmap_size/2, -params.local_costmap_size/2);
-  int global_costmap_size_x = static_cast<int>(std::round(params_.global_costmap_size_x/params_.global_costmap_resolution));
-  int global_costmap_size_y = static_cast<int>(std::round(params_.global_costmap_size_y/params_.global_costmap_resolution));
-  global_costmap_ = costmap_2d::Costmap2D(global_costmap_size_x, global_costmap_size_y, params_.global_costmap_resolution, params.global_costmap_origin_x, params.global_costmap_origin_y);
+  int local_costmap_size =
+      2 * static_cast<int>(std::round(params_.local_costmap_size /
+                                      params_.local_costmap_resolution));
+  costmap_ = costmap_2d::Costmap2D(
+      local_costmap_size, local_costmap_size, params_.local_costmap_resolution,
+      -params.local_costmap_size / 2, -params.local_costmap_size / 2);
+  int global_costmap_size_x = static_cast<int>(std::round(
+      params_.global_costmap_size_x / params_.global_costmap_resolution));
+  int global_costmap_size_y = static_cast<int>(std::round(
+      params_.global_costmap_size_y / params_.global_costmap_resolution));
+  global_costmap_ = costmap_2d::Costmap2D(
+      global_costmap_size_x, global_costmap_size_y,
+      params_.global_costmap_resolution, params.global_costmap_origin_x,
+      params.global_costmap_origin_y);
   planning_domain_ = GraphDomain(map_file, &params_);
 
   LoadVectorMap(map_file);
@@ -205,9 +204,9 @@ void Navigation::Initialize(const NavigationParameters& params,
   if (params_.evaluator_type == "cost_map") {
     auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
     cost_map_evaluator->LoadModel();
-    evaluator = (PathEvaluatorBase*) cost_map_evaluator;
+    evaluator = (PathEvaluatorBase*)cost_map_evaluator;
   } else if (params_.evaluator_type == "linear") {
-    evaluator = (PathEvaluatorBase*) new LinearEvaluator();
+    evaluator = (PathEvaluatorBase*)new LinearEvaluator();
   } else {
     printf("Uknown evaluator type %s\n", params_.evaluator_type.c_str());
     exit(1);
@@ -215,23 +214,25 @@ void Navigation::Initialize(const NavigationParameters& params,
   evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
 }
 
-void Navigation::LoadVectorMap(const string& map_file){ //Assume map is given as MAP.navigation.json
+void Navigation::LoadVectorMap(
+    const string& map_file) {  // Assume map is given as MAP.navigation.json
 
   std::string vector_map_file = map_file;
 
   // Find the position of ".navigation.json"
   size_t found = vector_map_file.find(".navigation.json");
-    
+
   // Replace ".navigation.json" with ".vectormap.json"
   if (found != std::string::npos) {
-      vector_map_file.replace(found, std::string(".navigation.json").length(), ".vectormap.json");
+    vector_map_file.replace(found, std::string(".navigation.json").length(),
+                            ".vectormap.json");
   }
 
   // Output the modified string
   std::cout << "Loading vectormap file: " << vector_map_file << std::endl;
 
-  int x_max = global_costmap_.getSizeInCellsX(); 
-  int y_max = global_costmap_.getSizeInCellsY(); 
+  int x_max = global_costmap_.getSizeInCellsX();
+  int y_max = global_costmap_.getSizeInCellsY();
   global_costmap_.resetMap(0, 0, x_max, y_max);
   global_costmap_obstacles_.clear();
 
@@ -248,31 +249,38 @@ void Navigation::LoadVectorMap(const string& map_file){ //Assume map is given as
     Vector2f p1(line["p1"]["x"], line["p1"]["y"]);
 
     float length = (p0 - p1).norm();
-    for (float i = 0; i < length; i += params_.global_costmap_resolution){
-      Vector2f costmap_point = p0 + i*(p1 - p0)/length;
+    for (float i = 0; i < length; i += params_.global_costmap_resolution) {
+      Vector2f costmap_point = p0 + i * (p1 - p0) / length;
       uint32_t unsigned_mx, unsigned_my;
-      bool in_map = global_costmap_.worldToMap(costmap_point.x(), costmap_point.y(), unsigned_mx, unsigned_my);
-      if(in_map){
-        int cell_inflation_size = std::ceil(params_.max_inflation_radius/global_costmap_.getResolution());
+      bool in_map = global_costmap_.worldToMap(
+          costmap_point.x(), costmap_point.y(), unsigned_mx, unsigned_my);
+      if (in_map) {
+        int cell_inflation_size = std::ceil(params_.max_inflation_radius /
+                                            global_costmap_.getResolution());
         int mx = static_cast<int>(unsigned_mx);
         int my = static_cast<int>(unsigned_my);
-        for (int j = -cell_inflation_size; j <= cell_inflation_size; j++){
-          for (int k = -cell_inflation_size; k <= cell_inflation_size; k++){
+        for (int j = -cell_inflation_size; j <= cell_inflation_size; j++) {
+          for (int k = -cell_inflation_size; k <= cell_inflation_size; k++) {
             float cell_dist = sqrt(pow(j, 2) + pow(k, 2));
             float dist = cell_dist * global_costmap_.getResolution();
-            if((cell_dist <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) && (my + k >= 0) && (my + k < y_max)){
+            if ((cell_dist <= cell_inflation_size) && (mx + j >= 0) &&
+                (mx + j < x_max) && (my + k >= 0) && (my + k < y_max)) {
               unsigned char cost;
-              if(j == 0 && k == 0){
+              if (j == 0 && k == 0) {
                 cost = costmap_2d::LETHAL_OBSTACLE;
-              }
-              else if(dist <= params_.min_inflation_radius){
+              } else if (dist <= params_.min_inflation_radius) {
                 cost = costmap_2d::INSCRIBED_INFLATED_OBSTACLE;
+              } else {
+                cost =
+                    std::ceil(std::exp(-1 * params_.inflation_coeff *
+                                       (dist - params_.min_inflation_radius)) *
+                              (costmap_2d::INSCRIBED_INFLATED_OBSTACLE - 1));
               }
-              else{
-                cost = std::ceil(std::exp(-1 * params_.inflation_coeff * (dist - params_.min_inflation_radius)) * (costmap_2d::INSCRIBED_INFLATED_OBSTACLE-1));
-              }
-              global_costmap_.setCost(mx + j, my + k, std::max(cost, global_costmap_.getCost(mx + j, my + k)));
-              inflation_cells[global_costmap_.getIndex(mx + j, my + k)] = std::max(cost, global_costmap_.getCost(mx + j, my + k));
+              global_costmap_.setCost(
+                  mx + j, my + k,
+                  std::max(cost, global_costmap_.getCost(mx + j, my + k)));
+              inflation_cells[global_costmap_.getIndex(mx + j, my + k)] =
+                  std::max(cost, global_costmap_.getCost(mx + j, my + k));
             }
           }
         }
@@ -289,18 +297,14 @@ void Navigation::LoadVectorMap(const string& map_file){ //Assume map is given as
 
     double wx, wy;
     global_costmap_.mapToWorld(mx, my, wx, wy);
-    global_costmap_obstacles_.push_back(ObstacleCost{Vector2f(wx, wy), pair.second});
+    global_costmap_obstacles_.push_back(
+        ObstacleCost{Vector2f(wx, wy), pair.second});
   }
-
 }
 
-bool Navigation::Enabled() const {
-  return enabled_;
-}
+bool Navigation::Enabled() const { return enabled_; }
 
-void Navigation::Enable(bool enable) {
-  enabled_ = enable;
-}
+void Navigation::Enable(bool enable) { enabled_ = enable; }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_state_ = NavigationState::kGoto;
@@ -322,9 +326,7 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
   override_target_ = loc;
 }
 
-void Navigation::Resume() {
-  nav_state_ = NavigationState::kGoto;
-}
+void Navigation::Resume() { nav_state_ = NavigationState::kGoto; }
 
 void Navigation::UpdateMap(const string& map_path) {
   LoadVectorMap(map_path);
@@ -351,12 +353,10 @@ void Navigation::PruneLatencyQueue() {
     }
     if (t_cmd < update_time - params_.dt) {
       if (kDebug) {
-        printf("Erase %d %f %f\n",
-            int(i),
-            t_cmd - update_time,
-            command_history_[i].linear.x());
+        printf("Erase %d %f %f\n", int(i), t_cmd - update_time,
+               command_history_[i].linear.x());
       }
-      command_history_.erase( command_history_.begin() + i);
+      command_history_.erase(command_history_.begin() + i);
       --i;
     }
   }
@@ -376,9 +376,8 @@ void Navigation::UpdateCommandHistory(Twist twist) {
   twist.time += params_.system_latency;
   command_history_.push_back(twist);
   if (false) {
-    printf("Push %f %f\n",
-          twist.linear.x(),
-          command_history_.back().linear.x());
+    printf("Push %f %f\n", twist.linear.x(),
+           command_history_.back().linear.x());
   }
 }
 
@@ -398,8 +397,8 @@ void Navigation::ForwardPredict(double t) {
     }
     printf("Predict: %f %f\n", t - t_odometry_, t - t_point_cloud_);
   }
-  odom_loc_ = Vector2f(latest_odom_msg_.position.x(),
-                       latest_odom_msg_.position.y());
+  odom_loc_ =
+      Vector2f(latest_odom_msg_.position.x(), latest_odom_msg_.position.y());
   odom_angle_ = 2.0f * atan2f(latest_odom_msg_.orientation.z(),
                               latest_odom_msg_.orientation.w());
   using Eigen::Affine2f;
@@ -410,21 +409,19 @@ void Navigation::ForwardPredict(double t) {
     const double cmd_time = c.time;
     if (cmd_time > t) continue;
     if (cmd_time >= t_odometry_ - params_.dt) {
-      const float dt = (t_odometry_ > cmd_time) ?
-          min<double>(t_odometry_ - cmd_time, params_.dt) :
-          min<double>(t - cmd_time, params_.dt);
-      odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(
-          c.linear.x(), c.linear.y()));
+      const float dt = (t_odometry_ > cmd_time)
+                           ? min<double>(t_odometry_ - cmd_time, params_.dt)
+                           : min<double>(t - cmd_time, params_.dt);
+      odom_loc_ += dt * (Rotation2Df(odom_angle_) *
+                         Vector2f(c.linear.x(), c.linear.y()));
       odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
     }
-    if (t_point_cloud_ >= cmd_time  - params_.dt) {
-      const float dt = (t_point_cloud_ > cmd_time) ?
-          min<double>(t_point_cloud_ - cmd_time, params_.dt) :
-          min<double>(t - cmd_time, params_.dt);
-      lidar_tf =
-          Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
-          Rotation2Df(-c.angular.z() * dt) *
-          lidar_tf;
+    if (t_point_cloud_ >= cmd_time - params_.dt) {
+      const float dt = (t_point_cloud_ > cmd_time)
+                           ? min<double>(t_point_cloud_ - cmd_time, params_.dt)
+                           : min<double>(t - cmd_time, params_.dt);
+      lidar_tf = Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
+                 Rotation2Df(-c.angular.z() * dt) * lidar_tf;
     }
   }
   fp_point_cloud_.resize(point_cloud_.size());
@@ -438,15 +435,11 @@ void Navigation::TrapezoidTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const float x = (odom_loc_ - starting_loc_).norm();
   const float speed = robot_vel_.norm();
   const float velocity_cmd = Run1DTimeOptimalControl(
-      params_.linear_limits,
-      x,
-      speed,
-      FLAGS_test_dist,
-      0,
-      params_.dt);
+      params_.linear_limits, x, speed, FLAGS_test_dist, 0, params_.dt);
   cmd_vel = {velocity_cmd, 0};
   cmd_angle_vel = 0;
-  printf("x: %.3f d:%.3f v: %.3f cmd:%.3f\n", x, FLAGS_test_dist, speed, velocity_cmd);
+  printf("x: %.3f d:%.3f v: %.3f cmd:%.3f\n", x, FLAGS_test_dist, speed,
+         velocity_cmd);
 }
 
 void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
@@ -460,8 +453,7 @@ void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   static double t_start_ = GetMonotonicTime();
   const double t = GetMonotonicTime() - t_start_;
   // float v_current = robot_vel_.x();
-  float v_cmd = kMaxSpeed *
-      sin(2.0 * M_PI * kFrequency * t);
+  float v_cmd = kMaxSpeed * sin(2.0 * M_PI * kFrequency * t);
   cmd_vel = {v_cmd, 0};
   cmd_angle_vel = 0.0;
 }
@@ -481,12 +473,7 @@ void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
       max<float>(0.0f, free_path_length - params_.obstacle_margin);
   printf("%f\n", free_path_length);
   const float velocity_cmd = Run1DTimeOptimalControl(
-      params_.linear_limits,
-      0,
-      speed,
-      dist_left,
-      0,
-      params_.dt);
+      params_.linear_limits, 0, speed, dist_left, 0, params_.dt);
   cmd_vel = {velocity_cmd, 0};
   cmd_angle_vel = 0;
 }
@@ -517,13 +504,11 @@ Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
                      turn_radius * (1.0f - cos(end_angle)));
 
   Vector2f closest_point = start;
-  if (middle_angle < end_angle &&
-      (closest_point - target).squaredNorm() >
-      (middle - target).squaredNorm()) {
+  if (middle_angle < end_angle && (closest_point - target).squaredNorm() >
+                                      (middle - target).squaredNorm()) {
     closest_point = middle;
   }
-  if ((closest_point - target).squaredNorm() >
-      (end - target).squaredNorm()) {
+  if ((closest_point - target).squaredNorm() > (end - target).squaredNorm()) {
     closest_point = end;
   }
   return closest_point;
@@ -534,8 +519,7 @@ float GetClosestDistance(const PathOption& o, const Vector2f& target) {
   return (target - closest_point).norm();
 }
 
-void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
-                                   double time) {
+void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
   point_cloud_ = cloud;
   t_point_cloud_ = time;
   PruneLatencyQueue();
@@ -550,7 +534,7 @@ vector<int> Navigation::GlobalPlan(const Vector2f& initial,
                                    const Vector2f& end) {
   auto plan = Plan(initial, end);
   std::vector<int> path;
-  for (auto& node : plan ) {
+  for (auto& node : plan) {
     path.push_back(node.id);
   }
   return path;
@@ -562,6 +546,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   static const bool kVisualize = true;
+  static const bool kDebug = FLAGS_v > 0;
   typedef navigation::GraphDomain Domain;
   planning_domain_.ResetDynamicStates();
   const uint64_t start_id = planning_domain_.AddDynamicState(initial);
@@ -569,11 +554,19 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
   Domain::State start = planning_domain_.states[start_id];
   Domain::State goal = planning_domain_.states[goal_id];
   GraphVisualizer graph_viz(kVisualize);
+
+  if (kDebug) {
+    printf("Starting A* with start %ld %f %f goal %ld %f %f\n", start_id,
+           start.loc.x(), start.loc.y(), goal_id, goal.loc.x(), goal.loc.y());
+  }
   const bool found_path =
-      AStar(start, goal, planning_domain_, &graph_viz, &path);
+      AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
   if (found_path) {
-    CHECK(path.size() > 0);
-    Vector2f s1 = plan_path_[0].loc;
+    // CHECK(path.size() > 0);
+    CHECK(plan_path_.size() > 0);
+    printf("Path found!\n");
+    Vector2f s1 = plan_path_[0].loc;  // BUG HERE plan_path_ is empty
+    printf("Path: %f %f\n", s1.x(), s1.y());
     for (size_t i = 1; i < plan_path_.size(); ++i) {
       Vector2f s2 = plan_path_[i].loc;
       s1 = s2;
@@ -583,7 +576,8 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
   }
 
   if (params_.do_intermed) {
-    std::priority_queue<PointCost, std::vector<PointCost>, CompareCost> intermediate_queue; //<Location stored as <index, cost>
+    std::priority_queue<PointCost, std::vector<PointCost>, CompareCost>
+        intermediate_queue;  //<Location stored as <index, cost>
 
     unordered_map<uint32_t, uint32_t> parent;
     unordered_map<uint32_t, float> cost;
@@ -598,8 +592,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
     Vector2f intermediate_goal_global = end;
     GetGlobalCarrot(intermediate_goal_global);
 
-
-    if(path.size() == 0){
+    if (path.size() == 0) {
       return path;
     }
 
@@ -607,67 +600,82 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
 
     int goal_map_x, goal_map_y;
 
-    costmap_.worldToMapEnforceBounds(intermediate_goal_local.x(), intermediate_goal_local.y(), goal_map_x, goal_map_y);
+    costmap_.worldToMapEnforceBounds(intermediate_goal_local.x(),
+                                     intermediate_goal_local.y(), goal_map_x,
+                                     goal_map_y);
     uint32_t goal_index = costmap_.getIndex(goal_map_x, goal_map_y);
     double goal_relative_x, goal_relative_y;
-    costmap_.mapToWorld(goal_map_x, goal_map_y, goal_relative_x, goal_relative_y);
-    intermediate_goal_ = Vector2f(goal_relative_x, goal_relative_y) + robot_loc_;
+    costmap_.mapToWorld(goal_map_x, goal_map_y, goal_relative_x,
+                        goal_relative_y);
+    intermediate_goal_ =
+        Vector2f(goal_relative_x, goal_relative_y) + robot_loc_;
 
     unordered_set<uint32_t> visited;
 
-    while(!intermediate_queue.empty()){
+    while (!intermediate_queue.empty()) {
       uint32_t current_index = intermediate_queue.top().index;
       intermediate_queue.pop();
-      if(visited.count(current_index) > 0){
+      if (visited.count(current_index) > 0) {
         continue;
       }
 
       visited.insert(current_index);
 
-      if(current_index == goal_index){
+      if (current_index == goal_index) {
         break;
       }
 
       costmap_.indexToCells(current_index, mx, my);
-      vector<int> neighbors_x {-1, 0, 0, 1, -1, -1, 1, 1};
-      vector<int> neighbors_y {0, -1, 1, 0, -1, 1, -1, 1};
-      for(size_t i = 0; i < neighbors_x.size(); i++){
+      vector<int> neighbors_x{-1, 0, 0, 1, -1, -1, 1, 1};
+      vector<int> neighbors_y{0, -1, 1, 0, -1, 1, -1, 1};
+      for (size_t i = 0; i < neighbors_x.size(); i++) {
         int new_row = mx + neighbors_x[i];
         int new_col = my + neighbors_y[i];
         uint32_t neighbor_index = costmap_.getIndex(new_row, new_col);
-        
-        if(new_row >= 0 && new_row < static_cast<int>(costmap_.getSizeInCellsX()) && new_col >= 0 
-        && new_col < static_cast<int>(costmap_.getSizeInCellsY())) {
+
+        if (new_row >= 0 &&
+            new_row < static_cast<int>(costmap_.getSizeInCellsX()) &&
+            new_col >= 0 &&
+            new_col < static_cast<int>(costmap_.getSizeInCellsY())) {
           double wx, wy;
           costmap_.mapToWorld(new_row, new_col, wx, wy);
           wx += robot_loc_.x();
           wy += robot_loc_.y();
           uint32_t global_mx, global_my;
-          bool in_global_map = global_costmap_.worldToMap(wx, wy, global_mx, global_my);
+          bool in_global_map =
+              global_costmap_.worldToMap(wx, wy, global_mx, global_my);
           unsigned char max_costmap_cost = costmap_.getCost(new_row, new_col);
-          if(in_global_map){
-            max_costmap_cost = std::max(costmap_.getCost(new_row, new_col), global_costmap_.getCost(global_mx, global_my));
+          if (in_global_map) {
+            max_costmap_cost =
+                std::max(costmap_.getCost(new_row, new_col),
+                         global_costmap_.getCost(global_mx, global_my));
           }
-          float new_cost = cost[current_index] + params_.distance_weight * sqrt(pow(neighbors_x[i], 2) + pow(neighbors_y[i], 2)) + max_costmap_cost;
-          if(cost.count(neighbor_index) == 0 || new_cost < cost[neighbor_index]){
+          float new_cost =
+              cost[current_index] +
+              params_.distance_weight *
+                  sqrt(pow(neighbors_x[i], 2) + pow(neighbors_y[i], 2)) +
+              max_costmap_cost;
+          if (cost.count(neighbor_index) == 0 ||
+              new_cost < cost[neighbor_index]) {
             cost[neighbor_index] = new_cost;
             parent[neighbor_index] = current_index;
 
             float dx = abs(goal_map_x - new_row);
             float dy = abs(goal_map_y - new_col);
 
-            float heuristic_cost = max(dx, dy) + (sqrt(2.0) - 1.0) * min(dx, dy);
-            intermediate_queue.push(PointCost(neighbor_index, new_cost + heuristic_cost));
+            float heuristic_cost =
+                max(dx, dy) + (sqrt(2.0) - 1.0) * min(dx, dy);
+            intermediate_queue.push(
+                PointCost(neighbor_index, new_cost + heuristic_cost));
           }
-        }   
+        }
       }
     }
 
     vector<Vector2f> intermediate_vector_path;
     vector<GraphDomain::State> intermediate_path;
 
-    if(cost.count(goal_index) != 0){
-
+    if (cost.count(goal_index) != 0) {
       uint32_t row, col;
       costmap_.indexToCells(robot_index, row, col);
       double wx, wy;
@@ -675,7 +683,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
       Vector2f robot_location(wx, wy);
 
       uint32_t current_index = goal_index;
-      while(parent.count(current_index) > 0){
+      while (parent.count(current_index) > 0) {
         costmap_.indexToCells(current_index, row, col);
         costmap_.mapToWorld(row, col, wx, wy);
         intermediate_vector_path.push_back(Vector2f(wx, wy) - robot_location);
@@ -683,17 +691,17 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
       }
       reverse(intermediate_vector_path.begin(), intermediate_vector_path.end());
       planning_domain_.ResetDynamicStates();
-    
-      for(size_t i = 0; i < intermediate_vector_path.size(); i++){
+
+      for (size_t i = 0; i < intermediate_vector_path.size(); i++) {
         Vector2f map_frame_position = intermediate_vector_path[i] + robot_loc_;
-        const uint64_t path_id = planning_domain_.AddDynamicState(map_frame_position);
+        const uint64_t path_id =
+            planning_domain_.AddDynamicState(map_frame_position);
         intermediate_path.push_back(planning_domain_.states[path_id]);
       }
       reverse(intermediate_path.begin(), intermediate_path.end());
       intermediate_path_found_ = true;
       return intermediate_path;
-    }
-    else{
+    } else {
       intermediate_path_found_ = false;
       printf("No intermediate planner path found\n");
     }
@@ -708,14 +716,12 @@ void Navigation::PlannerTest() {
 }
 
 DEFINE_double(max_plan_deviation, 0.5,
-   "Maximum premissible deviation from the plan");
+              "Maximum premissible deviation from the plan");
 bool Navigation::PlanStillValid() {
   if (plan_path_.size() < 2) return false;
   for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
-    const float dist_from_segment =
-        geometry::DistanceFromLineSegment(robot_loc_,
-                                          plan_path_[i].loc,
-                                          plan_path_[i + 1].loc);
+    const float dist_from_segment = geometry::DistanceFromLineSegment(
+        robot_loc_, plan_path_[i].loc, plan_path_[i + 1].loc);
     if (dist_from_segment < FLAGS_max_plan_deviation) {
       return true;
     }
@@ -723,34 +729,38 @@ bool Navigation::PlanStillValid() {
   return false;
 }
 
-bool Navigation::IntermediatePlanStillValid(){
-
+bool Navigation::IntermediatePlanStillValid() {
   if (plan_path_.size() < 2 || !intermediate_path_found_) return false;
 
-  // TODO: Add parameter for when to look for new goal or use different heuristic, may not be necessary with carrot replan
-  if ((nav_goal_loc_ - plan_path_[0].loc).norm() > sqrt(2 * params_.local_costmap_resolution) / 2 
-  && (robot_loc_ - plan_path_[0].loc).norm() < 1){
+  // TODO: Add parameter for when to look for new goal or use different
+  // heuristic, may not be necessary with carrot replan
+  if ((nav_goal_loc_ - plan_path_[0].loc).norm() >
+          sqrt(2 * params_.local_costmap_resolution) / 2 &&
+      (robot_loc_ - plan_path_[0].loc).norm() < 1) {
     return false;
   }
 
   Vector2f global_carrot;
   GetGlobalCarrot(global_carrot);
-  if((intermediate_goal_ - global_carrot).norm() > params_.replan_dist){
+  if ((intermediate_goal_ - global_carrot).norm() > params_.replan_dist) {
     return false;
   }
 
-  for (size_t i = 0; i < plan_path_.size(); i++){
+  for (size_t i = 0; i < plan_path_.size(); i++) {
     uint32_t mx, my;
     Vector2f relative_path_location = plan_path_[i].loc - robot_loc_;
-    bool in_map = costmap_.worldToMap(relative_path_location.x(), relative_path_location.y(), mx, my);
-    if(in_map && (costmap_.getCost(mx, my) == costmap_2d::LETHAL_OBSTACLE || costmap_.getCost(mx, my) == costmap_2d::INSCRIBED_INFLATED_OBSTACLE) ){
+    bool in_map = costmap_.worldToMap(relative_path_location.x(),
+                                      relative_path_location.y(), mx, my);
+    if (in_map &&
+        (costmap_.getCost(mx, my) == costmap_2d::LETHAL_OBSTACLE ||
+         costmap_.getCost(mx, my) == costmap_2d::INSCRIBED_INFLATED_OBSTACLE)) {
       return false;
     }
   }
   return true;
 }
 
-Vector2f Navigation::GetPathGoal(float target_distance){
+Vector2f Navigation::GetPathGoal(float target_distance) {
   CHECK_GE(plan_path_.size(), 2u);
 
   float total_distance = 0.0;
@@ -767,13 +777,15 @@ Vector2f Navigation::GetPathGoal(float target_distance){
 }
 
 bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
-  for(float carrot_dist = params_.intermediate_goal_dist; carrot_dist > params_.carrot_dist; carrot_dist -= 0.5){
-    if(GetCarrot(carrot, true, carrot_dist)){
+  for (float carrot_dist = params_.intermediate_goal_dist;
+       carrot_dist > params_.carrot_dist; carrot_dist -= 0.5) {
+    if (GetCarrot(carrot, true, carrot_dist)) {
       Vector2f robot_frame_carrot = carrot - robot_loc_;
       uint32_t mx, my;
-      bool in_map = costmap_.worldToMap(robot_frame_carrot.x(), robot_frame_carrot.y(), mx, my);
-      if(in_map && costmap_.getCost(mx, my) != costmap_2d::LETHAL_OBSTACLE 
-      && costmap_.getCost(mx, my) != costmap_2d::INSCRIBED_INFLATED_OBSTACLE){
+      bool in_map = costmap_.worldToMap(robot_frame_carrot.x(),
+                                        robot_frame_carrot.y(), mx, my);
+      if (in_map && costmap_.getCost(mx, my) != costmap_2d::LETHAL_OBSTACLE &&
+          costmap_.getCost(mx, my) != costmap_2d::INSCRIBED_INFLATED_OBSTACLE) {
         return true;
       }
     }
@@ -788,7 +800,7 @@ bool Navigation::GetLocalCarrot(Vector2f& carrot) {
 
 bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
   vector<GraphDomain::State> plan_path = plan_path_;
-  if(global){
+  if (global) {
     plan_path = global_plan_path_;
   }
   const float kSqCarrotDist = Sq(carrot_dist);
@@ -807,8 +819,8 @@ bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
   for (size_t i = 0; i + 1 < plan_path.size(); ++i) {
     const Vector2f v0 = plan_path[i].loc;
     const Vector2f v1 = plan_path[i + 1].loc;
-    const float dist_to_segment = geometry::DistanceFromLineSegment(
-        robot_loc_, v0, v1);
+    const float dist_to_segment =
+        geometry::DistanceFromLineSegment(robot_loc_, v0, v1);
     if (dist_to_segment < closest_dist) {
       closest_dist = dist_to_segment;
       i0 = i;
@@ -844,18 +856,22 @@ bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
   const Vector2f v0 = plan_path[i0].loc;
   const Vector2f v1 = plan_path[i1].loc;
   Vector2f r0, r1;
-  #define V2COMP(v) v.x(), v.y()
+#define V2COMP(v) v.x(), v.y()
   // printf("%f,%f %f,%f %f,%f %f\n",
   //     V2COMP(robot_loc_), V2COMP(v0), V2COMP(v1), (v0 - v1).norm());
   const int num_intersections = geometry::CircleLineIntersection<float>(
       robot_loc_, carrot_dist, v0, v1, &r0, &r1);
   if (num_intersections == 0) {
-    fprintf(stderr, "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) sq_carrot_dist: (%f) closest_dist: (%f)\n",
-      v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), kSqCarrotDist, closest_dist);
+    fprintf(stderr,
+            "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), "
+            "robot_loc_: (%f %f) sq_carrot_dist: (%f) closest_dist: (%f)\n",
+            v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(),
+            kSqCarrotDist, closest_dist);
     return false;
   }
 
-  if (num_intersections == 1 || (r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
+  if (num_intersections == 1 ||
+      (r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
     carrot = r0;
   } else {
     carrot = r1;
@@ -866,7 +882,8 @@ bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
 void Navigation::GetStraightFreePathLength(float* free_path_length,
                                            float* clearance) {
   // How much the robot's body extends in front of its base link frame.
-  const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
+  const float l = 0.5 * params_.robot_length - params_.base_link_offset +
+                  params_.obstacle_margin;
   // The robot's half-width.
   const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
   for (const Vector2f& p : fp_point_cloud_) {
@@ -906,8 +923,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     local_target = override_target_;
   }
 
-  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
-  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
+  sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_,
+                   latest_image_);
+  evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_,
+                     local_target, fp_point_cloud_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     printf("%lu options\n", paths.size());
@@ -915,8 +934,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     for (auto p : paths) {
       ConstantCurvatureArc arc =
           *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f\n",
-          i++, arc.curvature, arc.length, arc.curvature);
+      printf("%3d: %7.5f %7.3f %7.3f\n", i++, arc.curvature, arc.length,
+             arc.curvature);
     }
   }
   if (paths.size() == 0) {
@@ -939,21 +958,16 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     return;
   }
 
-
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};
 
   float max_map_speed = params_.linear_limits.max_speed;
-  planning_domain_.GetClearanceAndSpeedFromLoc(
-      robot_loc_, nullptr, &max_map_speed);
+  planning_domain_.GetClearanceAndSpeedFromLoc(robot_loc_, nullptr,
+                                               &max_map_speed);
   auto linear_limits = params_.linear_limits;
   linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
-  best_path->GetControls(linear_limits,
-                         params_.angular_limits,
-                         params_.dt, robot_vel_,
-                         robot_omega_,
-                         vel_cmd,
-                         ang_vel_cmd);
+  best_path->GetControls(linear_limits, params_.angular_limits, params_.dt,
+                         robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
   last_options_ = paths;
   best_option_ = best_path;
 }
@@ -973,7 +987,7 @@ void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
     }
   }
   cmd_vel = {velocity_cmd, 0};
-  //TODO: motion profiling for omega
+  // TODO: motion profiling for omega
   angular_vel_cmd = 0;
 }
 
@@ -982,7 +996,6 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const float kMaxLinearSpeed = 0.1;
   const float velocity = robot_vel_.x();
   cmd_angle_vel = 0;
-
 
   if (fabs(velocity) > kMaxLinearSpeed) {
     Halt(cmd_vel, cmd_angle_vel);
@@ -996,9 +1009,10 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   } else if (nav_state_ == NavigationState::kTurnInPlace) {
     dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
   }
-  if (kDebug) printf("dTheta: %f robot_angle: %f\n", RadToDeg(dTheta), RadToDeg(robot_angle_));
+  if (kDebug)
+    printf("dTheta: %f robot_angle: %f\n", RadToDeg(dTheta),
+           RadToDeg(robot_angle_));
 
-  
   const float s = Sign(dTheta);
   if (robot_omega_ * dTheta < 0.0f) {
     if (kDebug) printf("Wrong way\n");
@@ -1010,20 +1024,14 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
       cmd_angle_vel = robot_omega_ - Sign(robot_omega_) * dv;
     }
   } else {
-    cmd_angle_vel = s * Run1DTimeOptimalControl(
-        params_.angular_limits,
-        0,
-        s * robot_omega_,
-        s * dTheta,
-        0,
-        params_.dt);
+    cmd_angle_vel =
+        s * Run1DTimeOptimalControl(params_.angular_limits, 0, s * robot_omega_,
+                                    s * dTheta, 0, params_.dt);
   }
   cmd_vel = {0, 0};
 }
 
-void Navigation::Pause() {
-  nav_state_ = NavigationState::kPaused;
-}
+void Navigation::Pause() { nav_state_ = NavigationState::kPaused; }
 
 void Navigation::SetMaxVel(const float vel) {
   params_.linear_limits.max_speed = vel;
@@ -1055,8 +1063,7 @@ void Navigation::SetObstacleMargin(const float margin) {
 }
 
 void Navigation::SetClearanceWeight(const float weight) {
-  LinearEvaluator* evaluator =
-      dynamic_cast<LinearEvaluator*>(evaluator_.get());
+  LinearEvaluator* evaluator = dynamic_cast<LinearEvaluator*>(evaluator_.get());
   evaluator->SetClearanceWeight(weight);
   return;
 }
@@ -1066,21 +1073,13 @@ void Navigation::SetCarrotDist(const float carrot_dist) {
   return;
 }
 
-Eigen::Vector2f Navigation::GetTarget() {
-  return local_target_;
-}
+Eigen::Vector2f Navigation::GetTarget() { return local_target_; }
 
-Eigen::Vector2f Navigation::GetOverrideTarget() {
-  return override_target_;
-}
+Eigen::Vector2f Navigation::GetOverrideTarget() { return override_target_; }
 
-Eigen::Vector2f Navigation::GetVelocity() {
-  return robot_vel_;
-}
+Eigen::Vector2f Navigation::GetVelocity() { return robot_vel_; }
 
-float Navigation::GetAngularVelocity() {
-  return robot_omega_;
-}
+float Navigation::GetAngularVelocity() { return robot_omega_; }
 
 string Navigation::GetNavStatus() {
   switch (nav_state_) {
@@ -1109,25 +1108,15 @@ uint8_t Navigation::GetNavStatusUint8() {
   return static_cast<uint8_t>(nav_state_);
 }
 
-vector<Vector2f> Navigation::GetPredictedCloud() {
-  return fp_point_cloud_;
-}
+vector<Vector2f> Navigation::GetPredictedCloud() { return fp_point_cloud_; }
 
-float Navigation::GetCarrotDist() {
-  return params_.carrot_dist;
-}
+float Navigation::GetCarrotDist() { return params_.carrot_dist; }
 
-float Navigation::GetObstacleMargin() {
-  return params_.obstacle_margin;
-}
+float Navigation::GetObstacleMargin() { return params_.obstacle_margin; }
 
-float Navigation::GetRobotWidth() {
-  return params_.robot_width;
-}
+float Navigation::GetRobotWidth() { return params_.robot_width; }
 
-float Navigation::GetRobotLength() {
-  return params_.robot_length;
-}
+float Navigation::GetRobotLength() { return params_.robot_length; }
 
 vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
@@ -1135,7 +1124,8 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
 
 const cv::Mat& Navigation::GetVisualizationImage() {
   if (params_.evaluator_type == "cost_map") {
-    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())->latest_vis_image_;
+    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())
+        ->latest_vis_image_;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);
@@ -1146,29 +1136,23 @@ std::shared_ptr<PathRolloutBase> Navigation::GetOption() {
   return best_option_;
 }
 
-vector<GraphDomain::State> Navigation::GetPlanPath() {
-  return plan_path_;
-}
+vector<GraphDomain::State> Navigation::GetPlanPath() { return plan_path_; }
 
 vector<GraphDomain::State> Navigation::GetGlobalPath() {
   return global_plan_path_;
 }
 
-vector<ObstacleCost> Navigation::GetCostmapObstacles(){
+vector<ObstacleCost> Navigation::GetCostmapObstacles() {
   return costmap_obstacles_;
 }
 
-vector<ObstacleCost> Navigation::GetGlobalCostmapObstacles(){
+vector<ObstacleCost> Navigation::GetGlobalCostmapObstacles() {
   return global_costmap_obstacles_;
 }
 
-Eigen::Vector2f Navigation::GetIntermediateGoal(){
-  return intermediate_goal_;
-}
+Eigen::Vector2f Navigation::GetIntermediateGoal() { return intermediate_goal_; }
 
-
-bool Navigation::Run(const double& time,
-                     Vector2f& cmd_vel,
+bool Navigation::Run(const double& time, Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 0;
   if (!initialized_) {
@@ -1197,19 +1181,21 @@ bool Navigation::Run(const double& time,
     LatencyTest(cmd_vel, cmd_angle_vel);
     return true;
   }
-  
+  printf("Is intermediate param enabled: %d\n", params_.do_intermed);
   if (params_.do_intermed) {
-    int cell_inflation_size = std::ceil(params_.max_inflation_radius/costmap_.getResolution());
+    int cell_inflation_size =
+        std::ceil(params_.max_inflation_radius / costmap_.getResolution());
 
-    int x_max = costmap_.getSizeInCellsX(); 
-    int y_max = costmap_.getSizeInCellsY(); 
+    int x_max = costmap_.getSizeInCellsX();
+    int y_max = costmap_.getSizeInCellsY();
 
     // Reset map to empty from previous iteration
     costmap_.resetMap(0, 0, x_max, y_max);
     costmap_obstacles_.clear();
 
     // True if distance is less than replan inflation size
-    // Assign different value for points within inflation size but farther than replan size
+    // Assign different value for points within inflation size but farther than
+    // replan size
     unordered_map<uint32_t, unsigned char> inflation_cells;
     unordered_set<uint32_t> obstacle_cells;
 
@@ -1225,22 +1211,28 @@ bool Navigation::Run(const double& time,
     costmap_.mapToWorld(robot_row, robot_col, robot_wx, robot_wy);
     Vector2f robot_location(robot_wx, robot_wy);
 
-
     // Add new points to costmap
-    for (size_t i = 0; i < point_cloud_.size(); i++){
+    for (size_t i = 0; i < point_cloud_.size(); i++) {
       uint32_t unsigned_mx, unsigned_my;
-      Vector2f relative_location_map_frame = Rotation2Df(robot_angle_) * point_cloud_[i];
-      bool in_map = costmap_.worldToMap(relative_location_map_frame.x(), relative_location_map_frame.y(), unsigned_mx, unsigned_my); 
+      Vector2f relative_location_map_frame =
+          Rotation2Df(robot_angle_) * point_cloud_[i];
+      bool in_map = costmap_.worldToMap(relative_location_map_frame.x(),
+                                        relative_location_map_frame.y(),
+                                        unsigned_mx, unsigned_my);
 
-      //TODO: change max distance based on lidar to base link transformation
-      if (in_map && relative_location_map_frame.norm() < (params_.lidar_range_max - params_.robot_length) && relative_location_map_frame.norm() > params_.lidar_range_min){
+      // TODO: change max distance based on lidar to base link transformation
+      if (in_map &&
+          relative_location_map_frame.norm() <
+              (params_.lidar_range_max - params_.robot_length) &&
+          relative_location_map_frame.norm() > params_.lidar_range_min) {
         uint32_t index = costmap_.getIndex(unsigned_mx, unsigned_my);
         double wx, wy;
         costmap_.mapToWorld(unsigned_mx, unsigned_my, wx, wy);
         obstacle_cells.insert(index);
 
         SeenObstacle obs;
-        obs.location = Vector2f(wx - robot_location.x(), wy - robot_location.y());
+        obs.location =
+            Vector2f(wx - robot_location.x(), wy - robot_location.y());
         obs.last_seen = std::time(nullptr);
         index_to_obstacle[index] = obs;
       }
@@ -1252,8 +1244,9 @@ bool Navigation::Run(const double& time,
       const int robot_mx;
       const int robot_my;
 
-
-      PointComparison(const costmap_2d::Costmap2D map, const int robot_x, const int robot_y) : costmap(map), robot_mx(robot_x), robot_my(robot_y) {}
+      PointComparison(const costmap_2d::Costmap2D map, const int robot_x,
+                      const int robot_y)
+          : costmap(map), robot_mx(robot_x), robot_my(robot_y) {}
 
       bool operator()(int a, int b) const {
         uint32_t row_a, col_a;
@@ -1279,7 +1272,8 @@ bool Navigation::Run(const double& time,
 
     auto iter = sorted_obstacle_cells.begin();
 
-    while (iter != sorted_obstacle_cells.end() && iter != std::prev(sorted_obstacle_cells.end())) {
+    while (iter != sorted_obstacle_cells.end() &&
+           iter != std::prev(sorted_obstacle_cells.end())) {
       costmap_2d::MapLocation point_a;
       costmap_.indexToCells(*iter, point_a.x, point_a.y);
       costmap_2d::MapLocation point_b;
@@ -1292,7 +1286,7 @@ bool Navigation::Run(const double& time,
       vector<costmap_2d::MapLocation> fill_cells;
       costmap_.convexFillCells(polygon, fill_cells);
 
-      for (size_t i = 0; i < fill_cells.size(); i++){
+      for (size_t i = 0; i < fill_cells.size(); i++) {
         empty_cells.insert(costmap_.getIndex(fill_cells[i].x, fill_cells[i].y));
       }
 
@@ -1304,17 +1298,19 @@ bool Navigation::Run(const double& time,
       Vector2f point = obs.location;
       uint32_t unsigned_mx, unsigned_my;
       Vector2f new_relative_point = point + prev_robot_loc_ - robot_loc_;
-      bool in_map = costmap_.worldToMap(new_relative_point.x(), new_relative_point.y(), unsigned_mx, unsigned_my);
+      bool in_map =
+          costmap_.worldToMap(new_relative_point.x(), new_relative_point.y(),
+                              unsigned_mx, unsigned_my);
       uint32_t index = costmap_.getIndex(unsigned_mx, unsigned_my);
-      if (in_map && empty_cells.count(index) == 0 && std::time(nullptr) - obs.last_seen < params_.object_lifespan){
+      if (in_map && empty_cells.count(index) == 0 &&
+          std::time(nullptr) - obs.last_seen < params_.object_lifespan) {
         obstacle_cells.insert(index);
-        if(index_to_obstacle.count(index) == 0){
+        if (index_to_obstacle.count(index) == 0) {
           SeenObstacle new_obs;
           new_obs.location = new_relative_point;
           new_obs.last_seen = obs.last_seen;
           index_to_obstacle[index] = new_obs;
-        }
-        else{
+        } else {
           index_to_obstacle[index].location = new_relative_point;
         }
       }
@@ -1325,23 +1321,26 @@ bool Navigation::Run(const double& time,
       costmap_.indexToCells(index, unsigned_mx, unsigned_my);
       int mx = static_cast<int>(unsigned_mx);
       int my = static_cast<int>(unsigned_my);
-      for (int j = -cell_inflation_size; j <= cell_inflation_size; j++){
-        for (int k = -cell_inflation_size; k <= cell_inflation_size; k++){
+      for (int j = -cell_inflation_size; j <= cell_inflation_size; j++) {
+        for (int k = -cell_inflation_size; k <= cell_inflation_size; k++) {
           float cell_dist = sqrt(pow(j, 2) + pow(k, 2));
           float dist = cell_dist * costmap_.getResolution();
-          if((cell_dist <= cell_inflation_size) && (mx + j >= 0) && (mx + j < x_max) && (my + k >= 0) && (my + k < y_max)){
+          if ((cell_dist <= cell_inflation_size) && (mx + j >= 0) &&
+              (mx + j < x_max) && (my + k >= 0) && (my + k < y_max)) {
             unsigned char cost;
-            if(j == 0 && k == 0){
+            if (j == 0 && k == 0) {
               cost = costmap_2d::LETHAL_OBSTACLE;
-            }
-            else if(dist <= params_.min_inflation_radius){
+            } else if (dist <= params_.min_inflation_radius) {
               cost = costmap_2d::INSCRIBED_INFLATED_OBSTACLE;
+            } else {
+              cost = std::ceil(std::exp(-1 * params_.inflation_coeff *
+                                        (dist - params_.min_inflation_radius)) *
+                               (costmap_2d::INSCRIBED_INFLATED_OBSTACLE - 1));
             }
-            else{
-              cost = std::ceil(std::exp(-1 * params_.inflation_coeff * (dist - params_.min_inflation_radius)) * (costmap_2d::INSCRIBED_INFLATED_OBSTACLE-1));
-            }
-            costmap_.setCost(mx + j, my + k, std::max(cost, costmap_.getCost(mx + j, my + k)));
-            inflation_cells[costmap_.getIndex(mx + j, my + k)] = std::max(cost, costmap_.getCost(mx + j, my + k));
+            costmap_.setCost(mx + j, my + k,
+                             std::max(cost, costmap_.getCost(mx + j, my + k)));
+            inflation_cells[costmap_.getIndex(mx + j, my + k)] =
+                std::max(cost, costmap_.getCost(mx + j, my + k));
           }
         }
       }
@@ -1355,7 +1354,8 @@ bool Navigation::Run(const double& time,
 
       double wx, wy;
       costmap_.mapToWorld(mx, my, wx, wy);
-      costmap_obstacles_.push_back(ObstacleCost{Vector2f(wx, wy) + robot_loc_, pair.second});
+      costmap_obstacles_.push_back(
+          ObstacleCost{Vector2f(wx, wy) + robot_loc_, pair.second});
     }
 
     // Record last seen locations of points
@@ -1368,13 +1368,14 @@ bool Navigation::Run(const double& time,
     }
   }
 
-
   // Before switching states we need to update the local target.
-
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
+    printf("Updating local target\n");
     // Recompute global plan as necessary.
-    if ((!params_.do_intermed && !PlanStillValid()) || (params_.do_intermed && (!PlanStillValid() || !IntermediatePlanStillValid()))) {
+    if ((!params_.do_intermed && !PlanStillValid()) ||
+        (params_.do_intermed &&
+         (!PlanStillValid() || !IntermediatePlanStillValid()))) {
       if (kDebug) printf("Replanning\n");
       plan_path_ = Plan(robot_loc_, nav_goal_loc_);
     }
@@ -1400,12 +1401,12 @@ bool Navigation::Run(const double& time,
         robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
       nav_state_ = NavigationState::kTurnInPlace;
     } else if (nav_state_ == NavigationState::kTurnInPlace &&
-          AngleDist(robot_angle_, nav_goal_angle_) < 
-          params_.target_angle_tolerance) {
+               AngleDist(robot_angle_, nav_goal_angle_) <
+                   params_.target_angle_tolerance) {
       nav_state_ = NavigationState::kStopped;
     }
   } while (prev_state != nav_state_);
-  
+
   switch (nav_state_) {
     case NavigationState::kStopped: {
       if (kDebug) printf("\nNav complete\n");
@@ -1423,8 +1424,8 @@ bool Navigation::Run(const double& time,
       if (kDebug) printf("\nNav override\n");
     } break;
     default: {
-      fprintf(stderr, "ERROR: Unknown nav state %d\n", 
-          static_cast<int>(nav_state_));
+      fprintf(stderr, "ERROR: Unknown nav state %d\n",
+              static_cast<int>(nav_state_));
     }
   }
 
@@ -1433,7 +1434,7 @@ bool Navigation::Run(const double& time,
     Halt(cmd_vel, cmd_angle_vel);
     return true;
   } else if (nav_state_ == NavigationState::kGoto ||
-      nav_state_ == NavigationState::kOverride) {
+             nav_state_ == NavigationState::kOverride) {
     Vector2f local_target(0, 0);
     if (nav_state_ == NavigationState::kGoto) {
       // Local Navigation
