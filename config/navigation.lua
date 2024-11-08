@@ -2,14 +2,20 @@ function deg2rad(deg)
   return deg * (math.pi / 180)
 end
 
+OSMPlannerParameters = {
+  gps_topic = "/phone/gps_with_heading";
+  gps_goals_topic = "/gps_goals";
+  osrm_file = "osrm_texas_cbf_mld/texas-latest.osrm";
+}
+
 NavigationParameters = {
   laser_topics = {
     "/scan",
-    -- "/velodyne_2dscan",
-    "/kinect_laserscan",
+    "/velodyne_2dscan_lowbeam",
+    -- "/kinect_laserscan",
   };
   laser_frame = "base_link";
-  odom_topic = "/odom";
+  odom_topic = "/jackal_velocity_controller/odom";
   localization_topic = "localization";
   image_topic = "/camera/rgb/image_raw/compressed";
   init_topic = "initialpose";

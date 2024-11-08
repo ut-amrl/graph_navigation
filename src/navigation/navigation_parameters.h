@@ -51,6 +51,17 @@ struct MotionLimits {
       max_speed(max_speed) {}
 };
 
+struct OSMPlannerParameters {
+  std::string osrm_file;
+  std::string gps_topic;
+  std::string gps_goals_topic;
+
+  OSMPlannerParameters() :
+      osrm_file(""),
+      gps_topic(""),
+      gps_goals_topic("") {}
+};
+
 struct NavigationParameters {
   // whether to use intermediate planning or not
   bool do_intermed;

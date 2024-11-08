@@ -35,6 +35,7 @@
 #include "graph_domain.h"
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
+#include "osm_planner.h"
 
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
@@ -42,6 +43,7 @@
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
+
 
 
 #ifndef NAVIGATION_H
@@ -120,8 +122,11 @@ class Navigation {
                          float* free_path_length,
                          float* clearance,
                          Eigen::Vector2f* obstruction);
+  void UpdateGPS(const GPSPoint& msg);
+  void SetGPSNavGoal(const vector<GPSPoint>& goals);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   void ResetNavGoals();
+  void updateGlobalNavGoal();
   void SetOverride(const Eigen::Vector2f& loc, float angle);
   void Resume();
   bool PlanStillValid();
@@ -134,6 +139,9 @@ class Navigation {
                               const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> GetPlanPath();
   std::vector<GraphDomain::State> GetGlobalPath();
+
+  // Get the next best global gps goal
+  void GetGlobalGoal();
 
   Eigen::Vector2f GetPathGoal(float target_distance);
   bool GetGlobalCarrot(Eigen::Vector2f& carrot);
@@ -148,6 +156,7 @@ class Navigation {
   // Set parameters for navigation.
   void Initialize(const NavigationParameters& params,
                   const std::string& map_file);
+  void InitializeOSM(const OSMPlannerParameters& params);
   // Map obstacles into global costmap
   void LoadVectorMap(const std::string& map_file);
 
@@ -190,6 +199,8 @@ class Navigation {
   void ObstacleTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test obstacle avoidance.
   void ObstAvTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  // Test OSM Planner.
+  void OSMPlannerTest();
   // Test planner.
   void PlannerTest();
   // Run obstacle avoidance local planner.
@@ -238,7 +249,14 @@ class Navigation {
   // Newest image received.
   cv::Mat latest_image_;
   double t_image_;
-
+  // GPS Related Variables
+  OSMPlannerParameters osm_params_;
+  OSMPlanner osm_planner_;
+  GPSPoint robot_gps_loc_;
+  GPSPoint initial_gps_loc_;
+  bool gps_initialized_;
+  int gps_goal_index_;
+  std::vector<GPSPoint> gps_nav_goals_loc_;
 
   NavigationState nav_state_;
   

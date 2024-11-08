@@ -55,6 +55,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
 #include "sensor_msgs/CompressedImage.h"
+#include "sensor_msgs/NavSatFix.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "nav_msgs/Odometry.h"
@@ -65,6 +66,7 @@
 #include "shared/util/timer.h"
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
+#include "std_msgs/Float64MultiArray.h"
 #include "std_msgs/Bool.h"
 #include "std_msgs/Empty.h"
 #include "tf/transform_broadcaster.h"
@@ -115,6 +117,8 @@ CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
 CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
+CONFIG_STRING(gps_topic, "OSMPlannerParameters.gps_topic");
+CONFIG_STRING(gps_goals_topic, "OSMPlannerParameters.gps_goals_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 
@@ -129,6 +133,7 @@ bool simulate_ = false;
 bool enabled_ = false;
 bool received_odom_ = false;
 bool received_laser_ = false;
+bool received_gps_ = false;
 Vector2f goal_ = {0, 0};
 Vector2f current_loc_ = {0, 0};
 Vector2f current_vel_ = {0, 0};
@@ -192,6 +197,13 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   received_odom_ = true;
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
+}
+
+void GPSCallback(const std_msgs::Float64MultiArray& msg) {
+  const GPSPoint loc(msg.data[0], msg.data[1], msg.data[2], msg.data[4]);
+  printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon, loc.heading);
+  received_gps_ = true;
+  navigation_.UpdateGPS(loc);
 }
 
 void RetrieveTransform(const std_msgs::Header& msg,
@@ -286,6 +298,21 @@ void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   const Vector2f loc(msg.pose.x, msg.pose.y);
   printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
   navigation_.SetNavGoal(loc, msg.pose.theta);
+  navigation_.Resume();
+}
+
+void GoToGPSGoalCallback(const std_msgs::Float64MultiArray& msg) {
+  if (msg.data.size() % 2 != 0) {
+    printf("Invalid GPS goal message, not divisible by 2\n");
+    return;
+  }
+
+  vector<GPSPoint> goals;
+  for (size_t i = 0; i < msg.data.size(); i += 2) {
+    goals.emplace_back(GPSPoint(msg.data[i], msg.data[i + 1]));
+    printf("GPS Goal: (%lf,%lf)\n", goals.back().lat, goals.back().lon);
+  }
+  navigation_.SetGPSNavGoal(goals);
   navigation_.Resume();
 }
 
@@ -757,6 +784,12 @@ int LoadCameraCalibrationCV(
   return 0;
 }
 
+void LoadOSMPlannerConfig(navigation::OSMPlannerParameters* params) {
+  CONFIG_STRING(osrm_file, "OSMPlannerParameters.osrm_file");
+  config_reader::ConfigReader reader({FLAGS_robot_config});
+  params->osrm_file = CONFIG_osrm_file;
+}
+
 void LoadConfig(navigation::NavigationParameters* params) {
   #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
   #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
@@ -902,6 +935,11 @@ int main(int argc, char** argv) {
   LoadConfig(&params);
   navigation_.Initialize(params, map_path);
 
+  // Load Global Planner Parameters and Initialize
+  navigation::OSMPlannerParameters osm_planner_params;
+  LoadOSMPlannerConfig(&osm_planner_params);
+  navigation_.InitializeOSM(osm_planner_params);
+
   // Publishers
   local_viz_msg_ = visualization::NewVisualizationMessage(
       "base_link", "navigation_local");
@@ -956,6 +994,10 @@ int main(int argc, char** argv) {
       n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
+  ros::Subscriber gps_pos_sub = 
+      n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
+  ros::Subscriber gps_goals_sub = 
+      n.subscribe(CONFIG_gps_goals_topic, 1, &GoToGPSGoalCallback);
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time
@@ -980,7 +1022,6 @@ int main(int argc, char** argv) {
     // Publish Nav Status
     PublishNavStatus();
     if(nav_succeeded) {
-      printf("Navigation Succeeded\n");
       if (!FLAGS_no_intermed) {
         // Publish Visualizations
         auto obstacles = navigation_.GetCostmapObstacles();
