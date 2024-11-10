@@ -41,6 +41,9 @@
 #include "constant_curvature_arcs.h"
 #include "amrl_msgs/NavStatusMsg.h"
 #include "amrl_msgs/Pose2Df.h"
+#include "amrl_msgs/GPSMsg.h"
+#include "amrl_msgs/GPSArrayMsg.h"
+#include "amrl_msgs/graphNavGPSSrv.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "eigen3/Eigen/Dense"
@@ -80,6 +83,9 @@
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
 using amrl_msgs::AckermannCurvatureDriveMsg;
+using amrl_msgs::GPSMsg;
+using amrl_msgs::GPSArrayMsg;
+using amrl_msgs::graphNavGPSSrv;
 using math_util::DegToRad;
 using math_util::RadToDeg;
 using motion_primitives::PathRolloutBase;
@@ -201,7 +207,8 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
 
 void GPSCallback(const std_msgs::Float64MultiArray& msg) {
   const GPSPoint loc(msg.data[0], msg.data[1], msg.data[2], msg.data[4]);
-  printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon, loc.heading);
+  if (FLAGS_v > 2)
+    printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon, loc.heading);
   received_gps_ = true;
   navigation_.UpdateGPS(loc);
 }
@@ -301,20 +308,20 @@ void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   navigation_.Resume();
 }
 
-void GoToGPSGoalCallback(const std_msgs::Float64MultiArray& msg) {
-  if (msg.data.size() % 2 != 0) {
-    printf("Invalid GPS goal message, not divisible by 2\n");
-    return;
-  }
+// void GoToGPSGoalCallback(const std_msgs::Float64MultiArray& msg) {
+//   if (msg.data.size() % 2 != 0) {
+//     printf("Invalid GPS goal message, not divisible by 2\n");
+//     return;
+//   }
 
-  vector<GPSPoint> goals;
-  for (size_t i = 0; i < msg.data.size(); i += 2) {
-    goals.emplace_back(GPSPoint(msg.data[i], msg.data[i + 1]));
-    printf("GPS Goal: (%lf,%lf)\n", goals.back().lat, goals.back().lon);
-  }
-  navigation_.SetGPSNavGoal(goals);
-  navigation_.Resume();
-}
+//   vector<GPSPoint> goals;
+//   for (size_t i = 0; i < msg.data.size(); i += 2) {
+//     goals.emplace_back(GPSPoint(msg.data[i], msg.data[i + 1]));
+//     printf("GPS Goal: (%lf,%lf)\n", goals.back().lat, goals.back().lon);
+//   }
+//   navigation_.SetGPSNavGoal(goals);
+//   navigation_.Resume();
+// }
 
 void ResetNavGoalsCallback(const std_msgs::Empty& msg) {
   printf("Resetting all nav goals.\n");
@@ -327,6 +334,31 @@ bool PlanServiceCb(graphNavSrv::Request &req,
   const Vector2f end(req.end.x, req.end.y);
   const vector<int> plan = navigation_.GlobalPlan(start, end);
   res.plan = plan;
+  return true;
+}
+
+bool GPSPlanServiceCb(graphNavGPSSrv::Request &req,
+                      graphNavGPSSrv::Response &res) {
+  const GPSPoint start(req.start.latitude, req.start.longitude);
+  vector<GPSPoint> goals;
+  for (const auto& goal : req.goals.data) {
+    goals.emplace_back(goal.header.stamp.toSec(), goal.latitude, goal.longitude, goal.heading);
+  }
+  const auto&route = navigation_.GlobalPlan(start, goals);
+  printf("Goals in osrm plan: %d\n", int(route.size()));
+  navigation_.SetGPSNavGoals(route);
+  GPSArrayMsg gps_goals_msg;
+  gps_goals_msg.header.stamp = ros::Time::now();  
+  for (const auto& route_node : route) {
+    GPSMsg goal_msg;
+    goal_msg.header.stamp = gps_goals_msg.header.stamp;
+    goal_msg.latitude = route_node.lat;
+    goal_msg.longitude = route_node.lon;
+    goal_msg.heading = route_node.heading;
+    gps_goals_msg.data.emplace_back(goal_msg);
+  }
+  res.plan = gps_goals_msg;
+  printf("Goals in gps_goals_msgs: %d\n", int(gps_goals_msg.data.size()));
   return true;
 }
 
@@ -966,6 +998,8 @@ int main(int argc, char** argv) {
   // Services
   ros::ServiceServer nav_srv =
     n.advertiseService("graphNavSrv", &PlanServiceCb);
+  ros::ServiceServer gps_nav_srv = 
+    n.advertiseService("graphNavGPSSrv", &GPSPlanServiceCb);
 
   // Subscribers
   ros::Subscriber velocity_sub =
@@ -996,8 +1030,8 @@ int main(int argc, char** argv) {
       n.subscribe("nav_override", 1, &OverrideCallback);
   ros::Subscriber gps_pos_sub = 
       n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
-  ros::Subscriber gps_goals_sub = 
-      n.subscribe(CONFIG_gps_goals_topic, 1, &GoToGPSGoalCallback);
+  // ros::Subscriber gps_goals_sub = 
+  //     n.subscribe(CONFIG_gps_goals_topic, 1, &GoToGPSGoalCallback);
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time

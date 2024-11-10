@@ -50,7 +50,6 @@
 #include "shared/math/math_util.h"
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
-#include "shared/math/conversion.h"
 #include "simple_queue.h"
 using json = nlohmann::json;
 
@@ -322,7 +321,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   plan_path_.clear();
 }
 
-void Navigation::SetGPSNavGoal(const vector<GPSPoint>& goals) {
+void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   nav_state_ = NavigationState::kGoto;
   // Skip gps subgoal update if the goal is the same as the current goal
   if (gps_nav_goals_loc_ == goals) {
@@ -571,6 +570,33 @@ vector<int> Navigation::GlobalPlan(const Vector2f& initial,
   return path;
 }
 
+vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital, const vector<GPSPoint>& goals) {
+//   for (size_t i = 0; i + 1 < gps_nav_goals_loc_.size(); i += 2) {
+//     printf("Start %lf %lf\n", gps_nav_goals_loc_[i].lat,
+//            gps_nav_goals_loc_[i].lon);
+//     printf("End %lf %lf\n", gps_nav_goals_loc_[i + 1].lat,
+//            gps_nav_goals_loc_[i + 1].lon);
+//     const auto& gps_route =
+//         osm_planner_.plan(gps_nav_goals_loc_[i], gps_nav_goals_loc_[i + 1]);
+//     printf("Route: %d\n", int(gps_route.size()));
+//     for (const auto& p : gps_route) {
+//       printf("%lf %lf %lf\n", p.time, p.lat, p.lon);
+//     }
+//   }
+// }
+  vector<GPSPoint> path;
+  GPSPoint start = inital;
+  for (const auto& subgoal : goals) {
+    const auto& route = osm_planner_.plan(start, subgoal);
+    if (!route.empty()) {  // Only append if subpath is not empty
+      path.insert(path.end(), route.begin(), route.end());
+    }
+    start = subgoal;
+  }
+  return path;
+}
+
+
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
                                             const Vector2f& end) {
   vector<GraphDomain::State> path;
@@ -754,7 +780,8 @@ void Navigation::OSMPlannerTest() {
            gps_nav_goals_loc_[i].lon);
     printf("End %lf %lf\n", gps_nav_goals_loc_[i + 1].lat,
            gps_nav_goals_loc_[i + 1].lon);
-    const auto& gps_route = osm_planner_.plan(gps_nav_goals_loc_[i], gps_nav_goals_loc_[i + 1]);
+    const auto& gps_route =
+        osm_planner_.plan(gps_nav_goals_loc_[i], gps_nav_goals_loc_[i + 1]);
     printf("Route: %d\n", int(gps_route.size()));
     for (const auto& p : gps_route) {
       printf("%lf %lf %lf\n", p.time, p.lat, p.lon);
@@ -1205,18 +1232,19 @@ void Navigation::GetGlobalGoal() {
 
   // 1 Replan global path in UTM frame from current position
   const auto& next_goal = gps_nav_goals_loc_[gps_goal_index_];
-  const auto & gps_route = osm_planner_.plan(latest_gps_loc_, next_goal);
+  const auto& gps_route = osm_planner_.plan(robot_gps_loc_, next_goal);
 
   // 2 Convert global path from UTM to local frame
   for (const auto& p : gps_route) {
     std::tuple<double, double> local_coords = gpsToGlobalCoord(
-      initial_gps_loc_.lat, initial_gps_loc_.lon, p.lat, p.lon);
+        initial_gps_loc_.lat, initial_gps_loc_.lon, p.lat, p.lon);
 
     if (FLAGS_v > 2) {
-      printf("|----- BEGIN GetGlobalGoal()   -----|\n")
+      printf("|----- BEGIN GetGlobalGoal()   -----|\n");
       printf("GPS Subgoal: %lf %lf\n", p.lat, p.lon);
-      printf("Local: %lf %lf\n", std::get<0>(local_coords), std::get<1>(local_coords));
-      printf("|----- END GetGlobalGoal()   -----|\n")
+      printf("Local: %lf %lf\n", std::get<0>(local_coords),
+             std::get<1>(local_coords));
+      printf("|----- END GetGlobalGoal()   -----|\n");
     }
   }
 
@@ -1259,7 +1287,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     LatencyTest(cmd_vel, cmd_angle_vel);
     return true;
   }
-
+  return true;
   if (params_.do_intermed) {
     int cell_inflation_size =
         std::ceil(params_.max_inflation_radius / costmap_.getResolution());
@@ -1447,26 +1475,38 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   }
 
   // Before switches states, we need to update the nav targets
-  bool is_gps_goal_reached_ = osm_planner_.isGoalReached(robot_gps_loc_, gps_nav_goals_loc_[gps_goal_index_]);
-  bool does_next_goal_exist = gps_goal_index_ + 1 < gps_nav_goals_loc_.size();
+  bool is_gps_goal_reached = osm_planner_.isGoalReached(
+      robot_gps_loc_, gps_nav_goals_loc_[gps_goal_index_]);
+  bool does_next_goal_exist =
+      gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size());
   bool is_path_invalid = (!params_.do_intermed && !PlanStillValid()) ||
-    (params_.do_intermed && (!PlanStillValid() || !IntermediatePlanStillValid()));
+                         (params_.do_intermed &&
+                          (!PlanStillValid() || !IntermediatePlanStillValid()));
 
   // Update navigation states
-  if (is_gps_goal_reached && !does_next_goal_exist) {
+  if (is_gps_goal_reached) {
+    if (!does_next_goal_exist) {
+      nav_state_ = NavigationState::kStopped;
+    } else {
+      gps_goal_index_++;
+      osm_planner_.updateGlobalGoal(robot_gps_loc_, gps_nav_goals_loc_,
+                                    gps_goal_index_);
+      // Update global plan
+
+      nav_state_ = NavigationState::kGoto;
+    }
     nav_state_ = NavigationState::kStopped;
-  } else if (is_gps_goal_reached && does_next_goal_exist) {
-    gps_goal_index_++;
-    // TODO: Implement function to update nav_goal_loc_ with gps_nav_goals_loc_[gps_goal_index_]    
-    osm_planner_.updateGlobalGoal(robot_gps_loc_, gps_nav_goals_loc_, gps_goal_index_);
-    nav_state_ = NavigationState::kGoto;
-  } else if (!is_gps_goal_reached && is_path_invalid) {
+  } else if (is_path_invalid) {
     // Replan intermediate goal if local plan is infeasible
     plan_path_ = Plan(robot_loc_, nav_goal_loc_);
-    is_plan_valid = PlanStillValid();
+    bool is_plan_valid = PlanStillValid();
     // If global plan is still not valid, enter recovery behavior
-    nav_state_ = NavigationState::kGoto if is_plan_valid else NavigationState::kTurnInPlace;
-  } else if (!is_gps_goal_reached && !is_path_invalid) {
+    if (!is_plan_valid) {
+      nav_state_ = NavigationState::kTurnInPlace;
+    } else {
+      nav_state_ = NavigationState::kGoto;
+    }
+  } else if (!is_path_invalid) {
     nav_state_ = NavigationState::kGoto;
   } else {
     nav_state_ = NavigationState::kStopped;

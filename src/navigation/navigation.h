@@ -123,7 +123,7 @@ class Navigation {
                          float* clearance,
                          Eigen::Vector2f* obstruction);
   void UpdateGPS(const GPSPoint& msg);
-  void SetGPSNavGoal(const vector<GPSPoint>& goals);
+  void SetGPSNavGoals(const vector<GPSPoint>& goals);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   void ResetNavGoals();
   void updateGlobalNavGoal();
@@ -137,6 +137,8 @@ class Navigation {
                                        const Eigen::Vector2f& end);
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
                               const Eigen::Vector2f& end);
+  std::vector<GPSPoint> GlobalPlan(const GPSPoint& inital, 
+                                   const std::vector<GPSPoint>& goals);
   std::vector<GraphDomain::State> GetPlanPath();
   std::vector<GraphDomain::State> GetGlobalPath();
 
