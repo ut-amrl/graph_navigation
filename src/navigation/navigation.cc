@@ -387,6 +387,7 @@ void Navigation::UpdateOdometry(const Odom& msg) {
   PruneLatencyQueue();
   if (!odom_initialized_) {
     starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
+    initial_odom_msg_ = msg;
     odom_initialized_ = true;
   }
 }
@@ -571,19 +572,6 @@ vector<int> Navigation::GlobalPlan(const Vector2f& initial,
 }
 
 vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital, const vector<GPSPoint>& goals) {
-//   for (size_t i = 0; i + 1 < gps_nav_goals_loc_.size(); i += 2) {
-//     printf("Start %lf %lf\n", gps_nav_goals_loc_[i].lat,
-//            gps_nav_goals_loc_[i].lon);
-//     printf("End %lf %lf\n", gps_nav_goals_loc_[i + 1].lat,
-//            gps_nav_goals_loc_[i + 1].lon);
-//     const auto& gps_route =
-//         osm_planner_.plan(gps_nav_goals_loc_[i], gps_nav_goals_loc_[i + 1]);
-//     printf("Route: %d\n", int(gps_route.size()));
-//     for (const auto& p : gps_route) {
-//       printf("%lf %lf %lf\n", p.time, p.lat, p.lon);
-//     }
-//   }
-// }
   vector<GPSPoint> path;
   GPSPoint start = inital;
   for (const auto& subgoal : goals) {
@@ -596,6 +584,9 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital, const vector<GPS
   return path;
 }
 
+void Navigation::UpdateLocalCostmap(const costmap_2d::Costmap2D& costmap) {
+  costmap_ = costmap;
+}
 
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
                                             const Vector2f& end) {
@@ -1226,29 +1217,51 @@ vector<ObstacleCost> Navigation::GetGlobalCostmapObstacles() {
 
 Eigen::Vector2f Navigation::GetIntermediateGoal() { return intermediate_goal_; }
 
-void Navigation::GetGlobalGoal() {
-  if (!gps_initialized_ || gps_nav_goals_loc_.empty()) return;
-  if (gps_goal_index_ < 0) return;
+void Navigation::PlanIntermediate(const Vector2f& initial, const Vector2f& end) {
+  // TODO: Implement Intermediate planner that uses costmap
 
-  // 1 Replan global path in UTM frame from current position
-  const auto& next_goal = gps_nav_goals_loc_[gps_goal_index_];
-  const auto& gps_route = osm_planner_.plan(robot_gps_loc_, next_goal);
+  // Initialize Planning Domain A*
 
-  // 2 Convert global path from UTM to local frame
-  for (const auto& p : gps_route) {
-    std::tuple<double, double> local_coords = gpsToGlobalCoord(
-        initial_gps_loc_.lat, initial_gps_loc_.lon, p.lat, p.lon);
+  // Add start and end states to planning domain
 
-    if (FLAGS_v > 2) {
-      printf("|----- BEGIN GetGlobalGoal()   -----|\n");
-      printf("GPS Subgoal: %lf %lf\n", p.lat, p.lon);
-      printf("Local: %lf %lf\n", std::get<0>(local_coords),
-             std::get<1>(local_coords));
-      printf("|----- END GetGlobalGoal()   -----|\n");
-    }
+  // Run A* on planning domain
+
+  // Get path from A*
+
+  // Set intermediate_path_found_ to true if path found
+  intermediate_path_found_ = true;
+  // local_target_ = 
+  // plan_path_ = 
+}
+
+bool Navigation::isGoalInFOV(const Vector2f& local_goal) {
+  const float angle_to_goal = atan2(local_goal.y(), local_goal.x());
+  const float min_angle = -params_.local_fov / 2; // in radians
+  const float max_angle = params_.local_fov / 2;  // in radians
+  return angle_to_goal >= min_angle && angle_to_goal <= max_angle;
+}
+
+void Navigation::UpdateRobotLocFromOdom() {
+  if (!odom_initialized_) {
+    return;
   }
 
-  // 3 Save global path in local frame
+  Eigen::Vector2f initial_odom_loc_ = Vector2f(initial_odom_msg_.position.x(), initial_odom_msg_.position.y());
+  float initial_odom_angle_ = 2.0f * atan2f(initial_odom_msg_.orientation.z(),
+                              initial_odom_msg_.orientation.w());
+  Eigen::Affine2f T_initial_to_odom = Eigen::Translation2f(initial_odom_loc_) *
+                                    Eigen::Rotation2Df(initial_odom_angle_);
+  Eigen::Affine2f T_robot_to_odom = Eigen::Translation2f(odom_loc_) *
+                                  Eigen::Rotation2Df(odom_angle_);
+
+  Eigen::Affine2f T_robot_to_initial = T_initial_to_odom.inverse() * T_robot_to_odom;
+
+  // Update robot_loc_ and robot_angle_ 
+  robot_loc_ = T_robot_to_initial.translation();
+  // Normalize angle to [-pi, pi]
+  robot_angle_ = std::atan2(
+    std::sin(Eigen::Rotation2Df(T_robot_to_initial.rotation()).angle()),
+    std::cos(Eigen::Rotation2Df(T_robot_to_initial.rotation()).angle()));
 }
 
 bool Navigation::Run(const double& time, Vector2f& cmd_vel,
@@ -1264,6 +1277,10 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   }
   if (!gps_initialized_) {
     if (kDebug) printf("GPS not initialized\n");
+    return false;
+  }
+  if (gps_nav_goals_loc_.empty() or gps_goal_index_ < 0) {
+    if (kDebug) printf("No GPS goals\n");
     return false;
   }
 
@@ -1287,7 +1304,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     LatencyTest(cmd_vel, cmd_angle_vel);
     return true;
   }
-  return true;
+
   if (params_.do_intermed) {
     int cell_inflation_size =
         std::ceil(params_.max_inflation_radius / costmap_.getResolution());
@@ -1474,67 +1491,72 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
   }
 
+  gps_goal_index_ = 1; // TODO: remove this for debuggin
+  printf("Current goal index %d\n", gps_goal_index_);
+  Eigen::Affine2f T_relutm_local = gpsToLocal(
+      robot_gps_loc_.lat, robot_gps_loc_.lon,
+      robot_gps_loc_.heading,
+      gps_nav_goals_loc_[gps_goal_index_].lat,
+      gps_nav_goals_loc_[gps_goal_index_].lon,
+      gps_nav_goals_loc_[gps_goal_index_].heading);
+  Vector2f local_subgoal(T_relutm_local.translation().x(),
+                      T_relutm_local.translation().y());
   // Before switches states, we need to update the nav targets
-  bool is_gps_goal_reached = osm_planner_.isGoalReached(
+  bool is_goal_reached = osm_planner_.isGoalReached(
       robot_gps_loc_, gps_nav_goals_loc_[gps_goal_index_]);
   bool does_next_goal_exist =
       gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size());
-  bool is_path_invalid = (!params_.do_intermed && !PlanStillValid()) ||
-                         (params_.do_intermed &&
-                          (!PlanStillValid() || !IntermediatePlanStillValid()));
-
+  bool is_goal_in_fov = isGoalInFOV(local_subgoal);
+  if (kDebug) {
+    printf("Is goal in fov: %d\n", is_goal_in_fov);
+    printf("Goal Relative Local: %f %f\n", T_relutm_local.translation().x(),
+            T_relutm_local.translation().y());
+    printf("Heading: %f\n",
+            Eigen::Rotation2Df(T_relutm_local.rotation()).angle() * 180 / M_PI);
+  }
+  bool is_path_invalid = global_plan_path_.empty();
+  
+  printf("is_goal_reached: %d\n", is_goal_reached);
+  printf("does_next_goal_exist: %d\n", does_next_goal_exist);
+  printf("is_goal_in_fov: %d\n", is_goal_in_fov);
   // Update navigation states
-  if (is_gps_goal_reached) {
+  if (is_goal_reached) {
     if (!does_next_goal_exist) {
       nav_state_ = NavigationState::kStopped;
     } else {
       gps_goal_index_++;
-      osm_planner_.updateGlobalGoal(robot_gps_loc_, gps_nav_goals_loc_,
-                                    gps_goal_index_);
-      // Update global plan
-
+      PlanIntermediate(robot_loc_, local_subgoal);
+      initial_odom_msg_ = latest_odom_msg_;
       nav_state_ = NavigationState::kGoto;
     }
-    nav_state_ = NavigationState::kStopped;
-  } else if (is_path_invalid) {
-    // Replan intermediate goal if local plan is infeasible
-    plan_path_ = Plan(robot_loc_, nav_goal_loc_);
-    bool is_plan_valid = PlanStillValid();
-    // If global plan is still not valid, enter recovery behavior
-    if (!is_plan_valid) {
+  } else if (!is_goal_in_fov) {
+      // float goal_angle = atan2(local_subgoal.y(), local_subgoal.x());
+      // TODO: Modify to do turn in place in direction of goal
       nav_state_ = NavigationState::kTurnInPlace;
-    } else {
-      nav_state_ = NavigationState::kGoto;
-    }
-  } else if (!is_path_invalid) {
+  } else if (is_path_invalid) {
+    // Update plan_path_ for GetLocalCarrot
+    PlanIntermediate(robot_loc_, local_subgoal);
+    initial_odom_msg_ = latest_odom_msg_;
     nav_state_ = NavigationState::kGoto;
   } else {
-    nav_state_ = NavigationState::kStopped;
+    nav_state_ = NavigationState::kGoto;
   }
-  return true;
-  // // Before switching states we need to update the local target.
-  // if (nav_state_ == NavigationState::kGoto ||
-  //     nav_state_ == NavigationState::kOverride) {
-  //   printf("Updating local target\n");
-  //   // Recompute global plan as necessary.
-  //   if ((!params_.do_intermed && !PlanStillValid()) ||
-  //       (params_.do_intermed &&
-  //        (!PlanStillValid() || !IntermediatePlanStillValid()))) {
-  //     if (kDebug) printf("Replanning\n");
-  //     plan_path_ = Plan(robot_loc_, nav_goal_loc_);
-  //   }
-  //   if (nav_state_ == NavigationState::kGoto) {
-  //     // Get Carrot and check if done
-  //     Vector2f carrot(0, 0);
-  //     bool foundCarrot = GetLocalCarrot(carrot);
-  //     if (!foundCarrot) {
-  //       Halt(cmd_vel, cmd_angle_vel);
-  //       return false;
-  //     }
-  //     // Local Navigation
-  //     local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
-  //   }
-  // }
+
+  // Update robot_loc_ based on odometry
+  UpdateRobotLocFromOdom();
+
+  // Before switching states, update the local target
+  if (nav_state_ == NavigationState::kGoto) {
+    // Get next local bev carrot
+    Vector2f carrot(0, 0);
+    bool foundCarrot = GetLocalCarrot(carrot);
+    if (!foundCarrot) {
+      Halt(cmd_vel, cmd_angle_vel);
+      return false;
+    }
+    // Local Navigation
+    local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+  }
 
   switch (nav_state_) {
     case NavigationState::kStopped: {

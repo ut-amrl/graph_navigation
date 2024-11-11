@@ -119,12 +119,6 @@ class OSMPlanner {
     return distance < threshold;
   }
 
-  void updateGlobalGoal(const GPSPoint &current, vector<GPSPoint> &goals,
-                        int goal_index) {
-    // TODO: Implement business logic for updating next global goal given
-    // current and goal_index
-  }
-
  private:
   std::unique_ptr<osrm::OSRM> osrm;
 };

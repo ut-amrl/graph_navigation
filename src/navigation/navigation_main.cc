@@ -61,6 +61,7 @@
 #include "sensor_msgs/NavSatFix.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
+#include <nav_msgs/OccupancyGrid.h>
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
 #include "ros/ros.h"
@@ -116,7 +117,7 @@ const string kOpenCVWindow = "Image window";
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
+DEFINE_bool(no_intermed, true, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
@@ -211,6 +212,35 @@ void GPSCallback(const std_msgs::Float64MultiArray& msg) {
     printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon, loc.heading);
   received_gps_ = true;
   navigation_.UpdateGPS(loc);
+}
+
+void LocalCostmapCallback(const nav_msgs::OccupancyGrid& msg) {
+  // Set up the Costmap2D dimensions, resolution, and origin based on the OccupancyGrid message
+  unsigned int width = msg.info.width;
+  unsigned int height = msg.info.height;
+  double resolution = msg.info.resolution;
+  double origin_x = msg.info.origin.position.x;
+  double origin_y = msg.info.origin.position.y;
+
+  costmap_2d::Costmap2D costmap(width, height, resolution, origin_x, origin_y);
+  for (unsigned int y = 0; y < height; ++y) {
+      for (unsigned int x = 0; x < width; ++x) {
+          // Index in OccupancyGrid's data array
+          unsigned int index = x + y * width;
+          int8_t cell_value = msg.data[index];
+          // Map OccupancyGrid values to continuous float values for Costmap2D (e.g., scale 0-100 to 0.0-1.0)
+          float normalized_value;
+          if (cell_value == -1) {
+              normalized_value = costmap_2d::NO_INFORMATION;
+          } else {
+              normalized_value = static_cast<float>(cell_value) / 100.0f;
+          }
+          costmap.setCost(x, y, static_cast<unsigned char>(normalized_value * 255.0f));
+      }
+  }
+  navigation_.UpdateLocalCostmap(costmap);
+
+  ROS_INFO("Costmap2D created with width: %d, height: %d, resolution: %f", width, height, resolution);
 }
 
 void RetrieveTransform(const std_msgs::Header& msg,
@@ -1030,8 +1060,8 @@ int main(int argc, char** argv) {
       n.subscribe("nav_override", 1, &OverrideCallback);
   ros::Subscriber gps_pos_sub = 
       n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
-  // ros::Subscriber gps_goals_sub = 
-  //     n.subscribe(CONFIG_gps_goals_topic, 1, &GoToGPSGoalCallback);
+  ros::Subscriber local_costmap_sub = 
+      n.subscribe("local_costmap", 1, &LocalCostmapCallback);
 
   std_msgs::Header viz_img_header; // empty viz_img_header
   viz_img_header.stamp = ros::Time::now(); // time

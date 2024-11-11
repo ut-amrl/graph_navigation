@@ -95,36 +95,36 @@ TARGET_LINK_LIBRARIES(streetmap_test
     ${LibOSRM_LIBRARIES} 
     ${LibOSRM_DEPENDENT_LIBRARIES})
 
-ADD_EXECUTABLE(navigation_tests
-    src/navigation/navigation_tests.cc
-    src/navigation/motion_primitives.cc
-)
-TARGET_LINK_LIBRARIES(navigation_tests
-    gtest
-    gtest_main
-    ${libs}
-    ${LibOSRM_LIBRARIES} 
-    ${LibOSRM_DEPENDENT_LIBRARIES})
+# ADD_EXECUTABLE(navigation_tests
+#     src/navigation/navigation_tests.cc
+#     src/navigation/motion_primitives.cc
+# )
+# TARGET_LINK_LIBRARIES(navigation_tests
+#     gtest
+#     gtest_main
+#     ${libs}
+#     ${LibOSRM_LIBRARIES} 
+#     ${LibOSRM_DEPENDENT_LIBRARIES})
 
-ROSBUILD_ADD_EXECUTABLE(social_nav
-                        src/navigation/social_nav.cc
-                        src/navigation/social_main.cc
-                        src/navigation/motion_primitives.cc
-                        src/navigation/ackermann_motion_primitives.cc
-                        src/navigation/constant_curvature_arcs.cc
-                        src/navigation/image_tiler.cc
-                        src/navigation/linear_evaluator.cc
-                        src/navigation/deep_cost_map_evaluator.cc
-                        src/navigation/image_based_evaluator.cc
-                        src/navigation/navigation.cc)
-TARGET_LINK_LIBRARIES(social_nav 
-  shared_library 
-  ${libs} 
-  ${TORCH_LIBRARIES} 
-  ${OpenCV_LIBS}
-  ${LibOSRM_LIBRARIES} 
-  ${LibOSRM_DEPENDENT_LIBRARIES})
+# ROSBUILD_ADD_EXECUTABLE(social_nav
+#                         src/navigation/social_nav.cc
+#                         src/navigation/social_main.cc
+#                         src/navigation/motion_primitives.cc
+#                         src/navigation/ackermann_motion_primitives.cc
+#                         src/navigation/constant_curvature_arcs.cc
+#                         src/navigation/image_tiler.cc
+#                         src/navigation/linear_evaluator.cc
+#                         src/navigation/deep_cost_map_evaluator.cc
+#                         src/navigation/image_based_evaluator.cc
+#                         src/navigation/navigation.cc)
+# TARGET_LINK_LIBRARIES(social_nav 
+#   shared_library 
+#   ${libs} 
+#   ${TORCH_LIBRARIES} 
+#   ${OpenCV_LIBS}
+#   ${LibOSRM_LIBRARIES} 
+#   ${LibOSRM_DEPENDENT_LIBRARIES})
 
 
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})
-add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})
+# add_dependencies(social_nav ${catkin_EXPORTED_TARGETS})

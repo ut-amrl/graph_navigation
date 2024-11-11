@@ -122,17 +122,19 @@ class Navigation {
                          float* free_path_length,
                          float* clearance,
                          Eigen::Vector2f* obstruction);
+  bool isGoalInFOV(const Eigen::Vector2f& local_goal);
   void UpdateGPS(const GPSPoint& msg);
   void SetGPSNavGoals(const vector<GPSPoint>& goals);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   void ResetNavGoals();
-  void updateGlobalNavGoal();
+  void UpdateLocalCostmap(const costmap_2d::Costmap2D& costmap);
   void SetOverride(const Eigen::Vector2f& loc, float angle);
   void Resume();
   bool PlanStillValid();
   bool IntermediatePlanStillValid();
 
   void Plan(Eigen::Vector2f goal_loc);
+  void PlanIntermediate(const Eigen::Vector2f& initial, const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,
                                        const Eigen::Vector2f& end);
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
@@ -192,6 +194,7 @@ class Navigation {
   std::vector<ObstacleCost> GetGlobalCostmapObstacles();
 
   Eigen::Vector2f GetIntermediateGoal();
+  void UpdateRobotLocFromOdom();
 
  private:
 
@@ -247,6 +250,7 @@ class Navigation {
   // Current odometry frame robot angle (OdometryCallback).
   float odom_angle_;
   // Newest odometry message received.
+  Odom initial_odom_msg_;
   Odom latest_odom_msg_;
   // Newest image received.
   cv::Mat latest_image_;
@@ -339,8 +343,6 @@ class Navigation {
   std::vector<ObstacleCost> global_costmap_obstacles_;
   //
   bool intermediate_path_found_;
-
-
 
   Eigen::Vector2f intermediate_goal_;
 
