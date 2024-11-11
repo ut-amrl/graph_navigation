@@ -388,10 +388,10 @@ void PublishNavStatus() {
   status_pub_.publish(status);
 }
 
-void SendCommand(Eigen::Vector2f vel, float ang_vel) {
+void SendCommand(Eigen::Vector2f vel, float ang_vel, ros::Time loopstart_time) {
   geometry_msgs::TwistStamped drive_msg;
   InitRosHeader("base_link", &drive_msg.header);
-  drive_msg.header.stamp = ros::Time::now();
+  drive_msg.header.stamp = loopstart_time;
   if (!FLAGS_no_joystick && !enabled_) {
     vel.setZero();
     ang_vel = 0;
@@ -990,7 +990,7 @@ int main(int argc, char** argv) {
     auto start_run_loop_sys = std::chrono::system_clock::now();  // System clock timing
     ros::Time start_run_loop_ros = ros::Time::now();  // ROS time timing
 
-    bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
+    bool nav_succeeded = navigation_.Run(start_run_loop_ros.toSec(), cmd_vel, cmd_angle_vel);
 
     auto end_run_loop_sys = std::chrono::system_clock::now();
     ros::Time end_run_loop_ros = ros::Time::now();
@@ -1050,7 +1050,7 @@ int main(int argc, char** argv) {
       }
 
       // Publish Commands
-      SendCommand(cmd_vel, cmd_angle_vel);
+      SendCommand(cmd_vel, cmd_angle_vel, start_run_loop_ros);
     }
     loop.Sleep();
   }

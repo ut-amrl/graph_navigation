@@ -417,7 +417,7 @@ void Navigation::ForwardPredict(double t) {
           c.linear.x(), c.linear.y()));
       odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
     }
-    if (t_point_cloud_ >= cmd_time  - params_.dt) {
+    if (cmd_time >= t_point_cloud_ - params_.dt) {
       const float dt = (t_point_cloud_ > cmd_time) ?
           min<double>(t_point_cloud_ - cmd_time, params_.dt) :
           min<double>(t - cmd_time, params_.dt);
