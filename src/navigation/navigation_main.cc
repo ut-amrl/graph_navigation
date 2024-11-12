@@ -54,6 +54,7 @@
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/TwistStamped.h"
+#include "amrl_msgs/LDOSTwist.h"
 #include "graph_navigation/graphNavSrv.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
@@ -157,6 +158,7 @@ struct LaserCache {
 ros::Publisher ackermann_drive_pub_;
 ros::Publisher vis_pub_;
 ros::Publisher twist_drive_pub_;
+ros::Publisher ldos_twist_drive_pub_;
 ros::Publisher viz_pub_;
 ros::Publisher map_lines_publisher_;
 ros::Publisher pose_marker_publisher_;
@@ -407,7 +409,13 @@ void SendCommand(Eigen::Vector2f vel, float ang_vel, ros::Time loopstart_time) {
   auto ackermann_msg = TwistToAckermann(drive_msg);
 
   ackermann_drive_pub_.publish(ackermann_msg);
+  amrl_msgs::LDOSTwist ldos_twist_msg;
+  ldos_twist_msg.linear = drive_msg.twist.linear;
+  ldos_twist_msg.angular = drive_msg.twist.angular;
+  ldos_twist_msg.sys_nano_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
   twist_drive_pub_.publish(drive_msg.twist);
+  ldos_twist_drive_pub_.publish(ldos_twist_msg);
   // This command is going to take effect system latency period after. Hence
   // modify the timestamp to reflect the time when it will take effect.
   navigation_.UpdateCommandHistory(ToTwist(drive_msg));
@@ -922,6 +930,8 @@ int main(int argc, char** argv) {
       "ackermann_curvature_drive", 1);
   twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
       FLAGS_twist_drive_topic, 1);
+  ldos_twist_drive_pub_ = n.advertise<amrl_msgs::LDOSTwist>(
+      "ldos/navigation/cmd_vel", 1);
   status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
