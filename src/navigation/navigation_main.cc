@@ -369,6 +369,13 @@ bool GPSPlanServiceCb(graphNavGPSSrv::Request& req,
                        goal.heading);
   }
   const auto& route = navigation_.GlobalPlan(start, goals);
+  const auto& map_route = navigation_.GPSRouteToMap(route);
+  global_viz_msg_.lines.clear();
+  for (const auto& p : map_route) {
+    visualization::DrawPoint(Vector2f(p.x(), p.y()), 0xFF0000, global_viz_msg_);
+  }
+  viz_pub_.publish(global_viz_msg_);
+
   printf("Goals in osrm plan: %d\n", int(route.size()));
   navigation_.SetGPSNavGoals(route);
   GPSArrayMsg gps_goals_msg;

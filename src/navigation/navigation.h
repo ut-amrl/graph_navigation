@@ -193,6 +193,10 @@ class Navigation {
   Eigen::Vector2f GetIntermediateGoal();
   void UpdateRobotLocFromOdom();
 
+  // Converts a route of GPS points to a route of map points
+  std::vector<Eigen::Vector2f> GPSRouteToMap(
+      const std::vector<GPSPoint>& route);
+
  private:
   // Test 1D TOC motion in a straight line.
   void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);

@@ -321,6 +321,7 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
   plan_path_.clear();
+  if (FLAGS_v > 0) printf("SetNavGoal(): %f %f %f\n", loc.x(), loc.y(), angle);
 }
 
 void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
@@ -332,6 +333,8 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   gps_nav_goals_loc_ = goals;
   gps_goal_index_ = 0;
   plan_path_.clear();
+  if (FLAGS_v > 0)
+    printf("SetGPSNavGoals(): %d\n", int(gps_nav_goals_loc_.size()));
 }
 
 void Navigation::ResetNavGoals() {
@@ -339,6 +342,7 @@ void Navigation::ResetNavGoals() {
   nav_goal_loc_ = robot_loc_;
   nav_goal_angle_ = robot_angle_;
   local_target_.setZero();
+  if (FLAGS_v > 0) printf("ResetNavGoals()\n");
   plan_path_.clear();
 }
 
@@ -360,6 +364,7 @@ void Navigation::UpdateMap(const string& map_path) {
   plan_path_.clear();
   prev_obstacles_.clear();
   costmap_obstacles_.clear();
+  if (FLAGS_v > 0) printf("UpdateMap(): %s\n", map_path.c_str());
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -570,12 +575,29 @@ void Navigation::ObserveImage(cv::Mat image, double time) {
 
 vector<int> Navigation::GlobalPlan(const Vector2f& initial,
                                    const Vector2f& end) {
+  const bool kDebug = FLAGS_v > 0;
+
+  if (kDebug)
+    printf("GlobalPlan(): Planning from %f %f to %f %f\n", initial.x(),
+           initial.y(), end.x(), end.y());
   auto plan = Plan(initial, end);
   std::vector<int> path;
   for (auto& node : plan) {
     path.push_back(node.id);
   }
+  if (kDebug) printf("GlobalPlan(): Path size %d\n", int(path.size()));
   return path;
+}
+
+std::vector<Vector2f> Navigation::GPSRouteToMap(
+    const std::vector<GPSPoint>& route) {
+  std::vector<Vector2f> map_route;
+  for (const auto& point : route) {
+    Eigen::Vector2f map_point =
+        gps_translator_.GPSToMetric(point.lat, point.lon).cast<float>();
+    map_route.emplace_back(map_point);
+  }
+  return map_route;
 }
 
 vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
@@ -589,6 +611,18 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
     }
     start = subgoal;
   }
+  CHECK(!path.empty());
+  CHECK(gps_translator_initialized_);
+  // Override planning domain with GPS points in map frame
+  printf("Path size: %d\n", int(path.size()));
+  const auto& nodes = this->GPSRouteToMap(path);
+  vector<Vector2f> edges(nodes.size() - 1);
+  for (size_t i = 0; i < path.size() - 1; ++i) {
+    edges[i] = Vector2f(i, i + 1);
+  }
+  planning_domain_.ResetDynamicStates();
+  planning_domain_.Load(nodes, edges);  // ids correspond to indices
+
   return path;
 }
 
@@ -616,22 +650,24 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
            start.loc.x(), start.loc.y(), goal_id, goal.loc.x(), goal.loc.y());
   }
   const bool found_path =
-      AStar(start, goal, planning_domain_, &graph_viz, &plan_path_);
+      AStar(start, goal, planning_domain_, &graph_viz, &path);
   if (found_path) {
-    // CHECK(path.size() > 0);
-    CHECK(plan_path_.size() > 0);
+    CHECK(path.size() > 0);
     printf("Path found!\n");
-    Vector2f s1 = plan_path_[0].loc;  // BUG HERE plan_path_ is empty
+    Vector2f s1 = path[0].loc;  // BUG HERE plan_path_ is empty
     printf("Path: %f %f\n", s1.x(), s1.y());
-    for (size_t i = 1; i < plan_path_.size(); ++i) {
-      Vector2f s2 = plan_path_[i].loc;
+    for (size_t i = 1; i < path.size(); ++i) {
+      Vector2f s2 = path[i].loc;
       s1 = s2;
     }
   } else {
     printf("No path found!\n");
   }
-
+  if (kDebug) {
+    printf("Plan(): Path size %d\n", int(path.size()));
+  }
   if (params_.do_intermed) {
+    if (kDebug) printf("Plan(): Performing intermediate planning\n");
     std::priority_queue<PointCost, std::vector<PointCost>, CompareCost>
         intermediate_queue;  //<Location stored as <index, cost>
 
@@ -872,10 +908,14 @@ bool Navigation::GetLocalCarrot(Vector2f& carrot) {
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
+  const bool kDebug = FLAGS_v > 1;
   vector<GraphDomain::State> plan_path = plan_path_;
   if (global) {
     plan_path = global_plan_path_;
   }
+  if (kDebug)
+    printf("GetCarrot(): Global: %d plan_path size %d\n", global,
+           int(plan_path.size()));
   const float kSqCarrotDist = Sq(carrot_dist);
 
   // CHECK_GE(plan_path.size(), 2u);
@@ -1547,23 +1587,37 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     GPSPoint next_nav_goal_loc = gps_nav_goals_loc_[gps_goal_index_];
     bool isGPSGoalReached =
         osm_planner_.isGoalReached(robot_gps_loc_, next_nav_goal_loc);
-    bool isGoalStillValid = true;  // TODO: Implement function to check straight
-                                   // line distance to goal line segment
+    bool isGPSGoalStillValid = true;
+    if (!plan_path_.empty()) {
+      isGPSGoalStillValid = PlanStillValid();
+    }
+
     if (isGPSGoalReached) {
+      if (kDebug) printf("GPS Goal reached\n");
       if (gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size())) {
-        gps_goal_index_++;
-        nav_goal_loc_ = {next_nav_goal_loc.lat, next_nav_goal_loc.lon};
-        nav_goal_angle_ = next_nav_goal_loc.heading;
+        if (kDebug) printf("Switching to next GPS Goal\n");
+        ++gps_goal_index_;
+        nav_goal_loc_ =
+            gps_translator_
+                .GPSToMetric(gps_nav_goals_loc_[gps_goal_index_].lat,
+                             gps_nav_goals_loc_[gps_goal_index_].lon)
+                .cast<float>();
+        nav_goal_angle_ = 0;  // TODO: Change this
       } else {
         nav_state_ = NavigationState::kStopped;
       }
-    } else if (!isGoalStillValid) {
+    } else if (!isGPSGoalStillValid) {
+      if (kDebug) printf("GPS Goal invalid\n");
       // Slice gps_nav_goals_loc_ from gps_goal_index_ to end
       gps_nav_goals_loc_.assign(1, gps_nav_goals_loc_.back());
+      // Convert robot gps to map frame
       const auto& route = this->GlobalPlan(robot_gps_loc_, gps_nav_goals_loc_);
+      const auto& map_route = this->GPSRouteToMap(route);
       this->SetGPSNavGoals(route);
-    } else {
-      nav_goal_loc_ = {next_nav_goal_loc.lat, next_nav_goal_loc.lon};
+      nav_goal_loc_ =
+          gps_translator_
+              .GPSToMetric(next_nav_goal_loc.lat, next_nav_goal_loc.lon)
+              .cast<float>();
       nav_goal_angle_ = next_nav_goal_loc.heading;
     }
   }
@@ -1574,7 +1628,11 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     if ((!params_.do_intermed && !PlanStillValid()) ||
         (params_.do_intermed &&
          (!PlanStillValid() || !IntermediatePlanStillValid()))) {
-      if (kDebug) printf("Replanning\n");
+      if (kDebug) {
+        printf("Replanning robot_loc_ %f %f to nav_goal_loc_ %f %f\n",
+               robot_loc_.x(), robot_loc_.y(), nav_goal_loc_.x(),
+               nav_goal_loc_.y());
+      }
 
       plan_path_ = Plan(robot_loc_, nav_goal_loc_);
     }

@@ -22,28 +22,6 @@ using std::string;
 using std::vector;
 using namespace gps_util;
 
-struct GPSPoint {
-  GPSPoint() : time(0), lat(0), lon(0) {}
-  GPSPoint(double time, double lat, double lon)
-      : time(time), lat(lat), lon(lon) {}
-  GPSPoint(double time, double lat, double lon, double heading)
-      : time(time), lat(lat), lon(lon), heading(heading) {}
-  GPSPoint(double lat, double lon) : time(0), lat(lat), lon(lon) {}
-
-  bool operator==(const GPSPoint &other) const {
-    return lat == other.lat && lon == other.lon;
-  }
-
-  bool operator!=(const GPSPoint &other) const {
-      return !(*this == other);
-  }
-
-  double time;
-  double lat;
-  double lon;
-  double heading;  // True North
-};
-
 class OSMPlanner {
  public:
   OSMPlanner() = default;
@@ -102,53 +80,60 @@ class OSMPlanner {
     vector<GPSPoint> path_coordinates;
 
     if (status == osrm::Status::Ok) {
-        auto &json_result = result.get<osrm::util::json::Object>();
-        auto &routes = json_result.values["routes"].get<osrm::util::json::Array>();
-        auto &route = routes.values.at(0).get<osrm::util::json::Object>();
-        const auto &geometry_encoded = route.values["geometry"].get<osrm::util::json::String>().value;
-        path_coordinates = this->decodePolyline(geometry_encoded);
+      auto &json_result = result.get<osrm::util::json::Object>();
+      auto &routes =
+          json_result.values["routes"].get<osrm::util::json::Array>();
+      auto &route = routes.values.at(0).get<osrm::util::json::Object>();
+      const auto &geometry_encoded =
+          route.values["geometry"].get<osrm::util::json::String>().value;
+      path_coordinates = this->decodePolyline(geometry_encoded);
 
-        // Interpolate additional points to achieve 20-meter spacing
-        vector<GPSPoint> dense_path;
-        
-        // Ensure the first point is exactly the start location
-        dense_path.push_back(start);
+      // Interpolate additional points to achieve 20-meter spacing
+      vector<GPSPoint> dense_path;
 
-        double accumulated_distance = 0.0;
-        for (size_t i = 1; i < path_coordinates.size(); ++i) {
-            GPSPoint prev_point = path_coordinates[i - 1];
-            GPSPoint curr_point = path_coordinates[i];
+      // Ensure the first point is exactly the start location
+      dense_path.push_back(start);
 
-            // Compute the distance between previous and current points
-            auto distance = gpsDistance(prev_point.lat, prev_point.lon, curr_point.lat, curr_point.lon);
+      double accumulated_distance = 0.0;
+      for (size_t i = 1; i < path_coordinates.size(); ++i) {
+        GPSPoint prev_point = path_coordinates[i - 1];
+        GPSPoint curr_point = path_coordinates[i];
 
-            accumulated_distance += distance;
+        // Compute the distance between previous and current points
+        auto distance = gpsDistance(prev_point.lat, prev_point.lon,
+                                    curr_point.lat, curr_point.lon);
 
-            // If accumulated distance is 20 meters or more, interpolate a point
-            while (accumulated_distance >= osrm_path_resolution_) {
-                double ratio = (osrm_path_resolution_ - (accumulated_distance - distance)) / distance;
+        accumulated_distance += distance;
 
-                // Interpolate latitude and longitude
-                double interp_lat = prev_point.lat + ratio * (curr_point.lat - prev_point.lat);
-                double interp_lon = prev_point.lon + ratio * (curr_point.lon - prev_point.lon);
+        // If accumulated distance is 20 meters or more, interpolate a point
+        while (accumulated_distance >= osrm_path_resolution_) {
+          double ratio =
+              (osrm_path_resolution_ - (accumulated_distance - distance)) /
+              distance;
 
-                dense_path.emplace_back(GPSPoint{interp_lat, interp_lon});
-                
-                accumulated_distance -= osrm_path_resolution_;
-            }
+          // Interpolate latitude and longitude
+          double interp_lat =
+              prev_point.lat + ratio * (curr_point.lat - prev_point.lat);
+          double interp_lon =
+              prev_point.lon + ratio * (curr_point.lon - prev_point.lon);
+
+          dense_path.emplace_back(GPSPoint{interp_lat, interp_lon});
+
+          accumulated_distance -= osrm_path_resolution_;
         }
+      }
 
-        // Ensure the last point is exactly the end location
-        if (dense_path.back() != path_coordinates.back()) {
-            dense_path.push_back(path_coordinates.back());
-        }
+      // Ensure the last point is exactly the end location
+      if (dense_path.back() != path_coordinates.back()) {
+        dense_path.push_back(path_coordinates.back());
+      }
 
-        return dense_path;
+      return dense_path;
     } else {
-        std::cerr << "Error: Failed to retrieve route.\n";
+      std::cerr << "Error: Failed to retrieve route.\n";
     }
     return {};
-}
+  }
 
   // vector<GPSPoint> plan(GPSPoint start, GPSPoint end) {
   //     osrm::RouteParameters params;
@@ -164,9 +149,11 @@ class OSMPlanner {
 
   //     if (status == osrm::Status::Ok) {
   //         auto &json_result = result.get<osrm::util::json::Object>();
-  //         auto &routes = json_result.values["routes"].get<osrm::util::json::Array>();
-  //         auto &route = routes.values.at(0).get<osrm::util::json::Object>();
-  //         const auto &geometry_encoded = route.values["geometry"].get<osrm::util::json::String>().value;
+  //         auto &routes =
+  //         json_result.values["routes"].get<osrm::util::json::Array>(); auto
+  //         &route = routes.values.at(0).get<osrm::util::json::Object>(); const
+  //         auto &geometry_encoded =
+  //         route.values["geometry"].get<osrm::util::json::String>().value;
   //         path_coordinates = this->decodePolyline(geometry_encoded);
 
   //         // Interpolate additional points to achieve 20-meter spacing
@@ -179,20 +166,23 @@ class OSMPlanner {
   //             GPSPoint curr_point = path_coordinates[i];
 
   //             // Compute the distance between previous and current points
-  //             auto distance = gpsDistance(prev_point.lat, prev_point.lon, curr_point.lat, curr_point.lon);
+  //             auto distance = gpsDistance(prev_point.lat, prev_point.lon,
+  //             curr_point.lat, curr_point.lon);
 
   //             accumulated_distance += distance;
-              
-  //             // If accumulated distance is 20 meters or more, interpolate a point
-  //             while (accumulated_distance >= 20.0) {
-  //                 double ratio = (20.0 - (accumulated_distance - distance)) / distance;
+
+  //             // If accumulated distance is 20 meters or more, interpolate a
+  //             point while (accumulated_distance >= 20.0) {
+  //                 double ratio = (20.0 - (accumulated_distance - distance)) /
+  //                 distance;
 
   //                 // Interpolate latitude and longitude
-  //                 double interp_lat = prev_point.lat + ratio * (curr_point.lat - prev_point.lat);
-  //                 double interp_lon = prev_point.lon + ratio * (curr_point.lon - prev_point.lon);
+  //                 double interp_lat = prev_point.lat + ratio *
+  //                 (curr_point.lat - prev_point.lat); double interp_lon =
+  //                 prev_point.lon + ratio * (curr_point.lon - prev_point.lon);
 
   //                 dense_path.emplace_back(GPSPoint{interp_lat, interp_lon});
-                  
+
   //                 accumulated_distance -= 20.0;
   //             }
   //         }
