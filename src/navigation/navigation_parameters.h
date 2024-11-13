@@ -53,11 +53,13 @@ struct MotionLimits {
 
 struct OSMPlannerParameters {
   std::string osrm_file;
+  float osrm_path_resolution;
   std::string gps_topic;
   std::string gps_goals_topic;
 
   OSMPlannerParameters() :
       osrm_file(""),
+      osrm_path_resolution(20.0),
       gps_topic(""),
       gps_goals_topic("") {}
 };

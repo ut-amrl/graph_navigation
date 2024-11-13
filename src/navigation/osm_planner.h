@@ -34,6 +34,10 @@ struct GPSPoint {
     return lat == other.lat && lon == other.lon;
   }
 
+  bool operator!=(const GPSPoint &other) const {
+      return !(*this == other);
+  }
+
   double time;
   double lat;
   double lon;
@@ -44,12 +48,14 @@ class OSMPlanner {
  public:
   OSMPlanner() = default;
 
-  OSMPlanner(const string &osrm_file) {
+  OSMPlanner(const string &osrm_file, const double osrm_path_resolution) {
     osrm::EngineConfig config;
     config.storage_config = {osrm_file};
     config.use_shared_memory = false;
     config.algorithm = osrm::EngineConfig::Algorithm::MLD;
     osrm = std::make_unique<osrm::OSRM>(config);
+
+    osrm_path_resolution_ = osrm_path_resolution;
   }
 
   // Utility function to decode polyline
@@ -96,18 +102,111 @@ class OSMPlanner {
     vector<GPSPoint> path_coordinates;
 
     if (status == osrm::Status::Ok) {
-      auto &json_result = result.get<osrm::util::json::Object>();
-      auto &routes =
-          json_result.values["routes"].get<osrm::util::json::Array>();
-      auto &route = routes.values.at(0).get<osrm::util::json::Object>();
-      const auto &geometry_encoded =
-          route.values["geometry"].get<osrm::util::json::String>().value;
-      path_coordinates = this->decodePolyline(geometry_encoded);
+        auto &json_result = result.get<osrm::util::json::Object>();
+        auto &routes = json_result.values["routes"].get<osrm::util::json::Array>();
+        auto &route = routes.values.at(0).get<osrm::util::json::Object>();
+        const auto &geometry_encoded = route.values["geometry"].get<osrm::util::json::String>().value;
+        path_coordinates = this->decodePolyline(geometry_encoded);
+
+        // Interpolate additional points to achieve 20-meter spacing
+        vector<GPSPoint> dense_path;
+        
+        // Ensure the first point is exactly the start location
+        dense_path.push_back(start);
+
+        double accumulated_distance = 0.0;
+        for (size_t i = 1; i < path_coordinates.size(); ++i) {
+            GPSPoint prev_point = path_coordinates[i - 1];
+            GPSPoint curr_point = path_coordinates[i];
+
+            // Compute the distance between previous and current points
+            auto distance = gpsDistance(prev_point.lat, prev_point.lon, curr_point.lat, curr_point.lon);
+
+            accumulated_distance += distance;
+
+            // If accumulated distance is 20 meters or more, interpolate a point
+            while (accumulated_distance >= osrm_path_resolution_) {
+                double ratio = (osrm_path_resolution_ - (accumulated_distance - distance)) / distance;
+
+                // Interpolate latitude and longitude
+                double interp_lat = prev_point.lat + ratio * (curr_point.lat - prev_point.lat);
+                double interp_lon = prev_point.lon + ratio * (curr_point.lon - prev_point.lon);
+
+                dense_path.emplace_back(GPSPoint{interp_lat, interp_lon});
+                
+                accumulated_distance -= osrm_path_resolution_;
+            }
+        }
+
+        // Ensure the last point is exactly the end location
+        if (dense_path.back() != path_coordinates.back()) {
+            dense_path.push_back(path_coordinates.back());
+        }
+
+        return dense_path;
     } else {
-      std::cerr << "Error: Failed to retrieve route.\n";
+        std::cerr << "Error: Failed to retrieve route.\n";
     }
-    return path_coordinates;
-  }
+    return {};
+}
+
+  // vector<GPSPoint> plan(GPSPoint start, GPSPoint end) {
+  //     osrm::RouteParameters params;
+  //     params.coordinates.push_back({osrm::util::FloatLongitude{start.lon},
+  //                                   osrm::util::FloatLatitude{start.lat}});
+  //     params.coordinates.push_back({osrm::util::FloatLongitude{end.lon},
+  //                                   osrm::util::FloatLatitude{end.lat}});
+  //     params.geometries = osrm::RouteParameters::GeometriesType::Polyline;
+
+  //     osrm::engine::api::ResultT result = osrm::util::json::Object();
+  //     const auto status = osrm->Route(params, result);
+  //     vector<GPSPoint> path_coordinates;
+
+  //     if (status == osrm::Status::Ok) {
+  //         auto &json_result = result.get<osrm::util::json::Object>();
+  //         auto &routes = json_result.values["routes"].get<osrm::util::json::Array>();
+  //         auto &route = routes.values.at(0).get<osrm::util::json::Object>();
+  //         const auto &geometry_encoded = route.values["geometry"].get<osrm::util::json::String>().value;
+  //         path_coordinates = this->decodePolyline(geometry_encoded);
+
+  //         // Interpolate additional points to achieve 20-meter spacing
+  //         vector<GPSPoint> dense_path;
+  //         dense_path.push_back(path_coordinates.front());
+
+  //         double accumulated_distance = 0.0;
+  //         for (size_t i = 1; i < path_coordinates.size(); ++i) {
+  //             GPSPoint prev_point = path_coordinates[i - 1];
+  //             GPSPoint curr_point = path_coordinates[i];
+
+  //             // Compute the distance between previous and current points
+  //             auto distance = gpsDistance(prev_point.lat, prev_point.lon, curr_point.lat, curr_point.lon);
+
+  //             accumulated_distance += distance;
+              
+  //             // If accumulated distance is 20 meters or more, interpolate a point
+  //             while (accumulated_distance >= 20.0) {
+  //                 double ratio = (20.0 - (accumulated_distance - distance)) / distance;
+
+  //                 // Interpolate latitude and longitude
+  //                 double interp_lat = prev_point.lat + ratio * (curr_point.lat - prev_point.lat);
+  //                 double interp_lon = prev_point.lon + ratio * (curr_point.lon - prev_point.lon);
+
+  //                 dense_path.emplace_back(GPSPoint{interp_lat, interp_lon});
+                  
+  //                 accumulated_distance -= 20.0;
+  //             }
+  //         }
+  //         // Add the last point
+  //         if (dense_path.back() != path_coordinates.back()) {
+  //             dense_path.push_back(path_coordinates.back());
+  //         }
+
+  //         return dense_path;
+  //     } else {
+  //         std::cerr << "Error: Failed to retrieve route.\n";
+  //     }
+  //     return {};
+  // }
 
   bool isGoalReached(const GPSPoint &current, const GPSPoint &goal,
                      double threshold = 3.0) {
@@ -121,4 +220,5 @@ class OSMPlanner {
 
  private:
   std::unique_ptr<osrm::OSRM> osrm;
+  double osrm_path_resolution_;
 };

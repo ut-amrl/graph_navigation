@@ -6,6 +6,7 @@ OSMPlannerParameters = {
   gps_topic = "/phone/gps_with_heading";
   gps_goals_topic = "/gps_goals";
   osrm_file = "osrm_texas_cbf_mld/texas-latest.osrm";
+  osrm_path_resolution = 15; -- meters between GPS points
 }
 
 NavigationParameters = {

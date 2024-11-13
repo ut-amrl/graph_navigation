@@ -19,32 +19,29 @@
 */
 //========================================================================
 
-#include <deque>
-#include <memory>
-#include <vector>
-#include <mutex>
-#include <unordered_set>
-#include <set>
-#include <ctime>
-
-#include "eigen3/Eigen/Dense"
 #include <costmap_2d/costmap_2d_ros.h>
 
-#include "config_reader/config_reader.h"
-#include "eight_connected_domain.h"
-#include "graph_domain.h"
-#include "navigation_parameters.h"
-#include "motion_primitives.h"
-#include "osm_planner.h"
+#include <ctime>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <set>
+#include <unordered_set>
+#include <vector>
 
+#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
+#include "config_reader/config_reader.h"
+#include "eigen3/Eigen/Dense"
+#include "eight_connected_domain.h"
+#include "graph_domain.h"
+#include "motion_primitives.h"
+#include "navigation_parameters.h"
+#include "osm_planner.h"
 #include "visualization/visualization.h"
 #include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
-#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
-
-
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -55,7 +52,8 @@ inline std::string GetMapPath(const std::string& dir, const std::string& name) {
   return dir + "/" + name + "/" + name + ".navigation.json";
 }
 
-inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
+inline std::string GetDeprecatedMapPath(const std::string& dir,
+                                        const std::string& name) {
   return dir + "/" + name + "/" + name + ".navigation.txt";
 }
 
@@ -91,7 +89,7 @@ struct SeenObstacle {
   std::time_t last_seen;
 };
 
-struct ObstacleCost{
+struct ObstacleCost {
   Eigen::Vector2f location;
   unsigned char cost;
 };
@@ -109,6 +107,7 @@ class Navigation {
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
+  void UpdateGPSMap(std::string maps_dir, std::string map_name);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
@@ -116,12 +115,9 @@ class Navigation {
                          double time);
   void ObserveImage(cv::Mat image, double time);
   bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-  void GetStraightFreePathLength(float* free_path_length,
-                                 float* clearance);
-  void GetFreePathLength(float curvature,
-                         float* free_path_length,
-                         float* clearance,
-                         Eigen::Vector2f* obstruction);
+  void GetStraightFreePathLength(float* free_path_length, float* clearance);
+  void GetFreePathLength(float curvature, float* free_path_length,
+                         float* clearance, Eigen::Vector2f* obstruction);
   bool isGoalInFOV(const Eigen::Vector2f& local_goal);
   void UpdateGPS(const GPSPoint& msg);
   void SetGPSNavGoals(const vector<GPSPoint>& goals);
@@ -134,12 +130,13 @@ class Navigation {
   bool IntermediatePlanStillValid();
 
   void Plan(Eigen::Vector2f goal_loc);
-  void PlanIntermediate(const Eigen::Vector2f& initial, const Eigen::Vector2f& end);
+  void PlanIntermediate(const Eigen::Vector2f& initial,
+                        const Eigen::Vector2f& end);
   std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,
                                        const Eigen::Vector2f& end);
   std::vector<int> GlobalPlan(const Eigen::Vector2f& initial,
                               const Eigen::Vector2f& end);
-  std::vector<GPSPoint> GlobalPlan(const GPSPoint& inital, 
+  std::vector<GPSPoint> GlobalPlan(const GPSPoint& inital,
                                    const std::vector<GPSPoint>& goals);
   std::vector<GraphDomain::State> GetPlanPath();
   std::vector<GraphDomain::State> GetGlobalPath();
@@ -158,12 +155,11 @@ class Navigation {
   // Stop all navigation functions.
   void Pause();
   // Set parameters for navigation.
-  void Initialize(const NavigationParameters& params,
-                  const std::string& map_file);
+  void Initialize(const NavigationParameters& params, const string& maps_dir,
+                  const string& map);
   void InitializeOSM(const OSMPlannerParameters& params);
   // Map obstacles into global costmap
   void LoadVectorMap(const std::string& map_file);
-
 
   // Allow client programs to configure navigation parameters
   void SetMaxVel(const float vel);
@@ -188,7 +184,8 @@ class Navigation {
   float GetRobotWidth();
   float GetRobotLength();
   const cv::Mat& GetVisualizationImage();
-  std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
+  std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
+  GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
   std::vector<ObstacleCost> GetCostmapObstacles();
   std::vector<ObstacleCost> GetGlobalCostmapObstacles();
@@ -197,7 +194,6 @@ class Navigation {
   void UpdateRobotLocFromOdom();
 
  private:
-
   // Test 1D TOC motion in a straight line.
   void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Test driving straight up to the next obstacle.
@@ -214,16 +210,13 @@ class Navigation {
   void LatencyTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Remove commands older than latest real robot updates (odometry and LIDAR),
   // accounting for latency.
-  void PruneLatencyQueue(); // Perform latency compensation by forward-predicting the commands within the latency interval.
+  void
+  PruneLatencyQueue();  // Perform latency compensation by forward-predicting
+                        // the commands within the latency interval.
   void ForwardPredict(double t);
   // Run 1D TOC.
-  float Run1DTOC(float x_now,
-                 float x_target,
-                 float v_now,
-                 float max_speed,
-                 float a_max,
-                 float d_max,
-                 float dt) const;
+  float Run1DTOC(float x_now, float x_target, float v_now, float max_speed,
+                 float a_max, float d_max, float dt) const;
   // Come to a halt.
   void Halt(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Turn around in-place to face the next waypoint.
@@ -263,9 +256,11 @@ class Navigation {
   bool gps_initialized_;
   int gps_goal_index_;
   std::vector<GPSPoint> gps_nav_goals_loc_;
+  GPSTranslator gps_translator_;
+  bool gps_translator_initialized_;
 
   NavigationState nav_state_;
-  
+
   // Navigation goal location.
   Eigen::Vector2f nav_goal_loc_;
   // Navigation goal angle.
@@ -280,7 +275,8 @@ class Navigation {
 
   // Point cloud from last laser scan observed.
   std::vector<Eigen::Vector2f> point_cloud_;
-  // Point cloud from last laser scan observed, forward predicted for latency compensation.
+  // Point cloud from last laser scan observed, forward predicted for latency
+  // compensation.
   std::vector<Eigen::Vector2f> fp_point_cloud_;
   // Time stamp of observation of point cloud.
   double t_point_cloud_;
@@ -345,7 +341,6 @@ class Navigation {
   bool intermediate_path_found_;
 
   Eigen::Vector2f intermediate_goal_;
-
 };
 
 }  // namespace navigation

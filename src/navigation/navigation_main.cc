@@ -19,97 +19,95 @@
 */
 //========================================================================
 
-#include <signal.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
-#include <inttypes.h>
-#include <vector>
-#include <unordered_map>
-#include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
+#include <image_transport/image_transport.h>
+#include <inttypes.h>
+#include <math.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <sensor_msgs/image_encodings.h>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "amrl_msgs/Localization2DMsg.h"
-#include "amrl_msgs/VisualizationMsg.h"
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <unordered_map>
+#include <vector>
+
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
-#include "config_reader/config_reader.h"
-#include "motion_primitives.h"
-#include "constant_curvature_arcs.h"
+#include "amrl_msgs/GPSArrayMsg.h"
+#include "amrl_msgs/GPSMsg.h"
+#include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/NavStatusMsg.h"
 #include "amrl_msgs/Pose2Df.h"
-#include "amrl_msgs/GPSMsg.h"
-#include "amrl_msgs/GPSArrayMsg.h"
+#include "amrl_msgs/VisualizationMsg.h"
 #include "amrl_msgs/graphNavGPSSrv.h"
-#include "glog/logging.h"
-#include "gflags/gflags.h"
+#include "config_reader/config_reader.h"
+#include "constant_curvature_arcs.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-#include "gflags/gflags.h"
 #include "geometry_msgs/Pose2D.h"
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/TwistStamped.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "graph_navigation/graphNavSrv.h"
-#include "sensor_msgs/LaserScan.h"
-#include "sensor_msgs/PointCloud.h"
-#include "sensor_msgs/CompressedImage.h"
-#include "sensor_msgs/NavSatFix.h"
-#include "visualization_msgs/Marker.h"
-#include "visualization_msgs/MarkerArray.h"
-#include <nav_msgs/OccupancyGrid.h>
+#include "motion_primitives.h"
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
-#include "ros/ros.h"
+#include "navigation.h"
 #include "ros/package.h"
+#include "ros/ros.h"
+#include "sensor_msgs/CompressedImage.h"
+#include "sensor_msgs/LaserScan.h"
+#include "sensor_msgs/NavSatFix.h"
+#include "sensor_msgs/PointCloud.h"
 #include "shared/math/math_util.h"
-#include "shared/util/timer.h"
-#include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
-#include "std_msgs/Float64MultiArray.h"
+#include "shared/util/helpers.h"
+#include "shared/util/timer.h"
 #include "std_msgs/Bool.h"
 #include "std_msgs/Empty.h"
+#include "std_msgs/Float64MultiArray.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "tf/transform_listener.h"
 #include "visualization/visualization.h"
+#include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
 
-#include "motion_primitives.h"
-#include "navigation.h"
-
+using amrl_msgs::AckermannCurvatureDriveMsg;
+using amrl_msgs::GPSArrayMsg;
+using amrl_msgs::GPSMsg;
+using amrl_msgs::graphNavGPSSrv;
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
-using amrl_msgs::AckermannCurvatureDriveMsg;
-using amrl_msgs::GPSMsg;
-using amrl_msgs::GPSArrayMsg;
-using amrl_msgs::graphNavGPSSrv;
+using Eigen::Affine3f;
+using Eigen::Vector2f;
+using Eigen::Vector3f;
+using geometry::kEpsilon;
+using geometry_msgs::TwistStamped;
+using graph_navigation::graphNavSrv;
 using math_util::DegToRad;
 using math_util::RadToDeg;
-using motion_primitives::PathRolloutBase;
 using motion_primitives::ConstantCurvatureArc;
+using motion_primitives::PathRolloutBase;
+using navigation::MotionLimits;
 using navigation::Navigation;
 using navigation::PathOption;
 using ros::Time;
-using ros_helpers::Eigen3DToRosPoint;
 using ros_helpers::Eigen2DToRosPoint;
+using ros_helpers::Eigen3DToRosPoint;
+using ros_helpers::InitRosHeader;
 using ros_helpers::RosPoint;
 using ros_helpers::SetRosVector;
-using std::string;
-using std::vector;
-using std::unordered_map;
 using sensor_msgs::PointCloud;
-using Eigen::Vector2f;
-using Eigen::Vector3f;
-using Eigen::Affine3f;
-using graph_navigation::graphNavSrv;
-using geometry_msgs::TwistStamped;
-using geometry::kEpsilon;
-using navigation::MotionLimits;
-using ros_helpers::InitRosHeader;
+using std::string;
+using std::unordered_map;
+using std::vector;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 const string kOpenCVWindow = "Image window";
@@ -117,7 +115,9 @@ const string kOpenCVWindow = "Image window";
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, true, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
+DEFINE_bool(no_intermed, true,
+            "Whether to disable intermediate planning (will use legacy "
+            "obstacle avoidance planner)");
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
@@ -180,9 +180,7 @@ visualization_msgs::Marker target_marker_;
 VisualizationMsg local_viz_msg_;
 VisualizationMsg global_viz_msg_;
 
-void EnablerCallback(const std_msgs::Bool& msg) {
-  enabled_ = msg.data;
-}
+void EnablerCallback(const std_msgs::Bool& msg) { enabled_ = msg.data; }
 
 navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 2) {
@@ -209,13 +207,15 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
 void GPSCallback(const std_msgs::Float64MultiArray& msg) {
   const GPSPoint loc(msg.data[0], msg.data[1], msg.data[2], msg.data[4]);
   if (FLAGS_v > 2)
-    printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon, loc.heading);
+    printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon,
+           loc.heading);
   received_gps_ = true;
   navigation_.UpdateGPS(loc);
 }
 
 void LocalCostmapCallback(const nav_msgs::OccupancyGrid& msg) {
-  // Set up the Costmap2D dimensions, resolution, and origin based on the OccupancyGrid message
+  // Set up the Costmap2D dimensions, resolution, and origin based on the
+  // OccupancyGrid message
   unsigned int width = msg.info.width;
   unsigned int height = msg.info.height;
   double resolution = msg.info.resolution;
@@ -224,37 +224,35 @@ void LocalCostmapCallback(const nav_msgs::OccupancyGrid& msg) {
 
   costmap_2d::Costmap2D costmap(width, height, resolution, origin_x, origin_y);
   for (unsigned int y = 0; y < height; ++y) {
-      for (unsigned int x = 0; x < width; ++x) {
-          // Index in OccupancyGrid's data array
-          unsigned int index = x + y * width;
-          int8_t cell_value = msg.data[index];
-          // Map OccupancyGrid values to continuous float values for Costmap2D (e.g., scale 0-100 to 0.0-1.0)
-          float normalized_value;
-          if (cell_value == -1) {
-              normalized_value = costmap_2d::NO_INFORMATION;
-          } else {
-              normalized_value = static_cast<float>(cell_value) / 100.0f;
-          }
-          costmap.setCost(x, y, static_cast<unsigned char>(normalized_value * 255.0f));
+    for (unsigned int x = 0; x < width; ++x) {
+      // Index in OccupancyGrid's data array
+      unsigned int index = x + y * width;
+      int8_t cell_value = msg.data[index];
+      // Map OccupancyGrid values to continuous float values for Costmap2D
+      // (e.g., scale 0-100 to 0.0-1.0)
+      float normalized_value;
+      if (cell_value == -1) {
+        normalized_value = costmap_2d::NO_INFORMATION;
+      } else {
+        normalized_value = static_cast<float>(cell_value) / 100.0f;
       }
+      costmap.setCost(x, y,
+                      static_cast<unsigned char>(normalized_value * 255.0f));
+    }
   }
   navigation_.UpdateLocalCostmap(costmap);
 
-  ROS_INFO("Costmap2D created with width: %d, height: %d, resolution: %f", width, height, resolution);
+  ROS_INFO("Costmap2D created with width: %d, height: %d, resolution: %f",
+           width, height, resolution);
 }
 
-void RetrieveTransform(const std_msgs::Header& msg,
-                       Eigen::Affine3f& frame_tf) {
+void RetrieveTransform(const std_msgs::Header& msg, Eigen::Affine3f& frame_tf) {
   static tf::TransformListener tf_listener;
   tf::StampedTransform transform;
   try {
-    tf_listener.waitForTransform(CONFIG_laser_frame,
-                                 msg.frame_id,
-                                 msg.stamp,
+    tf_listener.waitForTransform(CONFIG_laser_frame, msg.frame_id, msg.stamp,
                                  ros::Duration(0.01));
-    tf_listener.lookupTransform(CONFIG_laser_frame,
-                                msg.frame_id,
-                                msg.stamp,
+    tf_listener.lookupTransform(CONFIG_laser_frame, msg.frame_id, msg.stamp,
                                 transform);
     frame_tf = Eigen::Translation3f(transform.getOrigin().getX(),
                                     transform.getOrigin().getY(),
@@ -271,21 +269,17 @@ void RetrieveTransform(const std_msgs::Header& msg,
   }
 }
 
-void LaserHandler(const sensor_msgs::LaserScan& msg,
-                  const string& topic) {
+void LaserHandler(const sensor_msgs::LaserScan& msg, const string& topic) {
   if (FLAGS_v > 2) {
-    printf("Laser topic=%s, t=%f, dt=%f\n",
-           topic.c_str(),
-           msg.header.stamp.toSec(),
-           GetWallTime() - msg.header.stamp.toSec());
+    printf("Laser topic=%s, t=%f, dt=%f\n", topic.c_str(),
+           msg.header.stamp.toSec(), GetWallTime() - msg.header.stamp.toSec());
   }
 
   static unordered_map<string, LaserCache> laser_caches_;
   laser_caches_.emplace(topic, LaserCache());
   LaserCache& cache = laser_caches_[topic];
 
-  if (cache.dtheta != msg.angle_increment ||
-      cache.angle_min != msg.angle_min ||
+  if (cache.dtheta != msg.angle_increment || cache.angle_min != msg.angle_min ||
       cache.rays.size() != msg.ranges.size()) {
     cache.dtheta = msg.angle_increment;
     cache.angle_min = msg.angle_min;
@@ -306,14 +300,14 @@ void LaserHandler(const sensor_msgs::LaserScan& msg,
 
   for (size_t i = 0; i < cache.rays.size(); ++i) {
     const float r =
-      ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
-      msg.ranges[i] : msg.range_max);
+        ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max)
+             ? msg.ranges[i]
+             : msg.range_max);
     point_cloud_[start_idx + i] = (frame_tf * (r * cache.rays[i])).head<2>();
-  } 
+  }
 }
 
-void LaserCallback(const sensor_msgs::LaserScan& msg,
-                   const string& topic) {
+void LaserCallback(const sensor_msgs::LaserScan& msg, const string& topic) {
   if (!received_laser_) {
     point_cloud_.clear();
     received_laser_ = true;
@@ -358,8 +352,7 @@ void ResetNavGoalsCallback(const std_msgs::Empty& msg) {
   navigation_.ResetNavGoals();
 }
 
-bool PlanServiceCb(graphNavSrv::Request &req,
-                   graphNavSrv::Response &res) {
+bool PlanServiceCb(graphNavSrv::Request& req, graphNavSrv::Response& res) {
   const Vector2f start(req.start.x, req.start.y);
   const Vector2f end(req.end.x, req.end.y);
   const vector<int> plan = navigation_.GlobalPlan(start, end);
@@ -367,18 +360,19 @@ bool PlanServiceCb(graphNavSrv::Request &req,
   return true;
 }
 
-bool GPSPlanServiceCb(graphNavGPSSrv::Request &req,
-                      graphNavGPSSrv::Response &res) {
+bool GPSPlanServiceCb(graphNavGPSSrv::Request& req,
+                      graphNavGPSSrv::Response& res) {
   const GPSPoint start(req.start.latitude, req.start.longitude);
   vector<GPSPoint> goals;
   for (const auto& goal : req.goals.data) {
-    goals.emplace_back(goal.header.stamp.toSec(), goal.latitude, goal.longitude, goal.heading);
+    goals.emplace_back(goal.header.stamp.toSec(), goal.latitude, goal.longitude,
+                       goal.heading);
   }
-  const auto&route = navigation_.GlobalPlan(start, goals);
+  const auto& route = navigation_.GlobalPlan(start, goals);
   printf("Goals in osrm plan: %d\n", int(route.size()));
   navigation_.SetGPSNavGoals(route);
   GPSArrayMsg gps_goals_msg;
-  gps_goals_msg.header.stamp = ros::Time::now();  
+  gps_goals_msg.header.stamp = ros::Time::now();
   for (const auto& route_node : route) {
     GPSMsg goal_msg;
     goal_msg.header.stamp = gps_goals_msg.header.stamp;
@@ -410,7 +404,7 @@ void SignalHandler(int) {
 }
 
 void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
-  static string map  = "";
+  static string map = "";
   if (FLAGS_v > 2) {
     printf("Localization t=%f\n", GetWallTime());
   }
@@ -421,9 +415,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
   }
 }
 
-void HaltCallback(const std_msgs::Bool& msg) {
-  navigation_.Pause();
-}
+void HaltCallback(const std_msgs::Bool& msg) { navigation_.Pause(); }
 
 AckermannCurvatureDriveMsg TwistToAckermann(
     const geometry_msgs::TwistStamped& twist) {
@@ -440,7 +432,7 @@ AckermannCurvatureDriveMsg TwistToAckermann(
 
 geometry_msgs::TwistStamped AckermannToTwist(
     const AckermannCurvatureDriveMsg& msg) {
-  geometry_msgs::TwistStamped  twist_msg;
+  geometry_msgs::TwistStamped twist_msg;
   twist_msg.header = msg.header;
   twist_msg.twist.linear.x = msg.velocity;
   twist_msg.twist.linear.y = 0;
@@ -458,8 +450,8 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
                   static_cast<float>(twist_msg.twist.linear.y),
                   static_cast<float>(twist_msg.twist.linear.z)};
   twist.angular = {static_cast<float>(twist_msg.twist.angular.x),
-                  static_cast<float>(twist_msg.twist.angular.y),
-                  static_cast<float>(twist_msg.twist.angular.z)};
+                   static_cast<float>(twist_msg.twist.angular.y),
+                   static_cast<float>(twist_msg.twist.angular.z)};
   return twist;
 }
 
@@ -510,8 +502,8 @@ void PublishForwardPredictedPCL(const vector<Vector2f>& pcl) {
 
 nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
   nav_msgs::Path carrotNav;
-  carrotNav.header.stamp=ros::Time::now();
-  carrotNav.header.frame_id="map";
+  carrotNav.header.stamp = ros::Time::now();
+  carrotNav.header.frame_id = "map";
   geometry_msgs::PoseStamped carrotPose;
   carrotPose.pose.position.x = carrot.x();
   carrotPose.pose.position.y = carrot.y();
@@ -531,8 +523,8 @@ void PublishPath() {
   const auto path = navigation_.GetPlanPath();
   if (path.size() >= 2) {
     nav_msgs::Path path_msg;
-    path_msg.header.stamp=ros::Time::now();
-    path_msg.header.frame_id="map";
+    path_msg.header.stamp = ros::Time::now();
+    path_msg.header.frame_id = "map";
     for (size_t i = 0; i < path.size(); i++) {
       geometry_msgs::PoseStamped pose_plan;
       pose_plan.pose.position.x = path[i].loc.x();
@@ -550,13 +542,13 @@ void PublishPath() {
       path_pub_.publish(path_msg);
     }
     for (size_t i = 1; i < path.size(); i++) {
-      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, 
-          global_viz_msg_);
+      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00,
+                              global_viz_msg_);
     }
     const auto global_path = navigation_.GetGlobalPath();
     for (size_t i = 1; i < global_path.size(); i++) {
-      visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, 
-          global_viz_msg_);
+      visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc,
+                              0xA86032, global_viz_msg_);
     }
     Vector2f carrot;
     bool foundCarrot = navigation_.GetLocalCarrot(carrot);
@@ -568,7 +560,6 @@ void PublishPath() {
     if (foundGlobalCarrot) {
       visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
     }
-
   }
 }
 
@@ -576,10 +567,11 @@ void DrawTarget() {
   const float carrot_dist = navigation_.GetCarrotDist();
   const Eigen::Vector2f target = navigation_.GetTarget();
   auto msg_copy = global_viz_msg_;
-  visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
+  visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF,
+                           global_viz_msg_);
   // visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
-  visualization::DrawArc(
-      Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+  visualization::DrawArc(Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0,
+                         local_viz_msg_);
   viz_pub_.publish(msg_copy);
   visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 }
@@ -595,14 +587,14 @@ void DrawRobot() {
     // How much the robot's body extends in front of its base link frame.
     const float l2 = 0.5 * kRobotLength - kRearAxleOffset + kObstacleMargin;
     const float w = 0.5 * kRobotWidth + kObstacleMargin;
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l2, w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l2, w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, -w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
+    visualization::DrawLine(Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0,
+                            local_viz_msg_);
+    visualization::DrawLine(Vector2f(l2, w), Vector2f(l2, -w), 0xC0C0C0,
+                            local_viz_msg_);
+    visualization::DrawLine(Vector2f(l1, w), Vector2f(l2, w), 0xC0C0C0,
+                            local_viz_msg_);
+    visualization::DrawLine(Vector2f(l1, -w), Vector2f(l2, -w), 0xC0C0C0,
+                            local_viz_msg_);
   }
 
   {
@@ -611,14 +603,14 @@ void DrawRobot() {
     // How much the robot's body extends in front of its base link frame.
     const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
     const float w = 0.5 * kRobotWidth;
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l2, w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l2, w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, -w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
+    visualization::DrawLine(Vector2f(l1, w), Vector2f(l1, -w), 0x000000,
+                            local_viz_msg_);
+    visualization::DrawLine(Vector2f(l2, w), Vector2f(l2, -w), 0x000000,
+                            local_viz_msg_);
+    visualization::DrawLine(Vector2f(l1, w), Vector2f(l2, w), 0x000000,
+                            local_viz_msg_);
+    visualization::DrawLine(Vector2f(l1, -w), Vector2f(l2, -w), 0x000000,
+                            local_viz_msg_);
   }
 }
 
@@ -626,7 +618,7 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
   vector<PathOption> options;
   for (size_t i = 0; i < paths.size(); ++i) {
     const ConstantCurvatureArc arc =
-      *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
+        *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
     PathOption option;
     option.curvature = arc.curvature;
     option.free_path_length = arc.Length();
@@ -640,25 +632,17 @@ void DrawPathOptions() {
   vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
       navigation_.GetLastPathOptions();
   auto path_options = ToOptions(path_rollouts);
-  std::shared_ptr<PathRolloutBase> best_option =
-      navigation_.GetOption();
+  std::shared_ptr<PathRolloutBase> best_option = navigation_.GetOption();
   for (const auto& o : path_options) {
-    visualization::DrawPathOption(o.curvature,
-        o.free_path_length,
-        o.clearance,
-        0x0000FF,
-        false,
-        local_viz_msg_);
+    visualization::DrawPathOption(o.curvature, o.free_path_length, o.clearance,
+                                  0x0000FF, false, local_viz_msg_);
   }
   if (best_option != nullptr) {
     const ConstantCurvatureArc best_arc =
-      *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
-    visualization::DrawPathOption(best_arc.curvature,
-        best_arc.length,
-        best_arc.clearance,
-        0xFF0000,
-        true,
-        local_viz_msg_);
+        *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
+    visualization::DrawPathOption(best_arc.curvature, best_arc.length,
+                                  best_arc.clearance, 0xFF0000, true,
+                                  local_viz_msg_);
   }
 }
 
@@ -679,10 +663,10 @@ void DrawPathOptions() {
  * @param color       vector of 4 float values representing color of marker;
  *                    0: red, 1: green, 2: blue, 3: alpha
  */
-void InitVizMarker(visualization_msgs::Marker& vizMarker, string ns,
-    int id, string type, geometry_msgs::PoseStamped p,
-    geometry_msgs::Point32 scale, double duration, vector<float> color) {
-
+void InitVizMarker(visualization_msgs::Marker& vizMarker, string ns, int id,
+                   string type, geometry_msgs::PoseStamped p,
+                   geometry_msgs::Point32 scale, double duration,
+                   vector<float> color) {
   vizMarker.header.frame_id = p.header.frame_id;
   vizMarker.header.stamp = ros::Time::now();
 
@@ -740,7 +724,7 @@ void InitSimulatorVizMarkers() {
   color[2] = 244.0 / 255.0;
   color[3] = 1.0;
   InitVizMarker(line_list_marker_, "map_lines", 0, "linelist", p, scale, 0.0,
-      color);
+                color);
 
   p.pose.position.z = 0.0;
   p.pose.position.x = 0.0;
@@ -753,27 +737,14 @@ void InitSimulatorVizMarkers() {
   color[2] = 255.0 / 255.0;
   color[3] = 0.8;
 
-  InitVizMarker(pose_marker_,
-      "robot_position",
-      1,
-      "cube",
-      p,
-      scale,
-      0.0,
-      color);
+  InitVizMarker(pose_marker_, "robot_position", 1, "cube", p, scale, 0.0,
+                color);
 
   scale.x = 0.05;
   scale.y = 0.05;
   scale.z = 0.05;
 
-  InitVizMarker(target_marker_,
-      "targets",
-      1,
-      "points",
-      p,
-      scale,
-      0.0,
-      color);
+  InitVizMarker(target_marker_, "targets", 1, "points", p, scale, 0.0, color);
 
   // p.pose.orientation.w = 1.0;
   // scale.x = 0.02;
@@ -784,7 +755,7 @@ void InitSimulatorVizMarkers() {
   // color[2] = 156.0 / 255.0;
   // color[3] = 1.0;
   // InitVizMarker(objectLinesMarker, "object_lines", 0, "linelist", p, scale,
-      // 0.0, color);
+  // 0.0, color);
 }
 
 void PublishVisualizationMarkers() {
@@ -792,11 +763,9 @@ void PublishVisualizationMarkers() {
   tf::Quaternion robotQ = tf::createQuaternionFromYaw(current_angle_);
   const float rear_axle_offset = 0.0;
   pose_marker_.pose.position.x =
-    current_loc_.x() -
-    cos(current_angle_) * rear_axle_offset;
+      current_loc_.x() - cos(current_angle_) * rear_axle_offset;
   pose_marker_.pose.position.y =
-    current_loc_.y() -
-    sin(current_angle_) * rear_axle_offset;
+      current_loc_.y() - sin(current_angle_) * rear_axle_offset;
   pose_marker_.pose.position.z = 0.5 * 0.5;
   pose_marker_.pose.orientation.w = 1.0;
   pose_marker_.pose.orientation.x = robotQ.x();
@@ -806,16 +775,15 @@ void PublishVisualizationMarkers() {
   pose_marker_publisher_.publish(pose_marker_);
 }
 
-int LoadCameraCalibrationCV(
-    const std::string& calibration_file,
-    cv::Mat* camera_mat_ptr,
-    cv::Mat* dist_coeffs_cv_ptr,
-    cv::Mat* homography_mat_ptr) {
+int LoadCameraCalibrationCV(const std::string& calibration_file,
+                            cv::Mat* camera_mat_ptr,
+                            cv::Mat* dist_coeffs_cv_ptr,
+                            cv::Mat* homography_mat_ptr) {
   cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
 
   if (!camera_settings.isOpened()) {
     std::cerr << "Failed to open camera settings file at: " << calibration_file
-               << endl;
+              << endl;
     return -1;
   }
 
@@ -824,7 +792,7 @@ int LoadCameraCalibrationCV(
     *camera_mat_ptr = node.mat();
   } else {
     std::cerr << "Camera calibration matrix not read! Check configuration "
-                  "file is in default yaml format.";
+                 "file is in default yaml format.";
   }
 
   node = camera_settings["D"];
@@ -832,7 +800,7 @@ int LoadCameraCalibrationCV(
     *dist_coeffs_cv_ptr = node.mat();
   } else {
     std::cerr << "Camera distortion coefficients not read! Check "
-                  "configuration file is in default yaml format.";
+                 "configuration file is in default yaml format.";
   }
 
   node = camera_settings["H"];
@@ -840,7 +808,7 @@ int LoadCameraCalibrationCV(
     *homography_mat_ptr = node.mat();
   } else {
     std::cerr << "Camera homography matrix not read! Check configuration file "
-                  "is in default yaml format.";
+                 "is in default yaml format.";
   }
 
   return 0;
@@ -848,15 +816,18 @@ int LoadCameraCalibrationCV(
 
 void LoadOSMPlannerConfig(navigation::OSMPlannerParameters* params) {
   CONFIG_STRING(osrm_file, "OSMPlannerParameters.osrm_file");
+  CONFIG_DOUBLE(osrm_path_resolution,
+                "OSMPlannerParameters.osrm_path_resolution");
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->osrm_file = CONFIG_osrm_file;
+  params->osrm_path_resolution = CONFIG_osrm_path_resolution;
 }
 
 void LoadConfig(navigation::NavigationParameters* params) {
-  #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
-  #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
-  #define STRING_PARAM(x) CONFIG_STRING(x, "NavigationParameters."#x);
-  #define BOOL_PARAM(x) CONFIG_BOOL(x, "NavigationParameters."#x);
+#define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters." #x);
+#define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters." #x);
+#define STRING_PARAM(x) CONFIG_STRING(x, "NavigationParameters." #x);
+#define BOOL_PARAM(x) CONFIG_BOOL(x, "NavigationParameters." #x);
   REAL_PARAM(dt);
   REAL_PARAM(max_linear_accel);
   REAL_PARAM(max_linear_decel);
@@ -904,14 +875,12 @@ void LoadConfig(navigation::NavigationParameters* params) {
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->do_intermed = !FLAGS_no_intermed;
   params->dt = CONFIG_dt;
-  params->linear_limits = MotionLimits(
-      CONFIG_max_linear_accel,
-      CONFIG_max_linear_decel,
-      CONFIG_max_linear_speed);
-  params->angular_limits = MotionLimits(
-      CONFIG_max_angular_accel,
-      CONFIG_max_angular_decel,
-      CONFIG_max_angular_speed);
+  params->linear_limits =
+      MotionLimits(CONFIG_max_linear_accel, CONFIG_max_linear_decel,
+                   CONFIG_max_linear_speed);
+  params->angular_limits =
+      MotionLimits(CONFIG_max_angular_accel, CONFIG_max_angular_decel,
+                   CONFIG_max_angular_speed);
   params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
   params->system_latency = CONFIG_system_latency;
   params->obstacle_margin = CONFIG_obstacle_margin;
@@ -948,14 +917,16 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->distance_weight = CONFIG_distance_weight;
   params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
 
-  // TODO Rather than loading camera homography from a file, compute it from camera transformation info
-  LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
+  // TODO Rather than loading camera homography from a file, compute it from
+  // camera transformation info
+  LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K,
+                          &params->D, &params->H);
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
   try {
-    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
-        msg, sensor_msgs::image_encodings::BGR8);
+    cv_bridge::CvImagePtr image =
+        cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
     last_image_ = image->image;
   } catch (cv_bridge::Exception& e) {
     fprintf(stderr, "cv_bridge exception: %s\n", e.what());
@@ -983,9 +954,11 @@ int main(int argc, char** argv) {
   std::string deprecated_path =
       navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
   if (!FileExists(map_path) && FileExists(deprecated_path)) {
-    printf("Could not find navigation map file at %s. An V1 nav-map was found\
+    printf(
+        "Could not find navigation map file at %s. An V1 nav-map was found\
             at %s. Please run map_upgrade from vector_display to upgrade this\
-            map.\n", map_path.c_str(), deprecated_path.c_str());
+            map.\n",
+        map_path.c_str(), deprecated_path.c_str());
     return 1;
   } else if (!FileExists(map_path)) {
     printf("Could not find navigation map file at %s.\n", map_path.c_str());
@@ -995,7 +968,7 @@ int main(int argc, char** argv) {
   // Load Parameters and Initialize
   navigation::NavigationParameters params;
   LoadConfig(&params);
-  navigation_.Initialize(params, map_path);
+  navigation_.Initialize(params, FLAGS_maps_dir, FLAGS_map);
 
   // Load Global Planner Parameters and Initialize
   navigation::OSMPlannerParameters osm_planner_params;
@@ -1003,14 +976,14 @@ int main(int argc, char** argv) {
   navigation_.InitializeOSM(osm_planner_params);
 
   // Publishers
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
-  ackermann_drive_pub_ = n.advertise<AckermannCurvatureDriveMsg>(
-      "ackermann_curvature_drive", 1);
-  twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
-      FLAGS_twist_drive_topic, 1);
+  local_viz_msg_ =
+      visualization::NewVisualizationMessage("base_link", "navigation_local");
+  global_viz_msg_ =
+      visualization::NewVisualizationMessage("map", "navigation_global");
+  ackermann_drive_pub_ =
+      n.advertise<AckermannCurvatureDriveMsg>("ackermann_curvature_drive", 1);
+  twist_drive_pub_ =
+      n.advertise<geometry_msgs::Twist>(FLAGS_twist_drive_topic, 1);
   status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
@@ -1019,17 +992,17 @@ int main(int argc, char** argv) {
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
 
   // Messages
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
+  local_viz_msg_ =
+      visualization::NewVisualizationMessage("base_link", "navigation_local");
+  global_viz_msg_ =
+      visualization::NewVisualizationMessage("map", "navigation_global");
   InitSimulatorVizMarkers();
 
   // Services
   ros::ServiceServer nav_srv =
-    n.advertiseService("graphNavSrv", &PlanServiceCb);
-  ros::ServiceServer gps_nav_srv = 
-    n.advertiseService("graphNavGPSSrv", &GPSPlanServiceCb);
+      n.advertiseService("graphNavSrv", &PlanServiceCb);
+  ros::ServiceServer gps_nav_srv =
+      n.advertiseService("graphNavGPSSrv", &GPSPlanServiceCb);
 
   // Subscribers
   ros::Subscriber velocity_sub =
@@ -1044,8 +1017,7 @@ int main(int argc, char** argv) {
           LaserCallback(*msg_ptr, CONFIG_laser_topics[i]);
         });
   }
-  ros::Subscriber img_sub = 
-      n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
+  ros::Subscriber img_sub = n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =
       n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
   ros::Subscriber goto_amrl_sub =
@@ -1054,22 +1026,22 @@ int main(int argc, char** argv) {
       n.subscribe("/reset_nav_goals", 1, &ResetNavGoalsCallback);
   ros::Subscriber enabler_sub =
       n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
-  ros::Subscriber halt_sub =
-      n.subscribe("halt_robot", 1, &HaltCallback);
+  ros::Subscriber halt_sub = n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
-  ros::Subscriber gps_pos_sub = 
-      n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
-  ros::Subscriber local_costmap_sub = 
+  ros::Subscriber gps_pos_sub = n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
+  ros::Subscriber local_costmap_sub =
       n.subscribe("local_costmap", 1, &LocalCostmapCallback);
 
-  std_msgs::Header viz_img_header; // empty viz_img_header
-  viz_img_header.stamp = ros::Time::now(); // time
+  std_msgs::Header viz_img_header;          // empty viz_img_header
+  viz_img_header.stamp = ros::Time::now();  // time
   cv_bridge::CvImage viz_img;
   if (params.evaluator_type == "cost_map") {
-    viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
+    viz_img =
+        cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8,
+                           navigation_.GetVisualizationImage());
   }
-  
+
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
     visualization::ClearVisualizationMsg(local_viz_msg_);
@@ -1081,28 +1053,32 @@ int main(int argc, char** argv) {
     Vector2f cmd_vel(0, 0);
     float cmd_angle_vel(0);
 
-    bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
+    bool nav_succeeded =
+        navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status
     PublishNavStatus();
-    if(nav_succeeded) {
+    if (nav_succeeded) {
       if (!FLAGS_no_intermed) {
         // Publish Visualizations
         auto obstacles = navigation_.GetCostmapObstacles();
         auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
 
         // for (const auto& vector : global_obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
+        //   visualization::DrawPoint(vector.location, vector.cost * 256,
+        //   global_viz_msg_);
         // }
 
         // for (const auto& vector : obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
+        //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256,
+        //   global_viz_msg_);
         // }
       }
-      
+
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
-      if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+      if (navigation_.GetNavStatusUint8() !=
+          static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
         DrawTarget();
         DrawPathOptions();
       }
