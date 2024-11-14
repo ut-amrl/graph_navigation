@@ -55,6 +55,9 @@
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "amrl_msgs/LDOSTwist.h"
+#include "amrl_msgs/LDOSLaserScan.h"
+#include "amrl_msgs/LDOSLocalization.h"
+#include "spot_msgs/LDOSOdometry.h"
 #include "graph_navigation/graphNavSrv.h"
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
@@ -118,9 +121,12 @@ DEFINE_double(dt, -0.01, "Time step value for control loop; use config value if 
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
+CONFIG_STRING(ldos_laser_topic, "NavigationParameters.ldos_laser_topic");
 CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
+CONFIG_STRING(ldos_odom_topic, "NavigationParameters.ldos_odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
+CONFIG_STRING(ldos_localization_topic, "NavigationParameters.ldos_localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 
@@ -143,6 +149,9 @@ float goal_angle_ = 0;
 navigation::Odom odom_;
 vector<Vector2f> point_cloud_;
 sensor_msgs::LaserScan last_laser_msg_;
+amrl_msgs::LDOSLaserScan last_ldos_laser_scan_;
+spot_msgs::LDOSOdometry last_ldos_odom_;
+amrl_msgs::LDOSLocalization last_ldos_localization_;
 cv::Mat last_image_;
 Navigation navigation_;
 
@@ -200,6 +209,18 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   received_odom_ = true;
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
+}
+
+void LDOSLaserCallback(const amrl_msgs::LDOSLaserScan& laser_message) {
+  last_ldos_laser_scan_ = laser_message;
+}
+
+void LDOSOdometryCallback(const spot_msgs::LDOSOdometry& odometry_message) {
+  last_ldos_odom_ = odometry_message;
+}
+
+void LDOSLocalizationCallback(const amrl_msgs::LDOSLocalization& localization_message) {
+  last_ldos_localization_ = localization_message;
 }
 
 void RetrieveTransform(const std_msgs::Header& msg,
@@ -413,6 +434,7 @@ void SendCommand(Eigen::Vector2f vel, float ang_vel, ros::Time loopstart_time) {
   ldos_twist_msg.linear = drive_msg.twist.linear;
   ldos_twist_msg.angular = drive_msg.twist.angular;
   ldos_twist_msg.sys_nano_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  ldos_twist_msg.anyinfo = "{odom: " + std::to_string(last_ldos_odom_.sys_nano_time) + ", laser: " + std::to_string(last_ldos_laser_scan_.sys_nano_time) + ", localization: " + std::to_string(last_ldos_localization_.sys_nano_time) + "}";
 
   twist_drive_pub_.publish(drive_msg.twist);
   ldos_twist_drive_pub_.publish(ldos_twist_msg);
@@ -954,8 +976,12 @@ int main(int argc, char** argv) {
   // Subscribers
   ros::Subscriber velocity_sub =
       n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
+  ros::Subscriber ldos_odom_sub = 
+      n.subscribe(CONFIG_ldos_odom_topic, 1, &LDOSOdometryCallback);
   ros::Subscriber localization_sub =
       n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
+  ros::Subscriber ldos_localization_sub =
+      n.subscribe(CONFIG_ldos_localization_topic, 1, &LDOSLocalizationCallback);
   vector<ros::Subscriber> laser_subs(CONFIG_laser_topics.size());
   for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
     laser_subs[i] = n.subscribe<sensor_msgs::LaserScan>(
@@ -964,6 +990,8 @@ int main(int argc, char** argv) {
           LaserCallback(*msg_ptr, CONFIG_laser_topics[i]);
         });
   }
+  ros::Subscriber ldos_laser_pub = 
+      n.subscribe(CONFIG_ldos_laser_topic, 1, &LDOSLaserCallback);
   ros::Subscriber img_sub = 
       n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
   ros::Subscriber goto_sub =

@@ -17,6 +17,7 @@
   <depend package="rosbag"/>
   <depend package="tf"/>
   <depend package="amrl_msgs"/>
+  <depend package="spot_msgs"/>
   <depend package="cv_bridge"/>
   <depend package="image_transport"/>
 
