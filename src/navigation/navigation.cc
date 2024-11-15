@@ -200,7 +200,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   planning_domain_ = GraphDomain(map_file, &params_);
 
   LoadVectorMap(map_file);
-  UpdateGPSMap(maps_dir, map);
+  // UpdateGPSMap(maps_dir, map);
 
   initialized_ = true;
   sampler_->SetNavParams(params);
@@ -333,6 +333,10 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   gps_nav_goals_loc_ = goals;
   gps_goal_index_ = 0;
   plan_path_.clear();
+
+  // Select next GPS goal
+  updateNextGPSGlobalGoal();
+
   if (FLAGS_v > 0)
     printf("SetGPSNavGoals(): %d\n", int(gps_nav_goals_loc_.size()));
 }
@@ -353,10 +357,10 @@ void Navigation::SetOverride(const Vector2f& loc, float angle) {
 
 void Navigation::Resume() { nav_state_ = NavigationState::kGoto; }
 
-void Navigation::UpdateGPSMap(std::string maps_dir, std::string map_name) {
-  gps_translator_initialized_ = gps_translator_.Load(maps_dir, map_name);
-  printf("GPS Translator Initialized: %d\n", gps_translator_initialized_);
-}
+// void Navigation::UpdateGPSMap(std::string maps_dir, std::string map_name) {
+//   gps_translator_initialized_ = gps_translator_.Load(maps_dir, map_name);
+//   printf("GPS Translator Initialized: %d\n", gps_translator_initialized_);
+// }
 
 void Navigation::UpdateMap(const string& map_path) {
   LoadVectorMap(map_path);
@@ -407,6 +411,9 @@ void Navigation::UpdateOdometry(const Odom& msg) {
 void Navigation::UpdateGPS(const GPSPoint& msg) {
   robot_gps_loc_ = msg;
   if (!gps_initialized_) {
+    this->gps_translator_.SetOrigin(robot_gps_loc_.lat, robot_gps_loc_.lon,
+                                    robot_gps_loc_.heading);
+    this->gps_translator_initialized_ = true;
     initial_gps_loc_ = robot_gps_loc_;
     gps_initialized_ = true;
   }
@@ -824,7 +831,7 @@ void Navigation::OSMPlannerTest() {
   }
 }
 
-DEFINE_double(max_plan_deviation, 0.5,
+DEFINE_double(max_plan_deviation, 12.8,
               "Maximum premissible deviation from the plan");
 bool Navigation::PlanStillValid() {
   if (plan_path_.size() < 2) return false;
@@ -1265,6 +1272,33 @@ vector<ObstacleCost> Navigation::GetGlobalCostmapObstacles() {
 
 Eigen::Vector2f Navigation::GetIntermediateGoal() { return intermediate_goal_; }
 
+void Navigation::updateNextGPSGlobalGoal() {
+  const bool kDebug = FLAGS_v > 0;
+  // Keep iterating to next waypoint until one gets you closer to the goal
+  // Never go back, Never surrender
+  const auto& final_goal_xy = gps_translator_
+                                  .GPSToMetric(gps_nav_goals_loc_.back().lat,
+                                               gps_nav_goals_loc_.back().lon)
+                                  .cast<float>();
+  for (size_t i = gps_goal_index_; i < gps_nav_goals_loc_.size(); ++i) {
+    const auto& next_goal_xy =
+        gps_translator_
+            .GPSToMetric(gps_nav_goals_loc_[i].lat, gps_nav_goals_loc_[i].lon)
+            .cast<float>();
+    float robot_to_final_goal = (robot_loc_ - final_goal_xy).norm();
+    float subgoal_to_final_goal = (next_goal_xy - final_goal_xy).norm();
+    if (kDebug) {
+      printf("Checking subgoal %ld\n", i);
+      printf("Robot dist to final goal: %f\n", robot_to_final_goal);
+      printf("Goal dist to final goal: %f\n", subgoal_to_final_goal);
+    }
+    if (robot_to_final_goal > subgoal_to_final_goal) {
+      gps_goal_index_ = i;
+      break;
+    }
+  }
+}
+
 bool Navigation::isGoalInFOV(const Vector2f& local_goal) {
   const float angle_to_goal = atan2(local_goal.y(), local_goal.x());
   const float min_angle = -params_.local_fov / 2;  // in radians
@@ -1318,8 +1352,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   }
 
   ForwardPredict(time + params_.system_latency);
-  // UpdateRobotLocFromOdom();  // Update robot_loc_ and robot_angle_ from
-  //                            // odom_loc_ and odom_angle_
+  UpdateRobotLocFromOdom();  // Update robot_loc_ using odometry only
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
     return true;
@@ -1583,26 +1616,40 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   /** END REFERENCE CODE FOR GPS NAV TO LOCAL */
   // return true;
 
-  if (!gps_nav_goals_loc_.empty()) {
+  if (!gps_nav_goals_loc_.empty()) {  // Keep iterating to next waypoint until
+                                      // one gets you closer to the goal
     GPSPoint next_nav_goal_loc = gps_nav_goals_loc_[gps_goal_index_];
-    bool isGPSGoalReached =
-        osm_planner_.isGoalReached(robot_gps_loc_, next_nav_goal_loc);
+    double goal_tolerance = params_.intermediate_goal_dist;
+    if (gps_goal_index_ + 1 >= int(gps_nav_goals_loc_.size())) {
+      goal_tolerance /= 2;
+    }
+    bool isGPSGoalReached = osm_planner_.isGoalReached(
+        robot_gps_loc_, next_nav_goal_loc, params_.intermediate_goal_dist);
+    // bool is_goal_in_fov = isGoalInFOV(nav_goal_loc_);
     bool isGPSGoalStillValid = true;
     if (!plan_path_.empty()) {
       isGPSGoalStillValid = PlanStillValid();
     }
 
+    /**
+     * Conditions:
+     * 1. If goal is reached, switch to next goal
+     * 2. If goal is invalid, replan to final goal
+     * 3. If goal is not reached and not invalid, continue running
+     */
     if (isGPSGoalReached) {
       if (kDebug) printf("GPS Goal reached\n");
+      // Reset local origin to robot location
+      initial_odom_msg_ = latest_odom_msg_;
       if (gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size())) {
         if (kDebug) printf("Switching to next GPS Goal\n");
-        ++gps_goal_index_;
+        updateNextGPSGlobalGoal();
         nav_goal_loc_ =
             gps_translator_
                 .GPSToMetric(gps_nav_goals_loc_[gps_goal_index_].lat,
                              gps_nav_goals_loc_[gps_goal_index_].lon)
                 .cast<float>();
-        nav_goal_angle_ = 0;  // TODO: Change this
+        nav_goal_angle_ = 0;
       } else {
         nav_state_ = NavigationState::kStopped;
       }
@@ -1620,6 +1667,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
               .cast<float>();
       nav_goal_angle_ = next_nav_goal_loc.heading;
     }
+  } else {
+    nav_state_ = NavigationState::kGoto;
   }
 
   if (nav_state_ == NavigationState::kGoto ||

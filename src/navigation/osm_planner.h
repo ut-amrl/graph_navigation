@@ -199,7 +199,7 @@ class OSMPlanner {
   // }
 
   bool isGoalReached(const GPSPoint &current, const GPSPoint &goal,
-                     double threshold = 3.0) {
+                     double threshold) {
     const auto &global_coord =
         gpsToGlobalCoord(current.lat, current.lon, goal.lat, goal.lon);
     // Check if the current location is within the threshold of the goal

@@ -107,7 +107,7 @@ class Navigation {
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
-  void UpdateGPSMap(std::string maps_dir, std::string map_name);
+  // void UpdateGPSMap(std::string maps_dir, std::string map_name);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
@@ -192,6 +192,7 @@ class Navigation {
 
   Eigen::Vector2f GetIntermediateGoal();
   void UpdateRobotLocFromOdom();
+  void updateNextGPSGlobalGoal();
 
   // Converts a route of GPS points to a route of map points
   std::vector<Eigen::Vector2f> GPSRouteToMap(
