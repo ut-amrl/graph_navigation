@@ -960,7 +960,7 @@ int main(int argc, char** argv) {
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
-  navloop_timer_pub_ = n.advertise<std_msgs::String>("navloop_timing_info", 10);
+  navloop_timer_pub_ = n.advertise<std_msgs::String>("ldos/navloop_timing_info", 10);
 
   // Messages
   local_viz_msg_ = visualization::NewVisualizationMessage(
