@@ -100,8 +100,7 @@ class OSMPlanner {
         GPSPoint curr_point = path_coordinates[i];
 
         // Compute the distance between previous and current points
-        auto distance = gpsDistance(prev_point.lat, prev_point.lon,
-                                    curr_point.lat, curr_point.lon);
+        auto distance = gpsDistance(prev_point, curr_point);
 
         accumulated_distance += distance;
 
@@ -200,11 +199,9 @@ class OSMPlanner {
 
   bool isGoalReached(const GPSPoint &current, const GPSPoint &goal,
                      double threshold) {
-    const auto &global_coord =
-        gpsToGlobalCoord(current.lat, current.lon, goal.lat, goal.lon);
+    const auto &global_coord = gpsToGlobalCoord(current, goal);
     // Check if the current location is within the threshold of the goal
-    double distance = sqrt(pow(std::get<0>(global_coord), 2) +
-                           pow(std::get<1>(global_coord), 2));
+    double distance = sqrt(pow(global_coord.x(), 2) + pow(global_coord.y(), 2));
     return distance < threshold;
   }
 

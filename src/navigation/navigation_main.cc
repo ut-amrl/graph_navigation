@@ -202,6 +202,8 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   received_odom_ = true;
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
+  // Compute global coordinate offset from odometry t'' to odometry t'
+  navigation_.UpdateRobotLocFromOdom(odom_);
 }
 
 void GPSCallback(const std_msgs::Float64MultiArray& msg) {
@@ -372,7 +374,7 @@ bool GPSPlanServiceCb(graphNavGPSSrv::Request& req,
   const auto& map_route = navigation_.GPSRouteToMap(route);
   global_viz_msg_.lines.clear();
   for (const auto& p : map_route) {
-    visualization::DrawPoint(Vector2f(p.x(), p.y()), 0xFF0000, global_viz_msg_);
+    visualization::DrawPoint(p.cast<float>(), 0xFF0000, global_viz_msg_);
   }
   viz_pub_.publish(global_viz_msg_);
 
@@ -410,17 +412,17 @@ void SignalHandler(int) {
   run_ = false;
 }
 
-void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
-  static string map = "";
-  if (FLAGS_v > 2) {
-    printf("Localization t=%f\n", GetWallTime());
-  }
-  navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
-  if (map != msg.map) {
-    map = msg.map;
-    navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
-  }
-}
+// void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
+//   static string map = "";
+//   if (FLAGS_v > 2) {
+//     printf("Localization t=%f\n", GetWallTime());
+//   }
+//   navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y),
+//   msg.pose.theta); if (map != msg.map) {
+//     map = msg.map;
+//     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
+//   }
+// }
 
 void HaltCallback(const std_msgs::Bool& msg) { navigation_.Pause(); }
 
@@ -1014,8 +1016,8 @@ int main(int argc, char** argv) {
   // Subscribers
   ros::Subscriber velocity_sub =
       n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
-  ros::Subscriber localization_sub =
-      n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
+  // ros::Subscriber localization_sub =
+  //     n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
   vector<ros::Subscriber> laser_subs(CONFIG_laser_topics.size());
   for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
     laser_subs[i] = n.subscribe<sensor_msgs::LaserScan>(

@@ -81,6 +81,10 @@ struct Odom {
   double time;
   Eigen::Vector3f position;
   Eigen::Quaternionf orientation;
+  Eigen::Affine2f toAffine2f() const {
+    return Eigen::Translation2f(position.x(), position.y()) *
+           Eigen::Rotation2Df(2.0f * atan2f(orientation.z(), orientation.w()));
+  }
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 };
 
@@ -107,7 +111,6 @@ class Navigation {
   explicit Navigation();
   void ConvertPathToNavMsgsPath();
   void UpdateMap(const std::string& map_file);
-  // void UpdateGPSMap(std::string maps_dir, std::string map_name);
   void UpdateLocation(const Eigen::Vector2f& loc, float angle);
   void UpdateOdometry(const Odom& msg);
   void UpdateCommandHistory(Twist twist);
@@ -128,6 +131,14 @@ class Navigation {
   void Resume();
   bool PlanStillValid();
   bool IntermediatePlanStillValid();
+
+  // GPS Odom Transform helpers
+  void GetCompensatedOdomUTMTransform(Eigen::Affine2f& T_tp_utm,
+                                      Eigen::Affine2f& T_tp_odom);
+  Eigen::Affine2f OdometryToUTMTransform(const Odom& odom,
+                                         const GPSPoint& gps_loc);
+  void UpdateRobotLocFromOdom(const Odom& msg);
+  int GetNextGPSGlobalGoal(int start_goal_index);
 
   void Plan(Eigen::Vector2f goal_loc);
   void PlanIntermediate(const Eigen::Vector2f& initial,
@@ -192,11 +203,11 @@ class Navigation {
 
   Eigen::Vector2f GetIntermediateGoal();
   void UpdateRobotLocFromOdom();
-  void updateNextGPSGlobalGoal();
+  // Get the next best global gps goal
+  void ReplanAndSetNextNavGoal(bool replan);
 
   // Converts a route of GPS points to a route of map points
-  std::vector<Eigen::Vector2f> GPSRouteToMap(
-      const std::vector<GPSPoint>& route);
+  std::vector<Vector2d> GPSRouteToMap(const std::vector<GPSPoint>& route);
 
  private:
   // Test 1D TOC motion in a straight line.
@@ -213,6 +224,9 @@ class Navigation {
   void RunObstacleAvoidance(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Latency testing routine.
   void LatencyTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
+  // Removes odometry messages older than the latest GPS update. (accounting for
+  // latency)
+  void PruneOdometryQueue();
   // Remove commands older than latest real robot updates (odometry and LIDAR),
   // accounting for latency.
   void
@@ -235,9 +249,9 @@ class Navigation {
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
 
-  // Current map frame robot location (LocalizationCallback).
+  // // Current map frame robot location (OdometryCallback).
   Eigen::Vector2f robot_loc_;
-  // Current map frame robot orientation (LocalizationCallback).
+  // // Current map frame robot orientation (OdometryCallback).
   float robot_angle_;
   // Current robot velocity.
   Eigen::Vector2f robot_vel_;
@@ -250,6 +264,8 @@ class Navigation {
   // Newest odometry message received.
   Odom initial_odom_msg_;
   Odom latest_odom_msg_;
+  std::deque<Odom> odom_history_;
+  // Odom latest_odom_msg_;
   // Newest image received.
   cv::Mat latest_image_;
   double t_image_;
@@ -261,8 +277,6 @@ class Navigation {
   bool gps_initialized_;
   int gps_goal_index_;
   std::vector<GPSPoint> gps_nav_goals_loc_;
-  GPSTranslator gps_translator_;
-  bool gps_translator_initialized_;
 
   NavigationState nav_state_;
 
