@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
+#include "amrl_msgs/GPSMsg.h"
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
 #include "config_reader/config_reader.h"
@@ -139,6 +140,7 @@ class Navigation {
                                          const GPSPoint& gps_loc);
   void UpdateRobotLocFromOdom(const Odom& msg);
   int GetNextGPSGlobalGoal(int start_goal_index);
+  bool GetNextGPSGoal(amrl_msgs::GPSMsg& goal_msg);
 
   void Plan(Eigen::Vector2f goal_loc);
   void PlanIntermediate(const Eigen::Vector2f& initial,

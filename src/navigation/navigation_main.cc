@@ -171,6 +171,7 @@ ros::Publisher status_pub_;
 ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
+ros::Publisher next_gps_goal_pub_;
 image_transport::Publisher viz_img_pub_;
 
 // Messages
@@ -569,6 +570,14 @@ void PublishPath() {
     if (foundGlobalCarrot) {
       visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
     }
+  }
+}
+
+void PublishNextGPSGoal() {
+  GPSMsg goal_msg;
+  bool is_goal_valid = navigation_.GetNextGPSGoal(goal_msg);
+  if (is_goal_valid) {
+    next_gps_goal_pub_.publish(goal_msg);
   }
 }
 
@@ -999,6 +1008,8 @@ int main(int argc, char** argv) {
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
+  next_gps_goal_pub_ = n.advertise<GPSMsg>(
+      "next_gps_goal", 1, true);  // Only publish if there is a goal
 
   // Messages
   local_viz_msg_ =
@@ -1093,6 +1104,7 @@ int main(int argc, char** argv) {
       }
       PublishVisualizationMarkers();
       PublishPath();
+      PublishNextGPSGoal();
       local_viz_msg_.header.stamp = ros::Time::now();
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);

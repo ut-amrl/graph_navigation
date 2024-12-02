@@ -33,6 +33,7 @@
 #include <unordered_map>
 
 #include "ackermann_motion_primitives.h"
+#include "amrl_msgs/GPSMsg.h"
 #include "amrl_msgs/NavStatusMsg.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "astar.h"
@@ -53,6 +54,7 @@
 #include "simple_queue.h"
 using json = nlohmann::json;
 
+using amrl_msgs::GPSMsg;
 using Eigen::Affine2f;
 using Eigen::Rotation2Df;
 using Eigen::Translation2f;
@@ -339,6 +341,16 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
 
   if (FLAGS_v > 0)
     printf("SetGPSNavGoals(): %d\n", int(gps_nav_goals_loc_.size()));
+}
+
+bool Navigation::GetNextGPSGoal(GPSMsg& goal_msg) {
+  if (gps_nav_goals_loc_.empty()) return false;
+
+  goal_msg = GPSMsg();
+  goal_msg.latitude = gps_nav_goals_loc_[gps_goal_index_].lat;
+  goal_msg.longitude = gps_nav_goals_loc_[gps_goal_index_].lon;
+  goal_msg.heading = gps_nav_goals_loc_[gps_goal_index_].heading;
+  return true;
 }
 
 void Navigation::ResetNavGoals() {
@@ -994,7 +1006,7 @@ bool Navigation::GetLocalCarrot(Vector2f& carrot) {
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
-  const bool kDebug = FLAGS_v > 1;
+  const bool kDebug = FLAGS_v > 2;
   vector<GraphDomain::State> plan_path = plan_path_;
   if (global) {
     plan_path = global_plan_path_;
@@ -1357,8 +1369,8 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
   const bool kDebug = FLAGS_v > 0;
   // Never go back, Never surrender
   const auto& final_goal = gps_nav_goals_loc_.back();
-  for (int i = start_goal_index; i < int(gps_nav_goals_loc_.size()); ++i) {
-    const auto& subgoal = gps_nav_goals_loc_[i];
+  for (int i = start_goal_index + 1; i < int(gps_nav_goals_loc_.size()); ++i) {
+    GPSPoint subgoal = gps_nav_goals_loc_[i];
     double robot_to_final_goal = gpsDistance(robot_gps_loc_, final_goal);
     double subgoal_to_final_goal = gpsDistance(subgoal, final_goal);
     if (kDebug) {
@@ -1396,6 +1408,8 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
       gpsToGlobalCoord(initial_gps_loc_, gps_nav_goals_loc_[gps_goal_index_])
           .cast<float>();
   nav_goal_angle_ = gps_nav_goals_loc_[gps_goal_index_].heading;
+
+  // Push next nav goal for visualization
 }
 
 void Navigation::UpdateRobotLocFromOdom() {
@@ -1425,7 +1439,7 @@ void Navigation::UpdateRobotLocFromOdom() {
 
 bool Navigation::Run(const double& time, Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
-  const bool kDebug = FLAGS_v > 0;
+  const bool kDebug = FLAGS_v > 1;
   if (!initialized_) {
     if (kDebug) printf("Parameters and maps not initialized\n");
     return false;
@@ -1650,63 +1664,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
   }
 
-  /** BEGIN REFERENCE CODE FOR GPS NAV TO LOCAL */
-  // // gps_goal_index_ = 1; // TODO: remove this for debugging
-  // printf("Current goal index %d\n", gps_goal_index_);
-  // Eigen::Affine2f T_relutm_local = gpsToLocal(
-  //     robot_gps_loc_.lat, robot_gps_loc_.lon,
-  //     robot_gps_loc_.heading,
-  //     gps_nav_goals_loc_[gps_goal_index_].lat,
-  //     gps_nav_goals_loc_[gps_goal_index_].lon,
-  //     gps_nav_goals_loc_[gps_goal_index_].heading);
-  // Vector2f local_subgoal(T_relutm_local.translation().x(),
-  //                     T_relutm_local.translation().y());
-  // // Before switches states, we need to update the nav targets
-  // bool is_goal_reached = osm_planner_.isGoalReached(
-  //     robot_gps_loc_, gps_nav_goals_loc_[gps_goal_index_]);
-  // bool does_next_goal_exist =
-  //     gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size());
-  // bool is_goal_in_fov = isGoalInFOV(local_subgoal);
-  // if (kDebug) {
-  //   printf("Is goal in fov: %d\n", is_goal_in_fov);
-  //   printf("Goal Relative Local: %f %f\n", T_relutm_local.translation().x(),
-  //           T_relutm_local.translation().y());
-  //   printf("Heading: %f\n",
-  //           Eigen::Rotation2Df(T_relutm_local.rotation()).angle() * 180 /
-  //           M_PI);
-  // }
-  // bool is_path_invalid = global_plan_path_.empty();
-
-  // printf("is_goal_reached: %d\n", is_goal_reached);
-  // printf("does_next_goal_exist: %d\n", does_next_goal_exist);
-  // printf("is_goal_in_fov: %d\n", is_goal_in_fov);
-  // // Update navigation states
-  // if (is_goal_reached) {
-  //   if (!does_next_goal_exist) {
-  //     nav_state_ = NavigationState::kStopped;
-  //   } else {
-  //     gps_goal_index_++;
-  //     PlanIntermediate(robot_loc_, local_subgoal);
-  //     initial_odom_msg_ = latest_odom_msg_;
-  //     UpdateRobotLocFromOdom();
-  //     nav_state_ = NavigationState::kGoto;
-  //   }
-  // } else if (!is_goal_in_fov) {
-  //     // float goal_angle = atan2(local_subgoal.y(), local_subgoal.x());
-  //     // TODO: Modify to do turn in place in direction of goal
-  //     nav_state_ = NavigationState::kTurnInPlace;
-  // } else if (is_path_invalid) {
-  //   // Update plan_path_ for GetLocalCarrot
-  //   PlanIntermediate(robot_loc_, local_subgoal);
-  //   initial_odom_msg_ = latest_odom_msg_;
-  //   UpdateRobotLocFromOdom();
-  //   nav_state_ = NavigationState::kGoto;
-  // } else {
-  //   nav_state_ = NavigationState::kGoto;
-  // }
-  /** END REFERENCE CODE FOR GPS NAV TO LOCAL */
-  // return true;
-
   if (!gps_nav_goals_loc_.empty()) {  // Keep iterating to next waypoint until
                                       // one gets you closer to the goal
     GPSPoint next_nav_goal_loc = gps_nav_goals_loc_[gps_goal_index_];
@@ -1732,6 +1689,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       if (kDebug) printf("GPS Goal reached\n");
       if (gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size())) {
         if (kDebug) printf("Switching to next GPS Goal\n");
+        printf("Switching to next GPS Goal\n");
         ReplanAndSetNextNavGoal(false);
       } else {
         nav_state_ = NavigationState::kStopped;
@@ -1764,17 +1722,24 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       // Get Carrot and check if done (global coordinates utm)
       Vector2f carrot(0, 0);
       bool foundCarrot = GetLocalCarrot(carrot);
+      printf("Local carrot %f %f\n", carrot.x(), carrot.y());
+      printf("Next GPS goal %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
+      printf("Current Robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());
       if (!foundCarrot) {
         Halt(cmd_vel, cmd_angle_vel);
         return false;
       }
-      // Local Navigation
+      // Local Navigation (Convert global to local coordinates)
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+      // Swap x=y y=-x
+      // local_target_ = Vector2f(local_target_.y(), -local_target_.x());
+      printf("Local target %f %f\n", local_target_.x(), local_target_.y());
     }
   }
 
   // Switch between navigation states.
   NavigationState prev_state = nav_state_;
+  bool did_state_change = prev_state != nav_state_;
   do {
     prev_state = nav_state_;
     if (nav_state_ == NavigationState::kGoto &&
@@ -1790,16 +1755,16 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
   switch (nav_state_) {
     case NavigationState::kStopped: {
-      if (kDebug) printf("\nNav complete\n");
+      if (kDebug && did_state_change) printf("\nNav complete\n");
     } break;
     case NavigationState::kPaused: {
       if (kDebug) printf("\nNav paused\n");
     } break;
     case NavigationState::kGoto: {
-      if (kDebug) printf("\nNav Goto\n");
+      if (kDebug && did_state_change) printf("\nNav Goto\n");
     } break;
     case NavigationState::kTurnInPlace: {
-      if (kDebug) printf("\nNav TurnInPlace\n");
+      if (kDebug && did_state_change) printf("\nNav TurnInPlace\n");
     } break;
     case NavigationState::kOverride: {
       if (kDebug) printf("\nNav override\n");
