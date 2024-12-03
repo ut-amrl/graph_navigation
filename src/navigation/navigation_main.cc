@@ -83,9 +83,9 @@ using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::GPSArrayMsg;
 using amrl_msgs::GPSMsg;
 using amrl_msgs::graphNavGPSSrv;
+using amrl_msgs::Localization2DMsg;
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
-using amrl_msgs::Localization2DMsg;
 using Eigen::Affine3f;
 using Eigen::Vector2f;
 using Eigen::Vector3f;
@@ -206,7 +206,7 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
   // Compute global coordinate offset from odometry t'' to odometry t'
-  navigation_.UpdateRobotLocFromOdom(odom_);
+  // navigation_.UpdateRobotLocFromOdom(odom_);
 }
 
 void GPSCallback(const std_msgs::Float64MultiArray& msg) {
@@ -533,12 +533,17 @@ nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
 
 void PublishLocalization() {
   // Publishes robot pose
+  Eigen::Vector3f robot_pose;
+  bool is_loc_initialized = navigation_.GetRobotPose(robot_pose);
+  if (!is_loc_initialized) {
+    return;
+  }
   Localization2DMsg loc_msg;
   loc_msg.header.stamp = ros::Time::now();
-  loc_msg.pose.x = navigation_.GetRobotPose().x();
-  loc_msg.pose.y = navigation_.GetRobotPose().y();
-  loc_msg.pose.theta = navigation_.GetRobotPose().z(); // theta
-  pose_marker_publisher_.publish(loc_msg);
+  loc_msg.pose.x = robot_pose.x();
+  loc_msg.pose.y = robot_pose.y();
+  loc_msg.pose.theta = robot_pose.z();  // theta
+  localization_pub_.publish(loc_msg);
 }
 
 void PublishPath() {
@@ -1091,6 +1096,7 @@ int main(int argc, char** argv) {
 
     // Publish Nav Status
     PublishNavStatus();
+    PublishLocalization();
     if (nav_succeeded) {
       if (!FLAGS_no_intermed) {
         // Publish Visualizations
@@ -1115,7 +1121,6 @@ int main(int argc, char** argv) {
         DrawTarget();
         DrawPathOptions();
       }
-      PublishLocalization();
       PublishVisualizationMarkers();
       PublishPath();
       PublishNextGPSGoal();

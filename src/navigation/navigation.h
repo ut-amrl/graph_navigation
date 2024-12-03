@@ -194,7 +194,7 @@ class Navigation {
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
   float GetObstacleMargin();
-  Eigen::Vector3f GetRobotPose();
+  bool GetRobotPose(Eigen::Vector3f& pose);
   float GetRobotWidth();
   float GetRobotLength();
   const cv::Mat& GetVisualizationImage();

@@ -430,7 +430,6 @@ void Navigation::GetCompensatedOdomUTMTransform(Affine2f& T_tp_utm,
       min_dtime_idx = i;
     }
   }
-
   // Compute new reference odometry to utm transform
   const auto& sync_odom = odom_history_[min_dtime_idx];
   const auto& T_odom_utm = OdometryToUTMTransform(sync_odom, robot_gps_loc_);
@@ -444,8 +443,9 @@ Affine2f Navigation::OdometryToUTMTransform(
   // Assumes that odom and gps_loc correspond to the same time
   // T^odom_utm = T^base_utm * (T^base_odom)^-1
   const auto& T_base_odom = odom.toAffine2f();
-  const auto& utm_vec = gpsToGlobalCoord(gps_loc, gps_loc).cast<float>();
-  double utm_theta = DegToRad(gps_loc.heading);
+  const auto& utm_vec =
+      gpsToGlobalCoord(initial_gps_loc_, gps_loc).cast<float>();
+  double utm_theta = gpsToGlobalHeading(gps_loc);  // radians
 
   // Compute the transform from odom to gps
   const Affine2f T_utm =
@@ -473,6 +473,9 @@ void Navigation::UpdateRobotLocFromOdom(const Odom& msg) {
   const auto& T_utm =
       Translation2f(robot_loc) * Rotation2Df(DegToRad(robot_gps_loc_.heading));
   const auto& T_new_utm = T_delta_utm * T_utm;
+
+  printf("Compensated robot loc: %f %f\n", T_new_utm.translation().x(),
+         T_new_utm.translation().y());  // Why is y infinity
 
   // Update robot_loc and robot_angle based on new odometry from last known gps
   // location
@@ -1325,8 +1328,17 @@ float Navigation::GetCarrotDist() { return params_.carrot_dist; }
 
 float Navigation::GetObstacleMargin() { return params_.obstacle_margin; }
 
-Eigen::Vector3f Navigation::GetRobotPose() {
-  return Eigen::Vector3f(robot_loc_.x(), robot_loc_.y(), robot_angle_);
+bool Navigation::GetRobotPose(Eigen::Vector3f& pose) {
+  if (!gps_initialized_) {
+    return false;
+  }
+  // Retrieve uncomponensated robot pose
+  Eigen::Vector2f robot_loc =
+      gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_).cast<float>();
+  float robot_angle = static_cast<float>(gpsToGlobalHeading(robot_gps_loc_));
+
+  pose = Eigen::Vector3f(robot_loc.x(), robot_loc.y(), robot_angle);
+  return true;
 }
 
 float Navigation::GetRobotWidth() { return params_.robot_width; }
@@ -1411,8 +1423,8 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
   nav_goal_loc_ =
       gpsToGlobalCoord(initial_gps_loc_, gps_nav_goals_loc_[gps_goal_index_])
           .cast<float>();
-  nav_goal_angle_ = gps_nav_goals_loc_[gps_goal_index_].heading;
-
+  nav_goal_angle_ = static_cast<float>(
+      gpsToGlobalHeading(gps_nav_goals_loc_[gps_goal_index_]));
   // Push next nav goal for visualization
 }
 
@@ -1675,8 +1687,15 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     if (gps_goal_index_ == int(gps_nav_goals_loc_.size()) - 1) {
       goal_tolerance /= 2;
     }
+    printf("Current robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());
+    const auto& metric_nav_goal_loc =
+        gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_);
+    printf("Nav goal loc %f %f\n", metric_nav_goal_loc.x(),
+           metric_nav_goal_loc.y());
+    printf("Distance to goal: %f\n", (robot_loc_ - nav_goal_loc_).norm());
     bool isGPSGoalReached = osm_planner_.isGoalReached(
         robot_gps_loc_, next_nav_goal_loc, params_.intermediate_goal_dist);
+    printf("IsGoalReached: %d\n", isGPSGoalReached);
     // bool is_goal_in_fov = isGoalInFOV(nav_goal_loc_);
     bool isGPSGoalStillValid = true;
     if (!plan_path_.empty()) {
@@ -1694,7 +1713,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       if (gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size())) {
         if (kDebug) printf("Switching to next GPS Goal\n");
         printf("Switching to next GPS Goal\n");
-        ReplanAndSetNextNavGoal(false);
+        ReplanAndSetNextNavGoal(true);
       } else {
         nav_state_ = NavigationState::kStopped;
       }
