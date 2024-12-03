@@ -85,6 +85,7 @@ using amrl_msgs::GPSMsg;
 using amrl_msgs::graphNavGPSSrv;
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
+using amrl_msgs::Localization2DMsg;
 using Eigen::Affine3f;
 using Eigen::Vector2f;
 using Eigen::Vector3f;
@@ -172,6 +173,7 @@ ros::Publisher fp_pcl_pub_;
 ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 ros::Publisher next_gps_goal_pub_;
+ros::Publisher localization_pub_;
 image_transport::Publisher viz_img_pub_;
 
 // Messages
@@ -527,6 +529,16 @@ nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
   carrotPose.header.frame_id = "map";
   carrotNav.poses.push_back(carrotPose);
   return carrotNav;
+}
+
+void PublishLocalization() {
+  // Publishes robot pose
+  Localization2DMsg loc_msg;
+  loc_msg.header.stamp = ros::Time::now();
+  loc_msg.pose.x = navigation_.GetRobotPose().x();
+  loc_msg.pose.y = navigation_.GetRobotPose().y();
+  loc_msg.pose.theta = navigation_.GetRobotPose().z(); // theta
+  pose_marker_publisher_.publish(loc_msg);
 }
 
 void PublishPath() {
@@ -1010,6 +1022,7 @@ int main(int argc, char** argv) {
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
   next_gps_goal_pub_ = n.advertise<GPSMsg>(
       "next_gps_goal", 1, true);  // Only publish if there is a goal
+  localization_pub_ = n.advertise<Localization2DMsg>("localization", 1);
 
   // Messages
   local_viz_msg_ =
@@ -1102,6 +1115,7 @@ int main(int argc, char** argv) {
         DrawTarget();
         DrawPathOptions();
       }
+      PublishLocalization();
       PublishVisualizationMarkers();
       PublishPath();
       PublishNextGPSGoal();

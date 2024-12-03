@@ -503,7 +503,7 @@ void Navigation::UpdateGPS(const GPSPoint& msg) {
 
   // Global coords relative to initial GPS location, heading is absolute
   robot_loc_ = gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_).cast<float>();
-  robot_angle_ = robot_gps_loc_.heading;  // degrees
+  robot_angle_ = static_cast<float>(gpsToGlobalHeading(robot_gps_loc_));
 
   if (FLAGS_v > 2) {
     printf("GPS: %lf %lf\n", msg.lat, msg.lon);
@@ -1325,6 +1325,10 @@ float Navigation::GetCarrotDist() { return params_.carrot_dist; }
 
 float Navigation::GetObstacleMargin() { return params_.obstacle_margin; }
 
+Eigen::Vector3f Navigation::GetRobotPose() {
+  return Eigen::Vector3f(robot_loc_.x(), robot_loc_.y(), robot_angle_);
+}
+
 float Navigation::GetRobotWidth() { return params_.robot_width; }
 
 float Navigation::GetRobotLength() { return params_.robot_length; }
@@ -1731,8 +1735,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       }
       // Local Navigation (Convert global to local coordinates)
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
-      // Swap x=y y=-x
-      // local_target_ = Vector2f(local_target_.y(), -local_target_.x());
       printf("Local target %f %f\n", local_target_.x(), local_target_.y());
     }
   }
