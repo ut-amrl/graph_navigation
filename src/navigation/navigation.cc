@@ -80,7 +80,7 @@ using namespace motion_primitives;
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
 DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
-DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
+DEFINE_bool(test_avoidance, true, "Run obstacle avoidance test");
 DEFINE_bool(test_osm_planner, false, "Run OSM planner test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
@@ -940,6 +940,7 @@ bool Navigation::PlanStillValid() {
 }
 
 bool Navigation::IntermediatePlanStillValid() {
+  const bool kDebug = FLAGS_v > 1;
   if (plan_path_.size() < 2 || !intermediate_path_found_) return false;
 
   // TODO: Add parameter for when to look for new goal or use different
@@ -947,12 +948,14 @@ bool Navigation::IntermediatePlanStillValid() {
   if ((nav_goal_loc_ - plan_path_[0].loc).norm() >
           sqrt(2 * params_.local_costmap_resolution) / 2 &&
       (robot_loc_ - plan_path_[0].loc).norm() < 1) {
+    if (kDebug) printf("IntermediatePlanStillValid(): Goal too far\n");
     return false;
   }
 
   Vector2f global_carrot;
   GetGlobalCarrot(global_carrot);
   if ((intermediate_goal_ - global_carrot).norm() > params_.replan_dist) {
+    if (kDebug) printf("IntermediatePlanStillValid(): Carrot too far\n");
     return false;
   }
 
@@ -964,6 +967,7 @@ bool Navigation::IntermediatePlanStillValid() {
     if (in_map &&
         (costmap_.getCost(mx, my) == costmap_2d::LETHAL_OBSTACLE ||
          costmap_.getCost(mx, my) == costmap_2d::INSCRIBED_INFLATED_OBSTACLE)) {
+      if (kDebug) printf("IntermediatePlanStillValid(): Obstacle\n");
       return false;
     }
   }
@@ -1382,7 +1386,7 @@ Eigen::Vector2f Navigation::GetIntermediateGoal() { return intermediate_goal_; }
 int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
   if (gps_nav_goals_loc_.empty() || !gps_initialized_) return -1;
 
-  const bool kDebug = FLAGS_v > 0;
+  const bool kDebug = FLAGS_v > 1;
   // Never go back, Never surrender
   const auto& final_goal = gps_nav_goals_loc_.back();
   for (int i = start_goal_index + 1; i < int(gps_nav_goals_loc_.size()); ++i) {
@@ -1713,7 +1717,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       if (gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size())) {
         if (kDebug) printf("Switching to next GPS Goal\n");
         printf("Switching to next GPS Goal\n");
-        ReplanAndSetNextNavGoal(true);
+        ReplanAndSetNextNavGoal(false);
       } else {
         nav_state_ = NavigationState::kStopped;
       }
@@ -1760,7 +1764,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
   // Switch between navigation states.
   NavigationState prev_state = nav_state_;
-  bool did_state_change = prev_state != nav_state_;
   do {
     prev_state = nav_state_;
     if (nav_state_ == NavigationState::kGoto &&
@@ -1776,16 +1779,16 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
   switch (nav_state_) {
     case NavigationState::kStopped: {
-      if (kDebug && did_state_change) printf("\nNav complete\n");
+      if (kDebug) printf("\nNav complete\n");
     } break;
     case NavigationState::kPaused: {
       if (kDebug) printf("\nNav paused\n");
     } break;
     case NavigationState::kGoto: {
-      if (kDebug && did_state_change) printf("\nNav Goto\n");
+      if (kDebug) printf("\nNav Goto\n");
     } break;
     case NavigationState::kTurnInPlace: {
-      if (kDebug && did_state_change) printf("\nNav TurnInPlace\n");
+      if (kDebug) printf("\nNav TurnInPlace\n");
     } break;
     case NavigationState::kOverride: {
       if (kDebug) printf("\nNav override\n");

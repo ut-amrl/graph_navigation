@@ -116,7 +116,7 @@ const string kOpenCVWindow = "Image window";
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, true,
+DEFINE_bool(no_intermed, false,
             "Whether to disable intermediate planning (will use legacy "
             "obstacle avoidance planner)");
 
@@ -206,7 +206,7 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
   // Compute global coordinate offset from odometry t'' to odometry t'
-  // navigation_.UpdateRobotLocFromOdom(odom_);
+  navigation_.UpdateRobotLocFromOdom(odom_);
 }
 
 void GPSCallback(const std_msgs::Float64MultiArray& msg) {
@@ -483,7 +483,7 @@ void SendCommand(Eigen::Vector2f vel, float ang_vel) {
     vel.setZero();
     ang_vel = 0;
   }
-
+  printf("Sending command: (%f, %f) %f\n", vel.x(), vel.y(), ang_vel);
   drive_msg.twist.angular.x = 0;
   drive_msg.twist.angular.y = 0;
   drive_msg.twist.angular.z = ang_vel;

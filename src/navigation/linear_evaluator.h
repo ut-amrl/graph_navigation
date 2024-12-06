@@ -28,10 +28,11 @@
 
 namespace motion_primitives {
 
-struct LinearEvaluator :  PathEvaluatorBase {
+struct LinearEvaluator : PathEvaluatorBase {
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
+  float GetPathCost(const std::shared_ptr<PathRolloutBase>& path);
   void SetClearanceWeight(const float& weight);
   void SetDistanceWeight(const float& weight);
   void SetFreePathWeight(const float& weight);
@@ -39,6 +40,5 @@ struct LinearEvaluator :  PathEvaluatorBase {
 };
 
 }  // namespace motion_primitives
-
 
 #endif  // LINEAR_EVALUATOR_H

@@ -48,9 +48,9 @@ using std::vector;
 using namespace geometry;
 using namespace math_util;
 
-DEFINE_double(dw, 0.5, "Distance weight");
+DEFINE_double(dw, 1, "Distance weight");
 DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, 0.5, "Free path weight");
+DEFINE_double(fw, -1, "Free path weight");
 DEFINE_double(subopt, 1.5, "Max path increase for clearance");
 
 namespace motion_primitives {
