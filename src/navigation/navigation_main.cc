@@ -117,6 +117,7 @@ DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
+DEFINE_bool(ldos_pub_overlay_carrot, false, "Whether to publish carrot overlay on image");
 DEFINE_double(dt, -0.01, "Time step value for control loop; use config value if not specified");  // override default value in config file
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
@@ -177,6 +178,7 @@ ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 image_transport::Publisher viz_img_pub_;
 ros::Publisher navloop_timer_pub_;
+ros::Publisher ldos_overlay_carrot_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -844,6 +846,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->do_intermed = !FLAGS_no_intermed;
+  params->ldos_pub_overlay_carrot = FLAGS_ldos_pub_overlay_carrot;
   if (FLAGS_dt > 0) {
     params->dt = FLAGS_dt;
   } else {
@@ -907,6 +910,20 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
     return;
   }
   navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
+
+  if (FLAGS_ldos_pub_overlay_carrot) {
+      // add overlay to image
+    static const Eigen::Affine3f frame_tf_ =
+        Eigen::Translation3f(0, 0, 0.85) *
+        Eigen::AngleAxisf(0.0, Vector3f::UnitX());
+    Eigen::Vector2f carrot(0, 0);
+    bool foundCarrot = navigation_.GetLocalCarrot(carrot);
+    const Vector3f p = frame_tf_ * Vector3f(carrot.x(), carrot.y(), 0);
+    std_msgs::String msg;
+    msg.data = "overlay: " + std::to_string(p.x()) + ", " + std::to_string(p.y()) + ", " + std::to_string(p.z()) + ", " + std::to_string(foundCarrot);
+    ldos_overlay_carrot_pub_.publish(msg);
+  }
+
   // Update GUI Window
   if (FLAGS_debug_images) {
     cv::imshow(kOpenCVWindow, last_image_);
@@ -961,6 +978,7 @@ int main(int argc, char** argv) {
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
   navloop_timer_pub_ = n.advertise<std_msgs::String>("ldos/navloop_timing_info", 10);
+  ldos_overlay_carrot_pub_ = n.advertise<std_msgs::String>("ldos/navigation/overlay_carrot", 1);
 
   // Messages
   local_viz_msg_ = visualization::NewVisualizationMessage(
