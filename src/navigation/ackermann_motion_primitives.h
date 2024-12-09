@@ -19,9 +19,6 @@
 */
 //========================================================================
 
-#ifndef ACKERMANN_MOTION_PRIMITIVES_H
-#define ACKERMANN_MOTION_PRIMITIVES_H
-
 #include <memory>
 #include <vector>
 
@@ -29,6 +26,9 @@
 #include "eigen3/Eigen/Dense"
 #include "math/poses_2d.h"
 #include "motion_primitives.h"
+
+#ifndef ACKERMANN_MOTION_PRIMITIVES_H
+#define ACKERMANN_MOTION_PRIMITIVES_H
 
 namespace motion_primitives {
 

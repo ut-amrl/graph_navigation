@@ -44,7 +44,6 @@ using namespace math_util;
 
 CONFIG_FLOAT(max_curvature, "AckermannSampler.max_curvature");
 CONFIG_FLOAT(clearance_clip, "AckermannSampler.clearance_path_clip_fraction");
-CONFIG_FLOAT(clearance_padding, "AckermannSampler.clearance_padding");
 
 namespace {
 // Epsilon value for handling limited numerical precision.
@@ -226,13 +225,16 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
     const float theta =
         ((path.curvature > 0.0f) ? atan2<float>(p.x(), path_radius - p.y())
                                  : atan2<float>(p.x(), p.y() - path_radius));
-    if (theta < CONFIG_clearance_clip * angle_min && theta > 0.0) {
+    // if (theta < CONFIG_clearance_clip * angle_min && theta > 0.0) {
+    if (theta > 0.0) {
       const float r = (p - c).norm();
       const float current_clearance = fabs(r - fabs(path_radius));
       if (path.clearance > current_clearance) {
         path.clearance = current_clearance;
       }
     }
+
+    // }
   }
   path.clearance = max(0.0f, path.clearance);
   // printf("%7.3f %7.3f %7.3f \n",

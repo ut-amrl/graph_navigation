@@ -19,6 +19,8 @@
 */
 //========================================================================
 
+#include <float.h>
+
 #include <vector>
 
 #include "motion_primitives.h"
@@ -29,14 +31,21 @@
 namespace motion_primitives {
 
 struct LinearEvaluator : PathEvaluatorBase {
+  // Normalize paths from 0 to 1 for each metric.
+  void NormalizePaths(
+      const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
+      const std::vector<float>& dist_to_goal,
+      std::vector<std::shared_ptr<PathRolloutBase>>& norm_paths,
+      std::vector<float>& norm_dist_to_goal);
   // Return the best path rollout from the provided set of paths.
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
-  float ClearanceCost(const std::shared_ptr<PathRolloutBase>& path);
+  float EvaluatePath(const std::shared_ptr<PathRolloutBase>& path,
+                     const float dist_to_goal);
   void SetClearanceWeight(const float& weight);
   void SetDistanceWeight(const float& weight);
   void SetFreePathWeight(const float& weight);
-  void SetSubOpt(const float& threshold);
+  // void SetSubOpt(const float& threshold);
 };
 
 }  // namespace motion_primitives

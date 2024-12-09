@@ -1,0 +1,232 @@
+//========================================================================
+//  This software is free: you can redistribute it and/or modify
+//  it under the terms of the GNU Lesser General Public License Version 3,
+//  as published by the Free Software Foundation.
+//
+//  This software is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU Lesser General Public License for more details.
+//
+//  You should have received a copy of the GNU Lesser General Public License
+//  Version 3 in the file COPYING that came with this distribution.
+//  If not, see <http://www.gnu.org/licenses/>.
+//========================================================================
+/*!
+\file    linear_evaluator.h
+\brief   Path rollout evaluator using a linear weighted cost.
+\author  Kavan Sikand, (C) 2020
+*/
+//========================================================================
+
+#include "linear_evaluator.h"
+
+#include <float.h>
+#include <math.h>
+
+#include <algorithm>
+#include <memory>
+#include <vector>
+
+#include "ackermann_motion_primitives.h"
+#include "config_reader/config_reader.h"
+#include "constant_curvature_arcs.h"
+#include "eigen3/Eigen/Dense"
+#include "eigen3/Eigen/Geometry"
+#include "gflags/gflags.h"
+#include "math/line2d.h"
+#include "math/poses_2d.h"
+#include "motion_primitives.h"
+#include "navigation_parameters.h"
+
+using Eigen::Vector2f;
+using motion_primitives::PathRolloutBase;
+using navigation::MotionLimits;
+using pose_2d::Pose2Df;
+using std::max;
+using std::min;
+using std::shared_ptr;
+using std::vector;
+using namespace geometry;
+using namespace math_util;
+
+// CONFIG_FLOAT(pw, "LinearEvaluator.path_weight");  //
+CONFIG_FLOAT(
+    dw, "LinearEvaluator.distance_weight");  // Less distance to goal is better
+CONFIG_FLOAT(fw, "LinearEvaluator.free_path_weight");  //
+CONFIG_FLOAT(cw,
+             "LinearEvaluator.clearance_weight");  // More clearance is better
+
+namespace motion_primitives {
+// Function to normalize paths
+void LinearEvaluator::NormalizePaths(
+    const vector<shared_ptr<PathRolloutBase>>& paths,
+    const vector<float>& dist_to_goal,
+    vector<shared_ptr<PathRolloutBase>>& norm_paths,
+    vector<float>& norm_dist_to_goal) {
+  if (paths.empty() || dist_to_goal.empty()) {
+    return;
+  }
+
+  // Step 1: Compute min and max values for each property
+  auto [min_length_it, max_length_it] = std::minmax_element(
+      paths.begin(), paths.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs->Length() < rhs->Length();
+      });
+
+  auto [min_fpl_it, max_fpl_it] = std::minmax_element(
+      paths.begin(), paths.end(),
+      [](const auto& lhs, const auto& rhs) { return lhs->FPL() < rhs->FPL(); });
+
+  auto [min_clearance_it, max_clearance_it] = std::minmax_element(
+      paths.begin(), paths.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs->Clearance() < rhs->Clearance();
+      });
+
+  auto [min_dist_it, max_dist_it] =
+      std::minmax_element(dist_to_goal.begin(), dist_to_goal.end());
+
+  float min_length = (*min_length_it)->Length();
+  float max_length = (*max_length_it)->Length();
+  float min_fpl = (*min_fpl_it)->FPL();
+  float max_fpl = (*max_fpl_it)->FPL();
+  float min_clearance = (*min_clearance_it)->Clearance();
+  float max_clearance = (*max_clearance_it)->Clearance();
+  float min_dist_to_goal = *min_dist_it;
+  float max_dist_to_goal = *max_dist_it;
+
+  // Step 2: Normalize values
+  norm_paths = paths;
+  norm_dist_to_goal.resize(dist_to_goal.size());
+
+  for (size_t i = 0; i < paths.size(); ++i) {
+    // Normalize Length
+    float normalized_length = (paths[i]->Length() - min_length) /
+                              (max_length - min_length + kEpsilon);
+    norm_paths[i]->SetLength(normalized_length);
+
+    // Normalize FPL
+    if (max_fpl != min_fpl) {
+      float normalized_fpl =
+          (paths[i]->FPL() - min_fpl) / (max_fpl - min_fpl + kEpsilon);
+      norm_paths[i]->SetFPL(normalized_fpl);
+    } else {
+      norm_paths[i]->SetFPL(0);  // Default to 0 if min == max
+    }
+
+    // Normalize Clearance
+    float normalized_clearance = (paths[i]->Clearance() - min_clearance) /
+                                 (max_clearance - min_clearance + kEpsilon);
+    norm_paths[i]->SetClearance(normalized_clearance);
+
+    // Normalize Distance to Goal (if you want to modify dist_to_goal)
+    norm_dist_to_goal[i] = (dist_to_goal[i] - min_dist_to_goal) /
+                           (max_dist_to_goal - min_dist_to_goal + kEpsilon);
+  }
+}
+
+shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
+    const vector<shared_ptr<PathRolloutBase>>& paths) {
+  if (paths.size() == 0) return nullptr;
+
+  // Check if there is any path with an obstacle-free path from the end to the
+  // local target.
+  vector<float> clearance_to_goal(paths.size(), 0.0);
+  vector<float> dist_to_goal(paths.size(), FLT_MAX);
+  bool path_to_goal_exists = false;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    const auto endpoint = paths[i]->EndPoint().translation;
+    clearance_to_goal[i] =
+        StraightLineClearance(Line2f(endpoint, local_target), point_cloud);
+    if (clearance_to_goal[i] > 0.0) {
+      dist_to_goal[i] = (endpoint - local_target).norm();
+      path_to_goal_exists = true;
+    }
+  }
+
+  // First find the shortest path.
+  shared_ptr<PathRolloutBase> best = nullptr;
+  float best_path_length = FLT_MAX;
+  int best_path_idx = -1;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i]->AngularLength() <= 0.0f) continue;
+    const float path_length =
+        (path_to_goal_exists ? (paths[i]->AngularLength() + dist_to_goal[i])
+                             : dist_to_goal[i]);
+    if (path_length < best_path_length) {
+      best_path_length = path_length;
+      best_path_idx = i;
+    }
+  }
+
+  if (best_path_idx == -1) {
+    printf("No valid path found\n");
+    // No valid paths!
+    return nullptr;
+  }
+  // vector<shared_ptr<PathRolloutBase>> norm_paths;
+  // vector<float> norm_dist_to_goal;
+  // NormalizePaths(paths, dist_to_goal, norm_paths, norm_dist_to_goal);
+  best = paths[best_path_idx];
+
+  // Next try to find better paths.
+  float best_cost = EvaluatePath(best, dist_to_goal[best_path_idx]);
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i]->Length() <= 0.0f) continue;
+    // const float path_length =
+    //     (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i])
+    //                          : dist_to_goal[i]);
+    const float cost = EvaluatePath(paths[i], dist_to_goal[i]);
+    if (cost < best_cost) {
+      best = paths[i];
+      best_cost = cost;
+    }
+
+    if (FLAGS_v > 0) {
+      const float dist_to_target =
+          (local_target - best->EndPoint().translation).norm();
+      cout << "Best path has free path length: " << best->FPL()
+           << " and clearance: " << best->Clearance()
+           << " and distance to target: " << dist_to_target
+           << " and cost: " << best_cost << endl;
+    }
+  }
+  return best;
+}
+
+float LinearEvaluator::EvaluatePath(const shared_ptr<PathRolloutBase>& path,
+                                    const float dist_to_goal) {
+  const float clearance = path->Clearance();      // good
+  const float free_path_length = path->Length();  // good
+  const float dist_to_target = dist_to_goal;
+
+  const float score = CONFIG_cw * clearance - CONFIG_fw * free_path_length -
+                      CONFIG_dw * dist_to_target;
+
+  if (FLAGS_v > 1) {
+    cout << ", Free path length: " << path->FPL() << ", End point: ("
+         << path->EndPoint().translation << ")"
+         << ", Clearance: " << path->Clearance()
+         << ", dist(target): " << dist_to_target << ", Score: " << score
+         << endl;
+  }
+  return score;
+}
+
+void LinearEvaluator::SetClearanceWeight(const float& weight) {
+  // CONFIG_cw = weight;
+}
+
+void LinearEvaluator::SetDistanceWeight(const float& weight) {
+  // CONFIG_dw = weight;
+}
+
+void LinearEvaluator::SetFreePathWeight(const float& weight) {
+  // CONFIG_fw = weight;
+}
+
+// void LinearEvaluator::SetSubOpt(const float &threshold) {
+//   FLAGS_subopt = threshold;
+// }
+
+}  // namespace motion_primitives

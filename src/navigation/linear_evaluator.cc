@@ -48,10 +48,24 @@ using std::vector;
 using namespace geometry;
 using namespace math_util;
 
-DEFINE_double(dw, 1, "Distance weight");
-DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
-DEFINE_double(subopt, 1.5, "Max path increase for clearance");
+// DEFINE_double(dw, 1, "Distance weight");
+// DEFINE_double(cw, -3.0, "Clearance weight");
+// DEFINE_double(fw, -1, "Free path weight");
+// DEFINE_double(subopt, 1.5, "Max path increase for clearance");
+
+// // Somewhat good paramters!
+// DEFINE_double(dw, 1.0, "Distance weight");
+// DEFINE_double(cw, 1.5, "Clearance weight");
+// DEFINE_double(fw, -2.0, "Free path weight");
+// DEFINE_double(subopt, 0.0, "Max path increase for clearance");
+// DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
+
+// Somewhat good paramters!
+DEFINE_double(dw, 1.0, "Distance weight");
+DEFINE_double(cw, 6.0, "Clearance weight");
+DEFINE_double(fw, -2.0, "Free path weight");
+DEFINE_double(subopt, 0.0, "Max path increase for clearance");
+DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
 
 namespace motion_primitives {
 
@@ -95,21 +109,25 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  float best_cost = FLAGS_dw * (FLAGS_subopt * best_path_length) +
-                    FLAGS_fw * best->Length() + FLAGS_cw * best->Clearance();
+  float best_cost = FLAGS_dw * (best_path_length) + FLAGS_fw * best->Length() +
+                    FLAGS_cw * ClearanceCost(best);
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length =
         (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i])
                              : dist_to_goal[i]);
-    const float cost = FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length() +
-                       FLAGS_cw * paths[i]->Clearance();
+    const float cost = FLAGS_cw * ClearanceCost(paths[i]) +
+                       FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length();
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
     }
   }
   return best;
+}
+
+float LinearEvaluator::ClearanceCost(const shared_ptr<PathRolloutBase> &path) {
+  return FLAGS_cw * exp(-FLAGS_cw_beta * path->Clearance());
 }
 
 void LinearEvaluator::SetClearanceWeight(const float &weight) {

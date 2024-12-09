@@ -86,6 +86,8 @@ DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
+DEFINE_int32(max_unsolvable_iterations, 3,
+             "Max unsolvable obstacle avoidance iterations");
 
 DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
 
@@ -474,8 +476,8 @@ void Navigation::UpdateRobotLocFromOdom(const Odom& msg) {
       Translation2f(robot_loc) * Rotation2Df(DegToRad(robot_gps_loc_.heading));
   const auto& T_new_utm = T_delta_utm * T_utm;
 
-  printf("Compensated robot loc: %f %f\n", T_new_utm.translation().x(),
-         T_new_utm.translation().y());  // Why is y infinity
+  // printf("Compensated robot loc: %f %f\n", T_new_utm.translation().x(),
+  //        T_new_utm.translation().y());  // Why is y infinity
 
   // Update robot_loc and robot_angle based on new odometry from last known gps
   // location
@@ -522,6 +524,129 @@ void Navigation::UpdateCommandHistory(Twist twist) {
   }
 }
 
+// void Navigation::ForwardPredict(double time) {
+// if (FLAGS_v > 1) {
+//   cout << "================ [Navigation] FORWARD PREDICT ================"
+//        << endl;
+//   cout << "forward time: " << time << endl;
+// }
+
+// Eigen::Affine2f fp_odom_tf =
+//     Eigen::Translation2f(odom_loc_) * Eigen::Rotation2Df(odom_angle_);
+// Eigen::Affine2f fp_local_tf = Eigen::Affine2f::Identity();
+// for (const Twist& cmd : command_history_) {
+//   const float cmd_v = cmd.linear.x();
+//   const float cmd_omega = cmd.linear.x() * cmd.angular.z();
+//   // Assume constant velocity and omega over the time interval
+//   // want to compute distance traveled (vel * dt) and arc length (ang_vel *
+//   // dt) and the value of the linear and angular velocity to use gives us the
+//   // area of the trapezoid in the v-t space when we multiply by dt
+//   const float v_mid = (robot_vel_.norm() + cmd_v) / 2.0f;
+//   const float omega_mid = (robot_omega_ + cmd_omega) / 2.0f;
+
+//   // Forward Predict Odometry
+//   if (cmd.time >=
+//       t_odometry_ -
+//           params_.dt) {  // start forward integrating from command before our
+//                          // most recent odometry (we are still executing the
+//                          // command in the timestep before the odom message)
+//     // we know that this gives us the last command because the controller
+//     runs
+//     // at a fixed frequency and you generate one command per controller
+//     // iteration every dt
+
+//     // in every iteration besides the first command in the control history,
+//     // t_odometry_ < cmd.time
+//     const double dt =
+//         (t_odometry_ > cmd.time)  // find time that we are executing the
+//                                   // previous command for
+//             ? min<double>(params_.dt - (t_odometry_ - cmd.time), params_.dt)
+//             : min<double>(
+//                   time - cmd.time,
+//                   params_.dt);  // upper bound on how long we execute a
+//                   command
+
+//     // see trapezoid comment above for v_mid and omega_mid
+//     const float dtheta = omega_mid * dt;
+//     const float ds = v_mid * dt;
+//     // Translation coeff for exponential map of se2 -- lie algebra dead
+//     // reckoning / autonomous error equation: does not estimate future state
+//     // based on past state Special matrix that tells you how much the angular
+//     // rate of rotation affects the translation because we integrate the
+//     // linear velocity and have angular rotation unless we are moving
+//     // straight, we accummulate error by just using the linear velocity (the
+//     // tangent -- it is a linear approximation) especially if our curvature
+//     is
+//     // high a smaller dt may not necessarily decrease error with the linear
+//     // velocity approximation; we could increase and decrease our error
+//     // between steps
+//     Eigen::Matrix2f V = Eigen::Matrix2f::Identity();
+//     if (fabs(dtheta) > kEpsilon) {
+//       V << sin(dtheta) / dtheta, (cos(dtheta) - 1) / dtheta,
+//           (1 - cos(dtheta)) / dtheta, sin(dtheta) / dtheta;
+//     }
+//     // Exponential map of translation part of se2 (in local frame)
+//     Eigen::Vector2f dloc = V * Eigen::Vector2f(ds, 0);
+//     // Update odom_tf in odom frame
+//     fp_odom_tf =
+//         fp_odom_tf * Eigen::Translation2f(dloc) * Eigen::Rotation2Df(dtheta);
+//     // Update odom_loc_ and odom_angle_ in odom frame
+//     fp_odom_tf =
+//         fp_odom_tf * Eigen::Translation2f(dloc) * Eigen::Rotation2Df(dtheta);
+//     odom_loc_ = fp_odom_tf.translation();
+//     odom_angle_ = atan2(fp_odom_tf(1, 0), fp_odom_tf(0, 0));
+
+//     // Update robot_vel_ and robot_omega_
+//     robot_vel_ = Eigen::Rotation2Df(odom_angle_) * Vector2f(cmd_v, 0);
+//     robot_omega_ = cmd_omega;
+//     t_odometry_ = cmd.time;  // keep track of time of command we last
+//     executed
+
+//     if (FLAGS_v > 1) {
+//       cout << "dtheta " << dtheta << ", ds " << ds << endl;
+//       cout << "V \n" << V << endl;
+//       cout << "odom_loc_: " << odom_loc_.transpose()
+//            << ", odom_angle_: " << odom_angle_ << endl;
+//     }
+//   }
+
+//   // Forward Predict Point Cloud
+//   if (cmd.time >= t_point_cloud_ - params_.dt) {
+//     const double dt =
+//         (t_point_cloud_ > cmd.time)
+//             ? min<double>(params_.dt - (t_point_cloud_ - cmd.time),
+//             params_.dt) : min<double>(time - cmd.time, params_.dt);
+//     // cout << "dt " << dt << endl;
+//     // cout << "params_.dt " << params_.dt << endl;
+//     // cout << "t_point_cloud_ " << t_point_cloud_ << " cmd.time " <<
+//     cmd.time
+//     // << endl;
+//     const float dtheta = omega_mid * dt;
+//     const float ds = v_mid * dt;
+//     // Translation coeff for exponential map of se2
+//     Eigen::Matrix2f V = Eigen::Matrix2f::Identity();
+//     if (fabs(dtheta) > kEpsilon) {
+//       V << sin(dtheta) / dtheta, (cos(dtheta) - 1) / dtheta,
+//           (1 - cos(dtheta)) / dtheta, sin(dtheta) / dtheta;
+//     }
+//     // cout << "V" << V << endl;
+//     // Exponential map of translation part of se2 (in local frame)
+//     Eigen::Vector2f dloc = V * Eigen::Vector2f(ds, 0);
+//     // Update local_tf in local frame
+//     fp_local_tf =
+//         fp_local_tf * Eigen::Translation2f(dloc) *
+//         Eigen::Rotation2Df(dtheta);
+//   }
+// }
+
+// // Forward Predict Point Cloud
+// Eigen::Affine2f inv_fp_local_tf = fp_local_tf.inverse();
+// fp_point_cloud_.resize(point_cloud_.size());
+// for (size_t i = 0; i < point_cloud_.size(); i++) {
+//   fp_point_cloud_[i] = inv_fp_local_tf * point_cloud_[i];
+// }
+// }
+
 void Navigation::ForwardPredict(double t) {
   if (command_history_.empty()) {
     robot_vel_ = Vector2f(0, 0);
@@ -538,11 +663,10 @@ void Navigation::ForwardPredict(double t) {
     }
     printf("Predict: %f %f\n", t - t_odometry_, t - t_point_cloud_);
   }
-  const auto& latest_odom_msg = odom_history_.back();
   odom_loc_ =
-      Vector2f(latest_odom_msg.position.x(), latest_odom_msg.position.y());
-  odom_angle_ = 2.0f * atan2f(latest_odom_msg.orientation.z(),
-                              latest_odom_msg.orientation.w());
+      Vector2f(latest_odom_msg_.position.x(), latest_odom_msg_.position.y());
+  odom_angle_ = 2.0f * atan2f(latest_odom_msg_.orientation.z(),
+                              latest_odom_msg_.orientation.w());
   using Eigen::Affine2f;
   using Eigen::Rotation2Df;
   using Eigen::Translation2f;
@@ -601,7 +725,8 @@ void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
 }
 
 void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-  const Vector2f kTarget(4, 0);
+  const static Vector2f kTarget(4, 0);
+  // Transform target to local frame
   local_target_ = kTarget;
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
 }
@@ -1131,6 +1256,7 @@ DEFINE_double(tx, 0.4, "Test obstacle point - X");
 DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
+  static int num_unsolvable_iter = 0;
   static CumulativeFunctionTimer function_timer_(__FUNCTION__);
   CumulativeFunctionTimer::Invocation invoke(&function_timer_);
   const bool debug = FLAGS_v > 1;
@@ -1147,13 +1273,15 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                      local_target, fp_point_cloud_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
-    printf("%lu options\n", paths.size());
+    printf("%lu options (fpl, length, curvature, clearance, dist_to_goal)\n",
+           paths.size());
     int i = 0;
     for (auto p : paths) {
+      float dist_to_goal = (p->EndPoint().translation - local_target).norm();
       ConstantCurvatureArc arc =
           *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f\n", i++, arc.curvature, arc.length,
-             arc.curvature);
+      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f\n", i++, arc.fpl, arc.length,
+             arc.curvature, arc.clearance, dist_to_goal);
     }
   }
   if (paths.size() == 0) {
@@ -1163,8 +1291,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     return;
   }
   auto best_path = evaluator_->FindBest(paths);
-  if (best_path == nullptr) {
+  if (best_path == nullptr &&
+      num_unsolvable_iter >= FLAGS_max_unsolvable_iterations) {
     if (debug) printf("No best path found\n");
+
     // No valid path found!
     Eigen::Vector2f prev_local_target = local_target_;
     Eigen::Vector2f temp_target;
@@ -1174,8 +1304,14 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     TurnInPlace(vel_cmd, ang_vel_cmd);
     local_target_ = prev_local_target;
     return;
+  } else if (best_path == nullptr) {
+    num_unsolvable_iter++;
+    // Simply execute last best path
+    best_path = best_option_;
+    if (debug) printf("No best path found, iter %d\n", num_unsolvable_iter);
+  } else {
+    num_unsolvable_iter = 0;
   }
-
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};
 

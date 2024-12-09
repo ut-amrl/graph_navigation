@@ -16,8 +16,8 @@ NavigationParameters = {
     -- "/kinect_laserscan",
   };
   laser_frame = "base_link";
-  odom_topic = "/jackal_velocity_controller/odom";
-  -- odom_topic = "/odometry/filtered";
+  -- odom_topic = "/jackal_velocity_controller/odom";
+  odom_topic = "/odometry/filtered";
   localization_topic = "localization";
   image_topic = "/camera/rgb/image_raw/compressed";
   init_topic = "initialpose";
@@ -35,9 +35,10 @@ NavigationParameters = {
   num_options = 31;
   robot_width = 0.44;
   robot_length = 0.5;
+  robot_wheelbase = 0.26;
   base_link_offset = 0.1;
-  max_free_path_length = 10.0;
-  max_clearance = 1.0;
+  max_free_path_length = 5.0;
+  max_clearance = 1.0; -- was 1.0
   can_traverse_stairs = false;
   use_map_speed = true;
   target_dist_tolerance = 0.1;
@@ -69,5 +70,11 @@ NavigationParameters = {
 
 AckermannSampler = {
   max_curvature = 2.5;
-  clearance_path_clip_fraction = 0.8;
+  clearance_path_clip_fraction = 0.05;
 };
+
+-- LinearEvaluator = {
+--   distance_weight = 1.0;
+--   free_path_weight = 1.0;
+--   clearance_weight = 1.0;
+-- }

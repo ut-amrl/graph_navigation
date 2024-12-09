@@ -19,13 +19,11 @@
 */
 //========================================================================
 
-
 #include <memory>
 #include <vector>
 
-#include "math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
-
+#include "math/poses_2d.h"
 #include "motion_primitives.h"
 
 #ifndef CONSTANT_CURVATURE_ARCS_H
@@ -48,12 +46,18 @@ struct ConstantCurvatureArc : PathRolloutBase {
   // Clearance along path.
   float Clearance() const override;
 
+  // Setters
+  void SetLength(const float& new_length) override;
+  void SetFPL(const float& new_fpl) override;
+  void SetAngularLength(const float& new_angular_length) override;
+  void SetClearance(const float& new_clearance) override;
+
   // Default constructor.
   ConstantCurvatureArc() : curvature(0), length(0), angular_length(0) {}
 
   // Explicit constructor from curvature.
-  explicit ConstantCurvatureArc(float curvature) : 
-      curvature(curvature), length(0), angular_length(0) {}
+  explicit ConstantCurvatureArc(float curvature)
+      : curvature(curvature), length(0), angular_length(0) {}
 
   // The pose of the robot at the end of the path rollout.
   pose_2d::Pose2Df EndPoint() const override;
@@ -63,10 +67,8 @@ struct ConstantCurvatureArc : PathRolloutBase {
   // The pose of the robot at the end of the path rollout.
   void GetControls(const navigation::MotionLimits& linear_limits,
                    const navigation::MotionLimits& angular_limits,
-                   const float dt,
-                   const Eigen::Vector2f& linear_vel,
-                   const float angular_vel,
-                   Eigen::Vector2f& vel_cmd,
+                   const float dt, const Eigen::Vector2f& linear_vel,
+                   const float angular_vel, Eigen::Vector2f& vel_cmd,
                    float& ang_vel_cmd) const override;
 
   float curvature;

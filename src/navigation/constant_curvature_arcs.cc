@@ -19,18 +19,18 @@
 */
 //========================================================================
 
+#include "constant_curvature_arcs.h"
+
 #include <float.h>
 
 #include <memory>
 #include <vector>
 
-#include "math/poses_2d.h"
-#include "math/math_util.h"
 #include "eigen3/Eigen/Dense"
-
+#include "math/math_util.h"
+#include "math/poses_2d.h"
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
-#include "constant_curvature_arcs.h"
 
 using Eigen::Vector2f;
 using pose_2d::Pose2Df;
@@ -39,32 +39,33 @@ using navigation::MotionLimits;
 
 namespace motion_primitives {
 
-float ConstantCurvatureArc::Length() const {
-  return length;
-}
+float ConstantCurvatureArc::Length() const { return length; }
 
-float ConstantCurvatureArc::FPL() const {
-  return fpl;
-}
+float ConstantCurvatureArc::FPL() const { return fpl; }
 
-float ConstantCurvatureArc::AngularLength() const {
-  return angular_length;
-}
+float ConstantCurvatureArc::AngularLength() const { return angular_length; }
 
-float ConstantCurvatureArc::Clearance() const {
-  return clearance;
+float ConstantCurvatureArc::Clearance() const { return clearance; }
+
+void ConstantCurvatureArc::SetLength(const float& new_length) {
+  length = new_length;
+}
+void ConstantCurvatureArc::SetFPL(const float& new_fpl) { fpl = new_fpl; }
+void ConstantCurvatureArc::SetAngularLength(const float& new_angular_length) {
+  angular_length = new_angular_length;
+}
+void ConstantCurvatureArc::SetClearance(const float& new_clearance) {
+  clearance = new_clearance;
 }
 
 void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
                                        const MotionLimits& angular_limits,
-                                       const float dt,
-                                       const Vector2f& vel,
-                                       const float ang_vel,
-                                       Vector2f& vel_cmd,
+                                       const float dt, const Vector2f& vel,
+                                       const float ang_vel, Vector2f& vel_cmd,
                                        float& ang_vel_cmd) const {
   vel_cmd.y() = 0;
-  vel_cmd.x() = Run1DTimeOptimalControl(
-      linear_limits, 0, vel.x(), length, 0, dt);
+  vel_cmd.x() =
+      Run1DTimeOptimalControl(linear_limits, 0, vel.x(), length, 0, dt);
   ang_vel_cmd = vel_cmd.x() * curvature;
 }
 

@@ -20,6 +20,7 @@
 //========================================================================
 
 #include <vector>
+
 #include "opencv2/opencv.hpp"
 
 #ifndef NAVIGATION_PARAMETERS_H
@@ -38,17 +39,12 @@ struct MotionLimits {
   // NOTE: Must be positive!
   float max_speed;
 
-  MotionLimits() :
-      max_acceleration(0),
-      max_deceleration(0),
-      max_speed(0) {}
+  MotionLimits() : max_acceleration(0), max_deceleration(0), max_speed(0) {}
 
-  MotionLimits(float max_acceleration,
-               float max_deceleration,
-               float max_speed) :
-      max_acceleration(max_acceleration),
-      max_deceleration(max_deceleration),
-      max_speed(max_speed) {}
+  MotionLimits(float max_acceleration, float max_deceleration, float max_speed)
+      : max_acceleration(max_acceleration),
+        max_deceleration(max_deceleration),
+        max_speed(max_speed) {}
 };
 
 struct OSMPlannerParameters {
@@ -57,11 +53,11 @@ struct OSMPlannerParameters {
   std::string gps_topic;
   std::string gps_goals_topic;
 
-  OSMPlannerParameters() :
-      osrm_file(""),
-      osrm_path_resolution(20.0),
-      gps_topic(""),
-      gps_goals_topic("") {}
+  OSMPlannerParameters()
+      : osrm_file(""),
+        osrm_path_resolution(20.0),
+        gps_topic(""),
+        gps_goals_topic("") {}
 };
 
 struct NavigationParameters {
@@ -86,6 +82,8 @@ struct NavigationParameters {
   float robot_width;
   // Length of the robot.
   float robot_length;
+  // Wheelbase length of robot
+  float robot_wheelbase;
   // Location of the base link w.r.t. the center of the robot.
   // Negative values indicate that the base link is closer to the rear of the
   // robot, for example on a car with ackermann steering, with its base link
@@ -139,7 +137,7 @@ struct NavigationParameters {
 
   // How long an object should stay in the costmap if not continuously observed
   float object_lifespan;
-  
+
   // Coefficient for exponential inflation cost
   float inflation_coeff;
   // Weight for distance cost vs. inflation cost
@@ -147,50 +145,48 @@ struct NavigationParameters {
   // Distance of carrot when using turn in place recovery
   float recovery_carrot_dist;
 
-
   cv::Mat K;
   cv::Mat D;
   cv::Mat H;
 
   // Default constructor, just set defaults.
-  NavigationParameters() :
-      dt(0.025),
-      linear_limits(0.5, 0.5, 0.5),
-      angular_limits(0.5, 0.5, 1.0),
-      intermediate_goal_dist(5),
-      system_latency(0.24),
-      obstacle_margin(0.15),
-      num_options(41),
-      robot_width(0.44),
-      robot_length(0.5),
-      base_link_offset(0),
-      max_free_path_length(10.0),
-      max_clearance(1.0),
-      can_traverse_stairs(false),
-      use_map_speed(true),
-      target_dist_tolerance(0.1),
-      target_vel_tolerance(0.1),
-      target_angle_tolerance(0.05),
-      use_kinect(true),
-      evaluator_type("cost_map"),
-      carrot_dist(2),
-      max_inflation_radius(1),
-      local_costmap_resolution(0.1),
-      local_costmap_size(20),
-      min_inflation_radius(0.3),
-      global_costmap_resolution(0.1),
-      global_costmap_size_x(100),
-      global_costmap_size_y(100),
-      global_costmap_origin_x(-50),
-      global_costmap_origin_y(-50),
-      lidar_range_min(0.1),
-      lidar_range_max(10),
-      replan_dist(2),
-      object_lifespan(5),
-      inflation_coeff(5),
-      distance_weight(2),
-      recovery_carrot_dist(0.5){
-      }
+  NavigationParameters()
+      : dt(0.025),
+        linear_limits(0.5, 0.5, 0.5),
+        angular_limits(0.5, 0.5, 1.0),
+        intermediate_goal_dist(5),
+        system_latency(0.24),
+        obstacle_margin(0.15),
+        num_options(41),
+        robot_width(0.44),
+        robot_length(0.5),
+        base_link_offset(0),
+        max_free_path_length(10.0),
+        max_clearance(1.0),
+        can_traverse_stairs(false),
+        use_map_speed(true),
+        target_dist_tolerance(0.1),
+        target_vel_tolerance(0.1),
+        target_angle_tolerance(0.05),
+        use_kinect(true),
+        evaluator_type("cost_map"),
+        carrot_dist(2),
+        max_inflation_radius(1),
+        local_costmap_resolution(0.1),
+        local_costmap_size(20),
+        min_inflation_radius(0.3),
+        global_costmap_resolution(0.1),
+        global_costmap_size_x(100),
+        global_costmap_size_y(100),
+        global_costmap_origin_x(-50),
+        global_costmap_origin_y(-50),
+        lidar_range_min(0.1),
+        lidar_range_max(10),
+        replan_dist(2),
+        object_lifespan(5),
+        inflation_coeff(5),
+        distance_weight(2),
+        recovery_carrot_dist(0.5) {}
 };
 }  // namespace navigation
 

@@ -53,6 +53,12 @@ struct PathRolloutBase {
   // $\dot{\theta}(t)$ is the instantaneous angular velocity.
   virtual float AngularLength() const = 0;
 
+  // Setters
+  virtual void SetLength(const float& new_length) = 0;
+  virtual void SetFPL(const float& new_fpl) = 0;
+  virtual void SetAngularLength(const float& new_angular_length) = 0;
+  virtual void SetClearance(const float& new_clearance) = 0;
+
   // The pose of the robot at the end of the path rollout.
   virtual pose_2d::Pose2Df EndPoint() const = 0;
 

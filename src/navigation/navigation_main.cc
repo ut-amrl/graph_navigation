@@ -483,7 +483,7 @@ void SendCommand(Eigen::Vector2f vel, float ang_vel) {
     vel.setZero();
     ang_vel = 0;
   }
-  printf("Sending command: (%f, %f) %f\n", vel.x(), vel.y(), ang_vel);
+
   drive_msg.twist.angular.x = 0;
   drive_msg.twist.angular.y = 0;
   drive_msg.twist.angular.z = ang_vel;
@@ -876,6 +876,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   NATURALNUM_PARAM(num_options);
   REAL_PARAM(robot_width);
   REAL_PARAM(robot_length);
+  REAL_PARAM(robot_wheelbase);
   REAL_PARAM(base_link_offset);
   REAL_PARAM(max_free_path_length);
   REAL_PARAM(max_clearance);
@@ -922,6 +923,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->num_options = CONFIG_num_options;
   params->robot_width = CONFIG_robot_width;
   params->robot_length = CONFIG_robot_length;
+  params->robot_wheelbase = CONFIG_robot_wheelbase;
   params->base_link_offset = CONFIG_base_link_offset;
   params->max_free_path_length = CONFIG_max_free_path_length;
   params->max_clearance = CONFIG_max_clearance;
