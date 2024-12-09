@@ -54,7 +54,6 @@ struct MotionLimits {
 struct NavigationParameters {
   // whether to use intermediate planning or not
   bool do_intermed;
-  bool ldos_pub_overlay_carrot;
   // Control period in seconds.
   double dt;
   // Motion limits for linear motion.

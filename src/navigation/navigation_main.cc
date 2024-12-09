@@ -846,7 +846,6 @@ void LoadConfig(navigation::NavigationParameters* params) {
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->do_intermed = !FLAGS_no_intermed;
-  params->ldos_pub_overlay_carrot = FLAGS_ldos_pub_overlay_carrot;
   if (FLAGS_dt > 0) {
     params->dt = FLAGS_dt;
   } else {
@@ -913,15 +912,16 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
 
   if (FLAGS_ldos_pub_overlay_carrot) {
       // add overlay to image
-    static const Eigen::Affine3f frame_tf_ =
-        Eigen::Translation3f(0, 0, 0.85) *
-        Eigen::AngleAxisf(0.0, Vector3f::UnitX());
-    Eigen::Vector2f carrot(0, 0);
-    bool foundCarrot = navigation_.GetLocalCarrot(carrot);
-    const Vector3f p = frame_tf_ * Vector3f(carrot.x(), carrot.y(), 0);
-    std_msgs::String msg;
-    msg.data = "overlay: " + std::to_string(p.x()) + ", " + std::to_string(p.y()) + ", " + std::to_string(p.z()) + ", " + std::to_string(foundCarrot);
-    ldos_overlay_carrot_pub_.publish(msg);
+    // static const Eigen::Affine3f frame_tf_ =
+    //     Eigen::Translation3f(0, 0, 0.85) *
+    //     Eigen::AngleAxisf(0.0, Vector3f::UnitX());
+    // Eigen::Vector2f carrot(0, 0);
+    // bool foundCarrot = navigation_.GetLocalCarrot(carrot);
+    // const Vector3f p = frame_tf_ * Vector3f(carrot.x(), carrot.y(), 0);
+    std_msgs::String msg_str;
+    msg_str.data = "dump";
+    // msg_str.data = "overlay: " + std::to_string(p.x()) + ", " + std::to_string(p.y()) + ", " + std::to_string(p.z()) + ", " + std::to_string(foundCarrot);
+    ldos_overlay_carrot_pub_.publish(msg_str);
   }
 
   // Update GUI Window
