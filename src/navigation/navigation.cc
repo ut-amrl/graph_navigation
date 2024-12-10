@@ -80,8 +80,9 @@ using namespace motion_primitives;
 // Special test modes.
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
 DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
-DEFINE_bool(test_avoidance, true, "Run obstacle avoidance test");
+DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
 DEFINE_bool(test_osm_planner, false, "Run OSM planner test");
+DEFINE_bool(test_gps_planner, true, "Run GPS planner test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_double(test_dist, 0.5, "Test distance");
@@ -450,40 +451,10 @@ Affine2f Navigation::OdometryToUTMTransform(
   double utm_theta = gpsToGlobalHeading(gps_loc);  // radians
 
   // Compute the transform from odom to gps
-  const Affine2f T_utm =
+  const Affine2f T_base_utm =
       Translation2f(utm_vec.x(), utm_vec.y()) * Rotation2Df(utm_theta);
-  const Affine2f T_odom_utm = T_utm * T_base_odom.inverse();
+  const Affine2f T_odom_utm = T_base_utm * T_base_odom.inverse();
   return T_odom_utm;
-}
-
-void Navigation::UpdateRobotLocFromOdom(const Odom& msg) {
-  // Offsets robot_loc_ by amount moved since last odom message
-  if (!gps_initialized_ || !odom_initialized_) return;
-
-  // TODO: Fix this with Lie Algebra to correct robot_gps_loc_ to obtain new
-  // robot_loc_
-  // UpdateOdometryUTMTransform();  // Update T^{odom}_{utm}
-  const auto& T_t2p = msg.toAffine2f();
-  Eigen::Affine2f T_tp;
-  Eigen::Affine2f T_tp_utm;
-  this->GetCompensatedOdomUTMTransform(T_tp_utm, T_tp);
-
-  const auto& T_t2p_tp = T_tp.inverse() * T_t2p;
-  const auto& T_delta_utm = T_tp_utm * T_t2p_tp;
-  const auto& robot_loc =
-      gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_).cast<float>();
-  const auto& T_utm =
-      Translation2f(robot_loc) * Rotation2Df(DegToRad(robot_gps_loc_.heading));
-  const auto& T_new_utm = T_delta_utm * T_utm;
-
-  // printf("Compensated robot loc: %f %f\n", T_new_utm.translation().x(),
-  //        T_new_utm.translation().y());  // Why is y infinity
-
-  // Update robot_loc and robot_angle based on new odometry from last known gps
-  // location
-  robot_loc_ =
-      Vector2f(T_new_utm.translation().x(), T_new_utm.translation().y());
-  robot_angle_ = atan2f(T_new_utm.rotation()(1, 0), T_new_utm.rotation()(0, 0));
 }
 
 void Navigation::UpdateOdometry(const Odom& msg) {
@@ -510,6 +481,9 @@ void Navigation::UpdateGPS(const GPSPoint& msg) {
   robot_loc_ = gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_).cast<float>();
   robot_angle_ = static_cast<float>(gpsToGlobalHeading(robot_gps_loc_));
 
+  // Update osm planner with new gps location
+  osm_planner_.UpdateLocation(robot_gps_loc_);
+
   if (FLAGS_v > 2) {
     printf("GPS: %lf %lf\n", msg.lat, msg.lon);
   }
@@ -523,129 +497,6 @@ void Navigation::UpdateCommandHistory(Twist twist) {
            command_history_.back().linear.x());
   }
 }
-
-// void Navigation::ForwardPredict(double time) {
-// if (FLAGS_v > 1) {
-//   cout << "================ [Navigation] FORWARD PREDICT ================"
-//        << endl;
-//   cout << "forward time: " << time << endl;
-// }
-
-// Eigen::Affine2f fp_odom_tf =
-//     Eigen::Translation2f(odom_loc_) * Eigen::Rotation2Df(odom_angle_);
-// Eigen::Affine2f fp_local_tf = Eigen::Affine2f::Identity();
-// for (const Twist& cmd : command_history_) {
-//   const float cmd_v = cmd.linear.x();
-//   const float cmd_omega = cmd.linear.x() * cmd.angular.z();
-//   // Assume constant velocity and omega over the time interval
-//   // want to compute distance traveled (vel * dt) and arc length (ang_vel *
-//   // dt) and the value of the linear and angular velocity to use gives us the
-//   // area of the trapezoid in the v-t space when we multiply by dt
-//   const float v_mid = (robot_vel_.norm() + cmd_v) / 2.0f;
-//   const float omega_mid = (robot_omega_ + cmd_omega) / 2.0f;
-
-//   // Forward Predict Odometry
-//   if (cmd.time >=
-//       t_odometry_ -
-//           params_.dt) {  // start forward integrating from command before our
-//                          // most recent odometry (we are still executing the
-//                          // command in the timestep before the odom message)
-//     // we know that this gives us the last command because the controller
-//     runs
-//     // at a fixed frequency and you generate one command per controller
-//     // iteration every dt
-
-//     // in every iteration besides the first command in the control history,
-//     // t_odometry_ < cmd.time
-//     const double dt =
-//         (t_odometry_ > cmd.time)  // find time that we are executing the
-//                                   // previous command for
-//             ? min<double>(params_.dt - (t_odometry_ - cmd.time), params_.dt)
-//             : min<double>(
-//                   time - cmd.time,
-//                   params_.dt);  // upper bound on how long we execute a
-//                   command
-
-//     // see trapezoid comment above for v_mid and omega_mid
-//     const float dtheta = omega_mid * dt;
-//     const float ds = v_mid * dt;
-//     // Translation coeff for exponential map of se2 -- lie algebra dead
-//     // reckoning / autonomous error equation: does not estimate future state
-//     // based on past state Special matrix that tells you how much the angular
-//     // rate of rotation affects the translation because we integrate the
-//     // linear velocity and have angular rotation unless we are moving
-//     // straight, we accummulate error by just using the linear velocity (the
-//     // tangent -- it is a linear approximation) especially if our curvature
-//     is
-//     // high a smaller dt may not necessarily decrease error with the linear
-//     // velocity approximation; we could increase and decrease our error
-//     // between steps
-//     Eigen::Matrix2f V = Eigen::Matrix2f::Identity();
-//     if (fabs(dtheta) > kEpsilon) {
-//       V << sin(dtheta) / dtheta, (cos(dtheta) - 1) / dtheta,
-//           (1 - cos(dtheta)) / dtheta, sin(dtheta) / dtheta;
-//     }
-//     // Exponential map of translation part of se2 (in local frame)
-//     Eigen::Vector2f dloc = V * Eigen::Vector2f(ds, 0);
-//     // Update odom_tf in odom frame
-//     fp_odom_tf =
-//         fp_odom_tf * Eigen::Translation2f(dloc) * Eigen::Rotation2Df(dtheta);
-//     // Update odom_loc_ and odom_angle_ in odom frame
-//     fp_odom_tf =
-//         fp_odom_tf * Eigen::Translation2f(dloc) * Eigen::Rotation2Df(dtheta);
-//     odom_loc_ = fp_odom_tf.translation();
-//     odom_angle_ = atan2(fp_odom_tf(1, 0), fp_odom_tf(0, 0));
-
-//     // Update robot_vel_ and robot_omega_
-//     robot_vel_ = Eigen::Rotation2Df(odom_angle_) * Vector2f(cmd_v, 0);
-//     robot_omega_ = cmd_omega;
-//     t_odometry_ = cmd.time;  // keep track of time of command we last
-//     executed
-
-//     if (FLAGS_v > 1) {
-//       cout << "dtheta " << dtheta << ", ds " << ds << endl;
-//       cout << "V \n" << V << endl;
-//       cout << "odom_loc_: " << odom_loc_.transpose()
-//            << ", odom_angle_: " << odom_angle_ << endl;
-//     }
-//   }
-
-//   // Forward Predict Point Cloud
-//   if (cmd.time >= t_point_cloud_ - params_.dt) {
-//     const double dt =
-//         (t_point_cloud_ > cmd.time)
-//             ? min<double>(params_.dt - (t_point_cloud_ - cmd.time),
-//             params_.dt) : min<double>(time - cmd.time, params_.dt);
-//     // cout << "dt " << dt << endl;
-//     // cout << "params_.dt " << params_.dt << endl;
-//     // cout << "t_point_cloud_ " << t_point_cloud_ << " cmd.time " <<
-//     cmd.time
-//     // << endl;
-//     const float dtheta = omega_mid * dt;
-//     const float ds = v_mid * dt;
-//     // Translation coeff for exponential map of se2
-//     Eigen::Matrix2f V = Eigen::Matrix2f::Identity();
-//     if (fabs(dtheta) > kEpsilon) {
-//       V << sin(dtheta) / dtheta, (cos(dtheta) - 1) / dtheta,
-//           (1 - cos(dtheta)) / dtheta, sin(dtheta) / dtheta;
-//     }
-//     // cout << "V" << V << endl;
-//     // Exponential map of translation part of se2 (in local frame)
-//     Eigen::Vector2f dloc = V * Eigen::Vector2f(ds, 0);
-//     // Update local_tf in local frame
-//     fp_local_tf =
-//         fp_local_tf * Eigen::Translation2f(dloc) *
-//         Eigen::Rotation2Df(dtheta);
-//   }
-// }
-
-// // Forward Predict Point Cloud
-// Eigen::Affine2f inv_fp_local_tf = fp_local_tf.inverse();
-// fp_point_cloud_.resize(point_cloud_.size());
-// for (size_t i = 0; i < point_cloud_.size(); i++) {
-//   fp_point_cloud_[i] = inv_fp_local_tf * point_cloud_[i];
-// }
-// }
 
 void Navigation::ForwardPredict(double t) {
   if (command_history_.empty()) {
@@ -1050,6 +901,34 @@ void Navigation::OSMPlannerTest() {
   }
 }
 
+void Navigation::GPSPlannerTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
+  const static bool kDebug = FLAGS_v > 0;
+  static bool isGoalSet = false;
+
+  // Offset current GPS location by 20 meters in map frame. Set as target.
+  if (!gps_initialized_) return;
+
+  if (!isGoalSet) {
+    // Replan global path and set next goal
+    ReplanAndSetNextNavGoal(true);
+    isGoalSet = true;
+  } else {
+    // Select next nav goal
+    ReplanAndSetNextNavGoal(false);
+  }
+
+  Vector2f carrot;
+  GetLocalCarrot(carrot);
+  // Select Carrot Location
+  if (kDebug) printf("Carrot: %f %f\n", carrot.x(), carrot.y());
+
+  // Transform carrot to local frame
+  local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+
+  // Run obstacle avoidance
+  RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+}
+
 DEFINE_double(max_plan_deviation, 12.8,
               "Maximum premissible deviation from the plan");
 bool Navigation::PlanStillValid() {
@@ -1116,7 +995,7 @@ Vector2f Navigation::GetPathGoal(float target_distance) {
 }
 
 bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
-  for (float carrot_dist = params_.intermediate_goal_dist;
+  for (float carrot_dist = params_.intermediate_goal_tolerance;
        carrot_dist > params_.carrot_dist; carrot_dist -= 0.5) {
     if (GetCarrot(carrot, true, carrot_dist)) {
       Vector2f robot_frame_carrot = carrot - robot_loc_;
@@ -1131,6 +1010,22 @@ bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
   }
 
   return false;
+}
+
+bool Navigation::GetLocalCarrotHeading(Vector2f& carrot) {
+  if (gps_nav_goals_loc_.empty()) return false;
+  if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size())) return false;
+
+  Vector2f T_goal_map = nav_goal_loc_;
+  // Compute current odometry estimated location in map frame
+  Affine2f T_odom_map = OdometryToUTMTransform(initial_odom_msg_, initial_gps_loc_);
+  Affine2f T_base_odom = Translation2f(odom_loc_) * Rotation2Df(odom_angle_);
+  Affine2f T_base_map = T_odom_map * T_base_odom;
+
+  // Goal carrot is a point on the carrot circle around robot
+  Vector2f goal_vec_norm = (T_goal_map - T_base_map.translation()).normalized();
+  carrot = T_odom_map.translation() + goal_vec_norm * params_.carrot_dist;
+  return true;
 }
 
 bool Navigation::GetLocalCarrot(Vector2f& carrot) {
@@ -1543,7 +1438,7 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
   return start_goal_index;
 }
 
-bool Navigation::isGoalInFOV(const Vector2f& local_goal) {
+bool Navigation::IsGoalInFOV(const Vector2f& local_goal) {
   const float angle_to_goal = atan2(local_goal.y(), local_goal.x());
   const float min_angle = -params_.local_fov / 2;  // in radians
   const float max_angle = params_.local_fov / 2;   // in radians
@@ -1568,31 +1463,6 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
   // Push next nav goal for visualization
 }
 
-void Navigation::UpdateRobotLocFromOdom() {
-  if (!odom_initialized_) {
-    return;
-  }
-
-  Eigen::Vector2f initial_odom_loc =
-      Vector2f(initial_odom_msg_.position.x(), initial_odom_msg_.position.y());
-  float initial_odom_angle_ = 2.0f * atan2f(initial_odom_msg_.orientation.z(),
-                                            initial_odom_msg_.orientation.w());
-  Eigen::Affine2f T_initial_to_odom = Eigen::Translation2f(initial_odom_loc) *
-                                      Eigen::Rotation2Df(initial_odom_angle_);
-  Eigen::Affine2f T_robot_to_odom =
-      Eigen::Translation2f(odom_loc_) * Eigen::Rotation2Df(odom_angle_);
-
-  Eigen::Affine2f T_robot_to_initial =
-      T_initial_to_odom.inverse() * T_robot_to_odom;
-
-  // Update robot_loc_ and robot_angle_
-  robot_loc_ = T_robot_to_initial.translation();
-  // Normalize angle to [-pi, pi]
-  robot_angle_ = std::atan2(
-      std::sin(Eigen::Rotation2Df(T_robot_to_initial.rotation()).angle()),
-      std::cos(Eigen::Rotation2Df(T_robot_to_initial.rotation()).angle()));
-}
-
 bool Navigation::Run(const double& time, Vector2f& cmd_vel,
                      float& cmd_angle_vel) {
   const bool kDebug = FLAGS_v > 1;
@@ -1606,10 +1476,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   }
   if (!gps_initialized_) {
     if (kDebug) printf("GPS not initialized\n");
-    return false;
-  }
-  if (gps_nav_goals_loc_.empty() or gps_goal_index_ < 0) {
-    if (kDebug) printf("No GPS goals\n");
     return false;
   }
 
@@ -1629,7 +1495,10 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   } else if (FLAGS_test_osm_planner) {
     OSMPlannerTest();
     return true;
-  } else if (FLAGS_test_latency) {
+  } else if (FLAGS_test_gps_planner) {
+    GPSPlannerTest(cmd_vel, cmd_angle_vel);
+    return true;
+  } if (FLAGS_test_latency) {
     LatencyTest(cmd_vel, cmd_angle_vel);
     return true;
   }
@@ -1820,56 +1689,35 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
   }
 
-  if (!gps_nav_goals_loc_.empty()) {  // Keep iterating to next waypoint until
-                                      // one gets you closer to the goal
-    GPSPoint next_nav_goal_loc = gps_nav_goals_loc_[gps_goal_index_];
-    double goal_tolerance = params_.intermediate_goal_dist;
-    if (gps_goal_index_ == int(gps_nav_goals_loc_.size()) - 1) {
-      goal_tolerance /= 2;
-    }
-    printf("Current robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());
-    const auto& metric_nav_goal_loc =
-        gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_);
-    printf("Nav goal loc %f %f\n", metric_nav_goal_loc.x(),
-           metric_nav_goal_loc.y());
-    printf("Distance to goal: %f\n", (robot_loc_ - nav_goal_loc_).norm());
-    bool isGPSGoalReached = osm_planner_.isGoalReached(
-        robot_gps_loc_, next_nav_goal_loc, params_.intermediate_goal_dist);
-    printf("IsGoalReached: %d\n", isGPSGoalReached);
-    // bool is_goal_in_fov = isGoalInFOV(nav_goal_loc_);
-    bool isGPSGoalStillValid = true;
-    if (!plan_path_.empty()) {
-      isGPSGoalStillValid = PlanStillValid();
-    }
+  bool isLastGoalReached = gps_goal_index_ >= 0 && 
+    gps_goal_index_ == int(gps_nav_goals_loc_.size()) - 1 && 
+    osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(), params_.intermediate_goal_tolerance);
+  bool isNavComplete = gps_nav_goals_loc_.empty() || isLastGoalReached;
+  bool isGoalInFOV = IsGoalInFOV(nav_goal_loc_);
+
+  if (kDebug) printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d\n",
+                     isLastGoalReached, isNavComplete, isGoalInFOV);
+  if (isNavComplete) {
+    nav_state_ = NavigationState::kStopped;
+  } else if (isGoalInFOV) {
+    nav_state_ = NavigationState::kGoto;
+    // Recompute global plan as necessary
+    CHECK_GE(plan_path_.size(), 0u);
 
     /**
      * Conditions:
-     * 1. If goal is reached, switch to next goal
-     * 2. If goal is invalid, replan to final goal
-     * 3. If goal is not reached and not invalid, continue running
+     *  1. If goal is invalid, replan global path. 
+     *  2. If goal is still valid, update next global goal
      */
-    if (isGPSGoalReached) {
-      if (kDebug) printf("GPS Goal reached\n");
-      if (gps_goal_index_ + 1 < int(gps_nav_goals_loc_.size())) {
-        if (kDebug) printf("Switching to next GPS Goal\n");
-        printf("Switching to next GPS Goal\n");
-        ReplanAndSetNextNavGoal(false);
-      } else {
-        nav_state_ = NavigationState::kStopped;
-      }
-    } else if (!isGPSGoalStillValid) {
-      if (kDebug) printf("GPS Goal invalid\n");
-      // Replan to last gps goal, plan in global coordinates, save route in gps
-      gps_nav_goals_loc_.assign(1, gps_nav_goals_loc_.back());
-      ReplanAndSetNextNavGoal(true);
-    }
+    bool isGPSGoalValid = PlanStillValid();
+    ReplanAndSetNextNavGoal(!isGPSGoalValid);
   } else {
-    nav_state_ = NavigationState::kGoto;
+    nav_state_ = NavigationState::kTurnInPlace;
   }
 
   if (nav_state_ == NavigationState::kGoto ||
       nav_state_ == NavigationState::kOverride) {
-    // Recompute global plan as necessary.
+    // Recompute intermediate plan as necessary.
     if ((!params_.do_intermed && !PlanStillValid()) ||
         (params_.do_intermed &&
          (!PlanStillValid() || !IntermediatePlanStillValid()))) {
@@ -1881,10 +1729,11 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
       plan_path_ = Plan(robot_loc_, nav_goal_loc_);
     }
+
     if (nav_state_ == NavigationState::kGoto) {
       // Get Carrot and check if done (global coordinates utm)
       Vector2f carrot(0, 0);
-      bool foundCarrot = GetLocalCarrot(carrot);
+      bool foundCarrot = GetLocalCarrotHeading(carrot);
       printf("Local carrot %f %f\n", carrot.x(), carrot.y());
       printf("Next GPS goal %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
       printf("Current Robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());

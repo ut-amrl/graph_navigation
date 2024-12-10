@@ -70,7 +70,7 @@ struct NavigationParameters {
   // Motion limits for angular motion.
   MotionLimits angular_limits;
   // Distance along global plan to find intermediate goal
-  float intermediate_goal_dist;
+  float intermediate_goal_tolerance;
   // System latency in seconds, including sensing latency, processing latency,
   // and actuation latency.
   float system_latency;
@@ -154,7 +154,7 @@ struct NavigationParameters {
       : dt(0.025),
         linear_limits(0.5, 0.5, 0.5),
         angular_limits(0.5, 0.5, 1.0),
-        intermediate_goal_dist(5),
+        intermediate_goal_tolerance(5),
         system_latency(0.24),
         obstacle_margin(0.15),
         num_options(41),

@@ -205,12 +205,11 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   received_odom_ = true;
   odom_ = OdomHandler(msg);
   navigation_.UpdateOdometry(odom_);
-  // Compute global coordinate offset from odometry t'' to odometry t'
-  navigation_.UpdateRobotLocFromOdom(odom_);
 }
 
-void GPSCallback(const std_msgs::Float64MultiArray& msg) {
-  const GPSPoint loc(msg.data[0], msg.data[1], msg.data[2], msg.data[4]);
+void GPSCallback(const amrl_msgs::GPSMsg& msg) {
+  const GPSPoint loc(msg.header.stamp.toSec(), msg.latitude, msg.longitude,
+                     msg.heading);
   if (FLAGS_v > 2)
     printf("GPS Pose: (%lf, %lf,%lf, %lf)\n", loc.time, loc.lat, loc.lon,
            loc.heading);
@@ -870,7 +869,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(max_angular_accel);
   REAL_PARAM(max_angular_decel);
   REAL_PARAM(max_angular_speed);
-  REAL_PARAM(intermediate_goal_dist);
+  REAL_PARAM(intermediate_goal_tolerance);
   REAL_PARAM(system_latency);
   REAL_PARAM(obstacle_margin);
   NATURALNUM_PARAM(num_options);
@@ -917,7 +916,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->angular_limits =
       MotionLimits(CONFIG_max_angular_accel, CONFIG_max_angular_decel,
                    CONFIG_max_angular_speed);
-  params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
+  params->intermediate_goal_tolerance = CONFIG_intermediate_goal_tolerance;
   params->system_latency = CONFIG_system_latency;
   params->obstacle_margin = CONFIG_obstacle_margin;
   params->num_options = CONFIG_num_options;
@@ -1069,7 +1068,7 @@ int main(int argc, char** argv) {
   ros::Subscriber halt_sub = n.subscribe("halt_robot", 1, &HaltCallback);
   ros::Subscriber override_sub =
       n.subscribe("nav_override", 1, &OverrideCallback);
-  ros::Subscriber gps_pos_sub = n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
+  ros::Subscriber gps_sub = n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
   ros::Subscriber local_costmap_sub =
       n.subscribe("local_costmap", 1, &LocalCostmapCallback);
 

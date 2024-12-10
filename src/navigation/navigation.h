@@ -122,7 +122,7 @@ class Navigation {
   void GetStraightFreePathLength(float* free_path_length, float* clearance);
   void GetFreePathLength(float curvature, float* free_path_length,
                          float* clearance, Eigen::Vector2f* obstruction);
-  bool isGoalInFOV(const Eigen::Vector2f& local_goal);
+  bool IsGoalInFOV(const Eigen::Vector2f& local_goal);
   void UpdateGPS(const GPSPoint& msg);
   void SetGPSNavGoals(const vector<GPSPoint>& goals);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
@@ -138,7 +138,6 @@ class Navigation {
                                       Eigen::Affine2f& T_tp_odom);
   Eigen::Affine2f OdometryToUTMTransform(const Odom& odom,
                                          const GPSPoint& gps_loc);
-  void UpdateRobotLocFromOdom(const Odom& msg);
   int GetNextGPSGlobalGoal(int start_goal_index);
   bool GetNextGPSGoal(amrl_msgs::GPSMsg& goal_msg);
 
@@ -160,6 +159,7 @@ class Navigation {
   Eigen::Vector2f GetPathGoal(float target_distance);
   bool GetGlobalCarrot(Eigen::Vector2f& carrot);
   bool GetLocalCarrot(Eigen::Vector2f& carrot);
+  bool GetLocalCarrotHeading(Eigen::Vector2f& carrot);
   bool GetCarrot(Eigen::Vector2f& carrot, bool global, float carrot_dist);
   // Enable or disable autonomy.
   void Enable(bool enable);
@@ -205,7 +205,6 @@ class Navigation {
   std::vector<ObstacleCost> GetGlobalCostmapObstacles();
 
   Eigen::Vector2f GetIntermediateGoal();
-  void UpdateRobotLocFromOdom();
   // Get the next best global gps goal
   void ReplanAndSetNextNavGoal(bool replan);
 
@@ -223,6 +222,8 @@ class Navigation {
   void OSMPlannerTest();
   // Test planner.
   void PlannerTest();
+  // Test GPS Planner.
+  void GPSPlannerTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Run obstacle avoidance local planner.
   void RunObstacleAvoidance(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
   // Latency testing routine.
