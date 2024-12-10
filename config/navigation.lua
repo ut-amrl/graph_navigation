@@ -3,7 +3,7 @@ function deg2rad(deg)
 end
 
 OSMPlannerParameters = {
-  gps_topic = "/vectornav/gps_with_heading";
+  gps_topic = "/vectornav/GPSHeading";
   gps_goals_topic = "/gps_goals";
   osrm_file = "osrm_texas_cbf_mld/texas-latest.osrm";
   osrm_path_resolution = 8; -- meters between GPS points
@@ -29,7 +29,7 @@ NavigationParameters = {
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
-  carrot_dist = 20.0;
+  carrot_dist = 10.0;
   system_latency = 0.24;
   obstacle_margin = 0.15;
   num_options = 31;

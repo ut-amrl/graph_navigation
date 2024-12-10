@@ -347,7 +347,8 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
 }
 
 bool Navigation::GetNextGPSGoal(GPSMsg& goal_msg) {
-  if (gps_nav_goals_loc_.empty()) return false;
+  if (gps_nav_goals_loc_.empty() || gps_goal_index_ >= 0) return false;
+  CHECK_GT(int(gps_nav_goals_loc_.size()), gps_goal_index_);
 
   goal_msg = GPSMsg();
   goal_msg.latitude = gps_nav_goals_loc_[gps_goal_index_].lat;
@@ -472,6 +473,7 @@ void Navigation::UpdateOdometry(const Odom& msg) {
 
 void Navigation::UpdateGPS(const GPSPoint& msg) {
   robot_gps_loc_ = msg;
+  // Change GPS heading
   if (!gps_initialized_) {
     initial_gps_loc_ = robot_gps_loc_;
     gps_initialized_ = true;
@@ -903,28 +905,26 @@ void Navigation::OSMPlannerTest() {
 
 void Navigation::GPSPlannerTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
   const static bool kDebug = FLAGS_v > 0;
-  static bool isGoalSet = false;
-
+  printf("GPSPlannerTest()\n");
   // Offset current GPS location by 20 meters in map frame. Set as target.
-  if (!gps_initialized_) return;
+  if (!gps_initialized_ || gps_nav_goals_loc_.empty()) return;
 
-  if (!isGoalSet) {
-    // Replan global path and set next goal
-    ReplanAndSetNextNavGoal(true);
-    isGoalSet = true;
-  } else {
-    // Select next nav goal
-    ReplanAndSetNextNavGoal(false);
-  }
+  // Select next nav goal
+  ReplanAndSetNextNavGoal(false);
 
+  printf("Robot loc and heading: %f %f %f\n", robot_loc_.x(), robot_loc_.y(),
+         robot_angle_);
+  printf("GPSPlannerTest(): %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
   Vector2f carrot;
-  GetLocalCarrot(carrot);
-  // Select Carrot Location
-  if (kDebug) printf("Carrot: %f %f\n", carrot.x(), carrot.y());
+  GetLocalCarrotHeading(carrot);
 
   // Transform carrot to local frame
   local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
-
+  // Select Carrot Location
+  if (kDebug) {
+    printf("Map Carrot: %f %f\n", carrot.x(), carrot.y());
+    printf("Local Carrot: %f %f\n", local_target_.x(), local_target_.y());
+  }
   // Run obstacle avoidance
   RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
 }
@@ -1014,17 +1014,23 @@ bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
 
 bool Navigation::GetLocalCarrotHeading(Vector2f& carrot) {
   if (gps_nav_goals_loc_.empty()) return false;
-  if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size())) return false;
+  if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size()))
+    return false;
 
   Vector2f T_goal_map = nav_goal_loc_;
+  Vector2f T_base_map = robot_loc_;
+
   // Compute current odometry estimated location in map frame
-  Affine2f T_odom_map = OdometryToUTMTransform(initial_odom_msg_, initial_gps_loc_);
-  Affine2f T_base_odom = Translation2f(odom_loc_) * Rotation2Df(odom_angle_);
-  Affine2f T_base_map = T_odom_map * T_base_odom;
+  // Affine2f T_odom_map =
+  //     OdometryToUTMTransform(initial_odom_msg_, initial_gps_loc_);
+  // Affine2f T_base_odom = Translation2f(odom_loc_) *
+  // Rotation2Df(odom_angle_); Affine2f T_base_map = T_odom_map *
+  // T_base_odom;
 
   // Goal carrot is a point on the carrot circle around robot
-  Vector2f goal_vec_norm = (T_goal_map - T_base_map.translation()).normalized();
-  carrot = T_odom_map.translation() + goal_vec_norm * params_.carrot_dist;
+  Vector2f goal_vec_norm = (T_goal_map - T_base_map).normalized();
+  // carrot = T_odom_map.translation() + goal_vec_norm * params_.carrot_dist;
+  carrot = T_base_map + goal_vec_norm * params_.carrot_dist;
   return true;
 }
 
@@ -1424,14 +1430,16 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
     GPSPoint subgoal = gps_nav_goals_loc_[i];
     double robot_to_final_goal = gpsDistance(robot_gps_loc_, final_goal);
     double subgoal_to_final_goal = gpsDistance(subgoal, final_goal);
+    double robot_to_subgoal = gpsDistance(robot_gps_loc_, subgoal);
+
     if (kDebug) {
       printf("Checking subgoal %d\n", i);
       printf("Robot dist to final goal: %f\n", robot_to_final_goal);
       printf("Subgoal dist to final goal: %f\n", subgoal_to_final_goal);
     }
-    if (robot_to_final_goal > subgoal_to_final_goal) {
+    if (robot_to_final_goal < subgoal_to_final_goal ||
+        robot_to_subgoal < params_.intermediate_goal_tolerance) {
       start_goal_index = i;
-      break;
     }
   }
 
@@ -1446,9 +1454,14 @@ bool Navigation::IsGoalInFOV(const Vector2f& local_goal) {
 }
 
 void Navigation::ReplanAndSetNextNavGoal(bool replan) {
-  if (gps_nav_goals_loc_.empty() || !gps_initialized_) return;
+  if (gps_nav_goals_loc_.empty() || !gps_initialized_ ||
+      gps_goal_index_ > int(gps_nav_goals_loc_.size()))
+    return;
+
+  printf("GPS goal index: %d\n", gps_goal_index_);
   if (replan) {  // Replans, sets next nav goal, and sets it as next goal
-    const auto& route = this->GlobalPlan(robot_gps_loc_, gps_nav_goals_loc_);
+    vector<GPSPoint> goals = {gps_nav_goals_loc_.back()};
+    const auto& route = this->GlobalPlan(robot_gps_loc_, goals);
     const auto& map_route = this->GPSRouteToMap(route);
     this->SetGPSNavGoals(route);  // Updates gps_goal_index_
   } else {                        // Only update next goal if not replanning
@@ -1498,7 +1511,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   } else if (FLAGS_test_gps_planner) {
     GPSPlannerTest(cmd_vel, cmd_angle_vel);
     return true;
-  } if (FLAGS_test_latency) {
+  }
+  if (FLAGS_test_latency) {
     LatencyTest(cmd_vel, cmd_angle_vel);
     return true;
   }
@@ -1689,14 +1703,17 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
   }
 
-  bool isLastGoalReached = gps_goal_index_ >= 0 && 
-    gps_goal_index_ == int(gps_nav_goals_loc_.size()) - 1 && 
-    osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(), params_.intermediate_goal_tolerance);
+  bool isLastGoalReached =
+      gps_goal_index_ >= 0 &&
+      gps_goal_index_ == int(gps_nav_goals_loc_.size()) - 1 &&
+      osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(),
+                                 params_.intermediate_goal_tolerance);
   bool isNavComplete = gps_nav_goals_loc_.empty() || isLastGoalReached;
   bool isGoalInFOV = IsGoalInFOV(nav_goal_loc_);
 
-  if (kDebug) printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d\n",
-                     isLastGoalReached, isNavComplete, isGoalInFOV);
+  if (kDebug)
+    printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d\n",
+           isLastGoalReached, isNavComplete, isGoalInFOV);
   if (isNavComplete) {
     nav_state_ = NavigationState::kStopped;
   } else if (isGoalInFOV) {
@@ -1706,7 +1723,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
     /**
      * Conditions:
-     *  1. If goal is invalid, replan global path. 
+     *  1. If goal is invalid, replan global path.
      *  2. If goal is still valid, update next global goal
      */
     bool isGPSGoalValid = PlanStillValid();

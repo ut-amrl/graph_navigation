@@ -1114,17 +1114,23 @@ int main(int argc, char** argv) {
         //   global_viz_msg_);
         // }
       }
-
+      // printf("Navigation succeeded\n");
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
+      // printf("Predicted cloud published\n");
       DrawRobot();
+      // printf("Robot drawn\n");
       if (navigation_.GetNavStatusUint8() !=
           static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
         DrawTarget();
         DrawPathOptions();
       }
+      // printf("Drew path options\n");
       PublishVisualizationMarkers();
+      // printf("Published visualization markers\n");
       PublishPath();
+      // printf("Published path\n");
       PublishNextGPSGoal();
+      // printf("Published next GPS goal\n");
       local_viz_msg_.header.stamp = ros::Time::now();
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
