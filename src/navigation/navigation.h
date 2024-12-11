@@ -281,6 +281,7 @@ class Navigation {
   bool gps_initialized_;
   int gps_goal_index_;
   std::vector<GPSPoint> gps_nav_goals_loc_;
+  GPSTranslator gps_translator_;
 
   NavigationState nav_state_;
 

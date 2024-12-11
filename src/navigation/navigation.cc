@@ -207,7 +207,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   // planning_domain_ = GraphDomain(map_file, &params_);
 
   // LoadVectorMap(map_file);
-  // UpdateGPSMap(maps_dir, map);
+  gps_translator_.SetReferenceFrame("utm");
 
   initialized_ = true;
   sampler_->SetNavParams(params);
@@ -447,9 +447,8 @@ Affine2f Navigation::OdometryToUTMTransform(
   // Assumes that odom and gps_loc correspond to the same time
   // T^odom_utm = T^base_utm * (T^base_odom)^-1
   const auto& T_base_odom = odom.toAffine2f();
-  const auto& utm_vec =
-      gpsToGlobalCoord(initial_gps_loc_, gps_loc).cast<float>();
-  double utm_theta = gpsToGlobalHeading(gps_loc);  // radians
+  const auto& utm_vec = gps_translator_.GpsToGlobalCoord(gps_loc).cast<float>();
+  double utm_theta = gps_translator_.GpsToGlobalHeading(gps_loc);  // radians
 
   // Compute the transform from odom to gps
   const Affine2f T_base_utm =
@@ -464,10 +463,13 @@ void Navigation::UpdateOdometry(const Odom& msg) {
   PruneLatencyQueue();
   PruneOdometryQueue();
   if (!odom_initialized_) {
+    Affine2d T_odom_initial = msg.toAffine2f().cast<double>();
+    gps_translator_.SetMapOrigin(T_odom_initial);
     starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
     initial_odom_msg_ = msg;
     odom_initialized_ = true;
   }
+
   odom_history_.push_back(msg);
 }
 
@@ -475,14 +477,17 @@ void Navigation::UpdateGPS(const GPSPoint& msg) {
   robot_gps_loc_ = msg;
   // Change GPS heading
   if (!gps_initialized_) {
+    gps_translator_.SetGPSOrigin(msg);
     initial_gps_loc_ = robot_gps_loc_;
     gps_initialized_ = true;
   }
 
-  // Global coords relative to initial GPS location, heading is absolute
-  robot_loc_ = gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_).cast<float>();
-  robot_angle_ = static_cast<float>(gpsToGlobalHeading(robot_gps_loc_));
-
+  if (gps_translator_.Initialized()) {
+    // Global coords relative to initial GPS location, heading is absolute
+    robot_loc_ = gps_translator_.GpsToGlobalCoord(robot_gps_loc_).cast<float>();
+    robot_angle_ =
+        static_cast<float>(gps_translator_.GpsToGlobalHeading(robot_gps_loc_));
+  }
   // Update osm planner with new gps location
   osm_planner_.UpdateLocation(robot_gps_loc_);
 
@@ -671,7 +676,7 @@ std::vector<Vector2d> Navigation::GPSRouteToMap(
   CHECK(gps_initialized_);
   std::vector<Vector2d> map_route;
   for (const auto& point : route) {
-    map_route.emplace_back(gpsToGlobalCoord(initial_gps_loc_, point));
+    map_route.emplace_back(gps_translator_.GpsToGlobalCoord(point));
   }
   return map_route;
 }
@@ -1375,8 +1380,9 @@ bool Navigation::GetRobotPose(Eigen::Vector3f& pose) {
   }
   // Retrieve uncomponensated robot pose
   Eigen::Vector2f robot_loc =
-      gpsToGlobalCoord(initial_gps_loc_, robot_gps_loc_).cast<float>();
-  float robot_angle = static_cast<float>(gpsToGlobalHeading(robot_gps_loc_));
+      gps_translator_.GpsToGlobalCoord(robot_gps_loc_).cast<float>();
+  float robot_angle =
+      static_cast<float>(gps_translator_.GpsToGlobalHeading(robot_gps_loc_));
 
   pose = Eigen::Vector3f(robot_loc.x(), robot_loc.y(), robot_angle);
   return true;
@@ -1469,10 +1475,10 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
   }
 
   nav_goal_loc_ =
-      gpsToGlobalCoord(initial_gps_loc_, gps_nav_goals_loc_[gps_goal_index_])
+      gps_translator_.GpsToGlobalCoord(gps_nav_goals_loc_[gps_goal_index_])
           .cast<float>();
   nav_goal_angle_ = static_cast<float>(
-      gpsToGlobalHeading(gps_nav_goals_loc_[gps_goal_index_]));
+      gps_translator_.GpsToGlobalHeading(gps_nav_goals_loc_[gps_goal_index_]));
   // Push next nav goal for visualization
 }
 
@@ -1489,6 +1495,10 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
   }
   if (!gps_initialized_) {
     if (kDebug) printf("GPS not initialized\n");
+    return false;
+  }
+  if (!gps_translator_.Initialized()) {
+    if (kDebug) printf("GPS translator not initialized\n");
     return false;
   }
 

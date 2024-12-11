@@ -140,8 +140,7 @@ class OSMPlanner {
     is_robot_loc_initialized_ = true;
   }
 
-  bool IsGoalReached(const GPSPoint &goal,
-                     double threshold) {
+  bool IsGoalReached(const GPSPoint &goal, double threshold) {
     if (!is_robot_loc_initialized_) {
       std::cerr << "Error: Robot location not initialized.\n";
       return false;
