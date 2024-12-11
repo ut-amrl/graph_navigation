@@ -1453,14 +1453,15 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
   return start_goal_index;
 }
 
-bool Navigation::IsGoalInFOV(const Vector2f& local_goal) {
-  if (local_goal.x() == 0 and local_goal.y() == 0) return true;
-  // Compute angle between two vectors
-  // const Vector2f v1 = robot_loc_.normalize()
+bool Navigation::IsGoalInFOV(const Vector2f& goal_loc) {
+  if (goal_loc.x()==0 && goal_loc.y()==0) return true;
+  // Assumes goal is in map frame
+  const Vector2f local_goal = Rotation2Df(-robot_angle_) * (goal_loc - robot_loc_);
   const float angle_to_goal = atan2(local_goal.y(), local_goal.x());
-  const float min_angle = -params_.local_fov / 2;  // in radians
-  const float max_angle = params_.local_fov / 2;   // in radians
-  return angle_to_goal >= min_angle && angle_to_goal <= max_angle;
+  // const float min_angle = -params_.local_fov / 2;  // in radians
+  // const float max_angle = params_.local_fov / 2;   // in radians
+
+  return AngleDist(angle_to_goal, 0.0f) < (params_.local_fov / 2.0f);
 }
 
 void Navigation::ReplanAndSetNextNavGoal(bool replan) {
@@ -1717,53 +1718,95 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
   }
 
-  bool isLastGoalReached =
-      gps_goal_index_ >= 0 &&
-      gps_goal_index_ == int(gps_nav_goals_loc_.size()) - 1 &&
+  bool validGoalExists = gps_goal_index_ >= 0 &&
+                       gps_goal_index_ < int(gps_nav_goals_loc_.size());
+  bool isLastGoalReached = validGoalExists &&
       osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(),
                                  params_.intermediate_goal_tolerance);
   bool isNavComplete = gps_nav_goals_loc_.empty() || isLastGoalReached;
-  bool isGoalInFOV = true;
-  // IsGoalInFOV(nav_goal_loc_);
+  bool isGoalInFOV = IsGoalInFOV(nav_goal_loc_);
 
   if (kDebug)
-    printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d\n",
-           isLastGoalReached, isNavComplete, isGoalInFOV);
-  if (isNavComplete) {
-    nav_state_ = NavigationState::kStopped;
-  } else if (isGoalInFOV) {
-    nav_state_ = NavigationState::kGoto;
-    // Recompute global plan as necessary
-    CHECK_GE(plan_path_.size(), 0u);
+    printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d validGoalExists %d\n",
+           isLastGoalReached, isNavComplete, isGoalInFOV, validGoalExists);
+  // Execute state machine transitions
+  NavigationState prev_state = nav_state_;
+  do {
+    prev_state = nav_state_;
+    switch (nav_state_) {
+      case NavigationState::kStopped: {
+        if (kDebug) printf("\nNav complete\n");
+        if (!isNavComplete) {
+          nav_state_ = NavigationState::kGoto;
+        } else {
+          nav_state_ = NavigationState::kStopped;
+        }
+      } break;
+      case NavigationState::kPaused: {
+        if (kDebug) printf("\nNav paused\n"); // Noop for now
+      } break;
+      case NavigationState::kGoto: {
+        if (kDebug) printf("\nNav Goto\n");
+        bool isGoalLocReached = local_target_.squaredNorm() <
+                                    Sq(params_.target_dist_tolerance) &&
+                                    robot_vel_.squaredNorm() <
+                                    Sq(params_.target_vel_tolerance);
+        if (isNavComplete && isGoalLocReached) {
+          nav_state_ = NavigationState::kStopped;
+        } else {
+          nav_state_ = NavigationState::kGoto;
+        }
+      } break;
+      case NavigationState::kTurnInPlace: {
+        if (kDebug) printf("\nNav TurnInPlace\n");
+        bool isGoalAngleReached = AngleDist(nav_goal_angle_, robot_angle_) <
+                                      params_.target_angle_tolerance;
+        if (isNavComplete && isGoalAngleReached) {
+          nav_state_ = NavigationState::kStopped;
+        } else if (isNavComplete && !isGoalAngleReached) {
+          nav_state_ = NavigationState::kTurnInPlace;
+        } else {
+          nav_state_ = NavigationState::kGoto;
+        }
+      } break;
+      case NavigationState::kOverride: {
+        if (kDebug) printf("\nNav override\n"); //Noop for now
+      } break;
+      default: {
+        fprintf(stderr, "ERROR: Unknown nav state %d\n",
+                static_cast<int>(nav_state_));
+      }
+    }
+  } while (prev_state != nav_state_);
 
-    /**
-     * Conditions:
-     *  1. If goal is invalid, replan global path.
-     *  2. If goal is still valid, update next global goal
-     */
-    bool isGPSGoalValid = PlanStillValid();
-    ReplanAndSetNextNavGoal(!isGPSGoalValid);
-  } else {
-    nav_state_ = NavigationState::kTurnInPlace;
-  }
+  // Execute verbose state specific business logic here for readability
+  switch (nav_state_) {
+    case NavigationState::kGoto: {
+      // Recompute global plan as necessary
+      CHECK_GE(plan_path_.size(), 0u);
 
-  if (nav_state_ == NavigationState::kGoto ||
-      nav_state_ == NavigationState::kOverride) {
-    // Recompute intermediate plan as necessary.
-    if ((!params_.do_intermed && !PlanStillValid()) ||
-        (params_.do_intermed &&
-         (!PlanStillValid() || !IntermediatePlanStillValid()))) {
-      if (kDebug) {
-        printf("Replanning robot_loc_ %f %f to nav_goal_loc_ %f %f\n",
-               robot_loc_.x(), robot_loc_.y(), nav_goal_loc_.x(),
-               nav_goal_loc_.y());
+      /**
+       * Conditions:
+       *  1. If goal is invalid, replan global path.
+       *  2. If goal is still valid, update next global goal
+       */
+      bool isGPSGoalValid = PlanStillValid();
+      ReplanAndSetNextNavGoal(!isGPSGoalValid);
+
+      /** Run intermediate planner */
+      if ((!params_.do_intermed && !PlanStillValid()) ||
+          (params_.do_intermed &&
+          (!PlanStillValid() || !IntermediatePlanStillValid()))) {
+        if (kDebug) {
+          printf("Replanning robot_loc_ %f %f to nav_goal_loc_ %f %f\n",
+                robot_loc_.x(), robot_loc_.y(), nav_goal_loc_.x(),
+                nav_goal_loc_.y());
+        }
+
+        plan_path_ = Plan(robot_loc_, nav_goal_loc_);
       }
 
-      plan_path_ = Plan(robot_loc_, nav_goal_loc_);
-    }
-
-    if (nav_state_ == NavigationState::kGoto) {
-      // Get Carrot and check if done (global coordinates utm)
+      /** Set local target */
       Vector2f carrot(0, 0);
       bool foundCarrot = GetLocalCarrotHeading(carrot);
       printf("Local carrot %f %f\n", carrot.x(), carrot.y());
@@ -1776,46 +1819,13 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       // Local Navigation (Convert global to local coordinates)
       local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
       printf("Local target %f %f\n", local_target_.x(), local_target_.y());
-    }
-  }
-
-  // Switch between navigation states.
-  NavigationState prev_state = nav_state_;
-  do {
-    prev_state = nav_state_;
-    if (nav_state_ == NavigationState::kGoto &&
-        local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
-        robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
-      nav_state_ = NavigationState::kTurnInPlace;
-    } else if (nav_state_ == NavigationState::kTurnInPlace &&
-               AngleDist(robot_angle_, nav_goal_angle_) <
-                   params_.target_angle_tolerance) {
-      nav_state_ = NavigationState::kGoto;
-    }
-  } while (prev_state != nav_state_);
-
-  switch (nav_state_) {
-    case NavigationState::kStopped: {
-      if (kDebug) printf("\nNav complete\n");
-    } break;
-    case NavigationState::kPaused: {
-      if (kDebug) printf("\nNav paused\n");
-    } break;
-    case NavigationState::kGoto: {
-      if (kDebug) printf("\nNav Goto\n");
-    } break;
-    case NavigationState::kTurnInPlace: {
-      if (kDebug) printf("\nNav TurnInPlace\n");
-    } break;
-    case NavigationState::kOverride: {
-      if (kDebug) printf("\nNav override\n");
     } break;
     default: {
-      fprintf(stderr, "ERROR: Unknown nav state %d\n",
-              static_cast<int>(nav_state_));
-    }
+      // Noop
+    } break;
   }
 
+  // Execute controls based on state
   if (nav_state_ == NavigationState::kPaused ||
       nav_state_ == NavigationState::kStopped) {
     Halt(cmd_vel, cmd_angle_vel);
