@@ -438,3 +438,6 @@ src/graph_navigation/__init__.py
 # Editors
 .vscode/
 compile_commands.json
+
+# OSRM
+osrm*/**
