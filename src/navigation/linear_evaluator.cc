@@ -60,10 +60,16 @@ using namespace math_util;
 // DEFINE_double(subopt, 0.0, "Max path increase for clearance");
 // DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
 
-// Somewhat good paramters!
-DEFINE_double(dw, 1.0, "Distance weight");
+// Somewhat good paramters! 12/10
+// DEFINE_double(dw, 1.0, "Distance weight");
+// DEFINE_double(cw, 6.0, "Clearance weight");
+// DEFINE_double(fw, -2.0, "Free path weight");
+// DEFINE_double(subopt, 0.0, "Max path increase for clearance");
+// DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
+
+DEFINE_double(dw, 2.0, "Distance weight");
 DEFINE_double(cw, 6.0, "Clearance weight");
-DEFINE_double(fw, -2.0, "Free path weight");
+DEFINE_double(fw, -20.0, "Free path weight");
 DEFINE_double(subopt, 0.0, "Max path increase for clearance");
 DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
 

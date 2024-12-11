@@ -116,7 +116,7 @@ const string kOpenCVWindow = "Image window";
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, false,
+DEFINE_bool(no_intermed, true,
             "Whether to disable intermediate planning (will use legacy "
             "obstacle avoidance planner)");
 

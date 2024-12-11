@@ -82,11 +82,12 @@ DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
 DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
 DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
 DEFINE_bool(test_osm_planner, false, "Run OSM planner test");
-DEFINE_bool(test_gps_planner, true, "Run GPS planner test");
+DEFINE_bool(test_gps_planner, false, "Run GPS planner test");
 DEFINE_bool(test_planner, false, "Run navigation planner test");
 DEFINE_bool(test_latency, false, "Run Latency test");
 DEFINE_double(test_dist, 0.5, "Test distance");
 DEFINE_string(test_log_file, "", "Log test results to file");
+DEFINE_string(nav_frame, "utm", "Map Reference frame");
 DEFINE_int32(max_unsolvable_iterations, 3,
              "Max unsolvable obstacle avoidance iterations");
 
@@ -207,7 +208,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   // planning_domain_ = GraphDomain(map_file, &params_);
 
   // LoadVectorMap(map_file);
-  gps_translator_.SetReferenceFrame("utm");
+  gps_translator_.SetReferenceFrame(FLAGS_nav_frame);
 
   initialized_ = true;
   sampler_->SetNavParams(params);
@@ -1453,6 +1454,9 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
 }
 
 bool Navigation::IsGoalInFOV(const Vector2f& local_goal) {
+  if (local_goal.x() == 0 and local_goal.y() == 0) return true;
+  // Compute angle between two vectors
+  // const Vector2f v1 = robot_loc_.normalize()
   const float angle_to_goal = atan2(local_goal.y(), local_goal.x());
   const float min_angle = -params_.local_fov / 2;  // in radians
   const float max_angle = params_.local_fov / 2;   // in radians
@@ -1719,7 +1723,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(),
                                  params_.intermediate_goal_tolerance);
   bool isNavComplete = gps_nav_goals_loc_.empty() || isLastGoalReached;
-  bool isGoalInFOV = IsGoalInFOV(nav_goal_loc_);
+  bool isGoalInFOV = true;
+  // IsGoalInFOV(nav_goal_loc_);
 
   if (kDebug)
     printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d\n",
@@ -1785,7 +1790,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     } else if (nav_state_ == NavigationState::kTurnInPlace &&
                AngleDist(robot_angle_, nav_goal_angle_) <
                    params_.target_angle_tolerance) {
-      nav_state_ = NavigationState::kStopped;
+      nav_state_ = NavigationState::kGoto;
     }
   } while (prev_state != nav_state_);
 
