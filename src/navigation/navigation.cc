@@ -1430,7 +1430,7 @@ Eigen::Vector2f Navigation::GetIntermediateGoal() { return intermediate_goal_; }
 int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
   if (gps_nav_goals_loc_.empty() || !gps_initialized_) return -1;
 
-  const bool kDebug = FLAGS_v > 1;
+  const bool kDebug = FLAGS_v > 2;
   // Never go back, Never surrender
   const auto& final_goal = gps_nav_goals_loc_.back();
   for (int i = start_goal_index + 1; i < int(gps_nav_goals_loc_.size()); ++i) {
@@ -1454,9 +1454,10 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
 }
 
 bool Navigation::IsGoalInFOV(const Vector2f& goal_loc) {
-  if (goal_loc.x()==0 && goal_loc.y()==0) return true;
+  if (goal_loc.x() == 0 && goal_loc.y() == 0) return true;
   // Assumes goal is in map frame
-  const Vector2f local_goal = Rotation2Df(-robot_angle_) * (goal_loc - robot_loc_);
+  const Vector2f local_goal =
+      Rotation2Df(-robot_angle_) * (goal_loc - robot_loc_);
   const float angle_to_goal = atan2(local_goal.y(), local_goal.x());
   // const float min_angle = -params_.local_fov / 2;  // in radians
   // const float max_angle = params_.local_fov / 2;   // in radians
@@ -1718,17 +1719,20 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
   }
 
-  bool validGoalExists = gps_goal_index_ >= 0 &&
-                       gps_goal_index_ < int(gps_nav_goals_loc_.size());
-  bool isLastGoalReached = validGoalExists &&
+  bool validGoalExists =
+      gps_goal_index_ >= 0 && gps_goal_index_ < int(gps_nav_goals_loc_.size());
+  bool isLastGoalReached =
+      validGoalExists &&
       osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(),
                                  params_.intermediate_goal_tolerance);
   bool isNavComplete = gps_nav_goals_loc_.empty() || isLastGoalReached;
   bool isGoalInFOV = IsGoalInFOV(nav_goal_loc_);
 
   if (kDebug)
-    printf("Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d validGoalExists %d\n",
-           isLastGoalReached, isNavComplete, isGoalInFOV, validGoalExists);
+    printf(
+        "Run() isLastGoalReached %d isNavComplete %d isGoalInFOV %d "
+        "validGoalExists %d\n",
+        isLastGoalReached, isNavComplete, isGoalInFOV, validGoalExists);
   // Execute state machine transitions
   NavigationState prev_state = nav_state_;
   do {
@@ -1743,14 +1747,13 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
         }
       } break;
       case NavigationState::kPaused: {
-        if (kDebug) printf("\nNav paused\n"); // Noop for now
+        if (kDebug) printf("\nNav paused\n");  // Noop for now
       } break;
       case NavigationState::kGoto: {
         if (kDebug) printf("\nNav Goto\n");
-        bool isGoalLocReached = local_target_.squaredNorm() <
-                                    Sq(params_.target_dist_tolerance) &&
-                                    robot_vel_.squaredNorm() <
-                                    Sq(params_.target_vel_tolerance);
+        bool isGoalLocReached =
+            local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
+            robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance);
         if (isNavComplete && isGoalLocReached) {
           nav_state_ = NavigationState::kStopped;
         } else {
@@ -1760,7 +1763,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       case NavigationState::kTurnInPlace: {
         if (kDebug) printf("\nNav TurnInPlace\n");
         bool isGoalAngleReached = AngleDist(nav_goal_angle_, robot_angle_) <
-                                      params_.target_angle_tolerance;
+                                  params_.target_angle_tolerance;
         if (isNavComplete && isGoalAngleReached) {
           nav_state_ = NavigationState::kStopped;
         } else if (isNavComplete && !isGoalAngleReached) {
@@ -1770,7 +1773,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
         }
       } break;
       case NavigationState::kOverride: {
-        if (kDebug) printf("\nNav override\n"); //Noop for now
+        if (kDebug) printf("\nNav override\n");  // Noop for now
       } break;
       default: {
         fprintf(stderr, "ERROR: Unknown nav state %d\n",
@@ -1796,11 +1799,11 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       /** Run intermediate planner */
       if ((!params_.do_intermed && !PlanStillValid()) ||
           (params_.do_intermed &&
-          (!PlanStillValid() || !IntermediatePlanStillValid()))) {
+           (!PlanStillValid() || !IntermediatePlanStillValid()))) {
         if (kDebug) {
           printf("Replanning robot_loc_ %f %f to nav_goal_loc_ %f %f\n",
-                robot_loc_.x(), robot_loc_.y(), nav_goal_loc_.x(),
-                nav_goal_loc_.y());
+                 robot_loc_.x(), robot_loc_.y(), nav_goal_loc_.x(),
+                 nav_goal_loc_.y());
         }
 
         plan_path_ = Plan(robot_loc_, nav_goal_loc_);
@@ -1840,12 +1843,15 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       // Running NavigationState::kOverride .
       local_target = override_target_;
     }
-    const float theta = atan2(local_target.y(), local_target.x());
+    // const float theta = atan2(local_target.y(), local_target.x());
+
     if (local_target.squaredNorm() > Sq(params_.carrot_dist)) {
       local_target = params_.carrot_dist * local_target.normalized();
     }
+
+    // if (kDebug) printf("Theta to goal %f\n", theta);
     if (!FLAGS_no_local) {
-      if (fabs(theta) > params_.local_fov) {
+      if (!isGoalInFOV) {
         if (kDebug) printf("TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
       } else {
