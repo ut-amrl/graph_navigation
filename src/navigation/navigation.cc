@@ -333,6 +333,29 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
   if (FLAGS_v > 0) printf("SetNavGoal(): %f %f %f\n", loc.x(), loc.y(), angle);
 }
 
+MissionStatus Navigation::GetMissionStatus() {
+  static int64_t prev_mission_id = -1;
+  if (prev_mission_id != mission_status_.mission_id) {
+    mission_status_.goals = gps_nav_goals_loc_;
+    mission_status_.goals_reached.clear();
+    prev_mission_id = mission_status_.mission_id;
+    mission_status_.next_goal_id = -1;
+  }
+  mission_status_.time = ros::Time::now().toSec();
+  mission_status_.status = GetNavStatusUint8();
+  mission_status_.next_goal_id = gps_goal_index_;
+
+  int num_goals_reached = int(mission_status_.goals_reached.size());
+  for (int i = num_goals_reached; i < gps_goal_index_; i++) {
+    const auto& waypoint =
+        GPSPoint(mission_status_.time, gps_nav_goals_loc_[i].lat,
+                 gps_nav_goals_loc_[i].lon);
+    mission_status_.goals_reached.emplace_back(waypoint);
+  }
+
+  return mission_status_;
+}
+
 void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   nav_state_ = NavigationState::kGoto;
   // Skip gps subgoal update if the goal is the same as the current goal
@@ -342,6 +365,7 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   gps_nav_goals_loc_ = goals;
   gps_goal_index_ = GetNextGPSGlobalGoal(0);
   plan_path_.clear();
+  mission_status_.mission_id++;
 
   if (FLAGS_v > 0)
     printf("SetGPSNavGoals(): %d\n", int(gps_nav_goals_loc_.size()));
@@ -1206,7 +1230,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     Eigen::Vector2f prev_local_target = local_target_;
     Eigen::Vector2f temp_target;
     GetCarrot(temp_target, false, params_.recovery_carrot_dist);
-    // Eigen::Vector2f temp_target = GetPathGoal(params_.recovery_carrot_dist);
+    // Eigen::Vector2f temp_target =
+    // GetPathGoal(params_.recovery_carrot_dist);
     local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
     TurnInPlace(vel_cmd, ang_vel_cmd);
     local_target_ = prev_local_target;
@@ -1443,6 +1468,7 @@ int Navigation::GetNextGPSGlobalGoal(int start_goal_index) {
       printf("Checking subgoal %d\n", i);
       printf("Robot dist to final goal: %f\n", robot_to_final_goal);
       printf("Subgoal dist to final goal: %f\n", subgoal_to_final_goal);
+      printf("Robot dist to subgoal: %f\n", robot_to_subgoal);
     }
     if (robot_to_final_goal < subgoal_to_final_goal ||
         robot_to_subgoal < params_.intermediate_goal_tolerance) {
@@ -1476,7 +1502,9 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
     const auto& route = this->GlobalPlan(robot_gps_loc_, goals);
     const auto& map_route = this->GPSRouteToMap(route);
     this->SetGPSNavGoals(route);  // Updates gps_goal_index_
-  } else {                        // Only update next goal if not replanning
+    // Republish new route
+    throw std::runtime_error("Replanning not implemented");
+  } else {  // Only update next goal if not replanning
     gps_goal_index_ = GetNextGPSGlobalGoal(gps_goal_index_);
   }
 
@@ -1545,8 +1573,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     costmap_obstacles_.clear();
 
     // True if distance is less than replan inflation size
-    // Assign different value for points within inflation size but farther than
-    // replan size
+    // Assign different value for points within inflation size but farther
+    // than replan size
     unordered_map<uint32_t, unsigned char> inflation_cells;
     unordered_set<uint32_t> obstacle_cells;
 
@@ -1793,7 +1821,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
        *  1. If goal is invalid, replan global path.
        *  2. If goal is still valid, update next global goal
        */
-      bool isGPSGoalValid = PlanStillValid();
+      bool isGPSGoalValid = true;  // PlanStillValid();
       ReplanAndSetNextNavGoal(!isGPSGoalValid);
 
       /** Run intermediate planner */

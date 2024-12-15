@@ -39,6 +39,7 @@
 #include "amrl_msgs/GPSArrayMsg.h"
 #include "amrl_msgs/GPSMsg.h"
 #include "amrl_msgs/Localization2DMsg.h"
+#include "amrl_msgs/MissionStatusMsg.h"
 #include "amrl_msgs/NavStatusMsg.h"
 #include "amrl_msgs/Pose2Df.h"
 #include "amrl_msgs/VisualizationMsg.h"
@@ -84,6 +85,7 @@ using amrl_msgs::GPSArrayMsg;
 using amrl_msgs::GPSMsg;
 using amrl_msgs::graphNavGPSSrv;
 using amrl_msgs::Localization2DMsg;
+using amrl_msgs::MissionStatusMsg;
 using amrl_msgs::NavStatusMsg;
 using amrl_msgs::VisualizationMsg;
 using Eigen::Affine3f;
@@ -96,6 +98,7 @@ using math_util::DegToRad;
 using math_util::RadToDeg;
 using motion_primitives::ConstantCurvatureArc;
 using motion_primitives::PathRolloutBase;
+using navigation::MissionStatus;
 using navigation::MotionLimits;
 using navigation::Navigation;
 using navigation::PathOption;
@@ -174,6 +177,7 @@ ros::Publisher path_pub_;
 ros::Publisher carrot_pub_;
 ros::Publisher next_gps_goal_pub_;
 ros::Publisher localization_pub_;
+ros::Publisher mission_status_pub_;
 image_transport::Publisher viz_img_pub_;
 
 // Messages
@@ -464,6 +468,32 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
                    static_cast<float>(twist_msg.twist.angular.y),
                    static_cast<float>(twist_msg.twist.angular.z)};
   return twist;
+}
+
+void PublishMissionStatus() {
+  MissionStatus status = navigation_.GetMissionStatus();
+  MissionStatusMsg status_msg;
+  status_msg.stamp = ros::Time(status.time);
+  status_msg.status = status.status;
+  status_msg.mission_id = status.mission_id;
+  status_msg.next_goal_id = status.next_goal_id;
+
+  for (size_t i = 0; i < status.goals.size(); ++i) {
+    GPSMsg goal_msg;
+    goal_msg.header.stamp = ros::Time(status.goals[i].time);
+    goal_msg.latitude = status.goals[i].lat;
+    goal_msg.longitude = status.goals[i].lon;
+    status_msg.goals.data.push_back(goal_msg);
+
+    if (i < status.goals_reached.size()) {
+      GPSMsg goal_reached_msg;
+      goal_reached_msg.header.stamp = ros::Time(status.goals_reached[i].time);
+      goal_reached_msg.latitude = status.goals_reached[i].lat;
+      goal_reached_msg.longitude = status.goals_reached[i].lon;
+      status_msg.goals_reached.data.push_back(goal_reached_msg);
+    }
+  }
+  mission_status_pub_.publish(status_msg);
 }
 
 void PublishNavStatus() {
@@ -1020,6 +1050,8 @@ int main(int argc, char** argv) {
       n.advertise<AckermannCurvatureDriveMsg>("ackermann_curvature_drive", 1);
   twist_drive_pub_ =
       n.advertise<geometry_msgs::Twist>(FLAGS_twist_drive_topic, 1);
+  mission_status_pub_ = n.advertise<MissionStatusMsg>(
+      "/navigation/mission_status", 1, true);  // Only publish
   status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("vis_image", 1);
@@ -1097,6 +1129,7 @@ int main(int argc, char** argv) {
 
     // Publish Nav Status
     PublishNavStatus();
+    PublishMissionStatus();
     PublishLocalization();
     if (nav_succeeded) {
       if (!FLAGS_no_intermed) {

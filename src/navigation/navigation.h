@@ -31,6 +31,7 @@
 
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 #include "amrl_msgs/GPSMsg.h"
+#include "amrl_msgs/GPSNavStatusMsg.h"
 #include "amrl_msgs/Localization2DMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
 #include "config_reader/config_reader.h"
@@ -87,6 +88,17 @@ struct Odom {
            Eigen::Rotation2Df(2.0f * atan2f(orientation.z(), orientation.w()));
   }
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+};
+
+struct MissionStatus {
+  double time;
+  uint8_t status;
+  int64_t mission_id;
+  int64_t next_goal_id;
+  std::vector<GPSPoint> goals;
+  std::vector<GPSPoint> goals_reached;
+
+  MissionStatus() : time(0), status(0), mission_id(-1), next_goal_id(-1) {}
 };
 
 struct SeenObstacle {
@@ -189,6 +201,7 @@ class Navigation {
   Eigen::Vector2f GetOverrideTarget();
   Eigen::Vector2f GetVelocity();
   float GetAngularVelocity();
+  MissionStatus GetMissionStatus();
   std::string GetNavStatus();
   uint8_t GetNavStatusUint8();
   std::vector<Eigen::Vector2f> GetPredictedCloud();
@@ -282,6 +295,7 @@ class Navigation {
   int gps_goal_index_;
   std::vector<GPSPoint> gps_nav_goals_loc_;
   GPSTranslator gps_translator_;
+  MissionStatus mission_status_;
 
   NavigationState nav_state_;
 
