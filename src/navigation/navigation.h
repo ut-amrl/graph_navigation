@@ -31,15 +31,17 @@
 
 #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 #include "amrl_msgs/GPSMsg.h"
-#include "amrl_msgs/GPSNavStatusMsg.h"
 #include "amrl_msgs/Localization2DMsg.h"
+#include "amrl_msgs/MissionStatusMsg.h"
 #include "amrl_msgs/VisualizationMsg.h"
+#include "carrot_service.h"
 #include "config_reader/config_reader.h"
 #include "eigen3/Eigen/Dense"
 #include "eight_connected_domain.h"
 #include "graph_domain.h"
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
+#include "navigation_types.h"
 #include "osm_planner.h"
 #include "visualization/visualization.h"
 #include "visualization_msgs/Marker.h"
@@ -58,48 +60,6 @@ inline std::string GetDeprecatedMapPath(const std::string& dir,
                                         const std::string& name) {
   return dir + "/" + name + "/" + name + ".navigation.txt";
 }
-
-struct PathOption {
-  float curvature;
-  float clearance;
-  float free_path_length;
-  float clearance_to_goal;
-  float dist_to_goal;
-  explicit PathOption(float c) : curvature(c) {}
-  PathOption() {}
-  Eigen::Vector2f obstruction;
-  Eigen::Vector2f closest_point;
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-};
-
-struct Twist {
-  double time;
-  Eigen::Vector3f linear;
-  Eigen::Vector3f angular;
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-};
-
-struct Odom {
-  double time;
-  Eigen::Vector3f position;
-  Eigen::Quaternionf orientation;
-  Eigen::Affine2f toAffine2f() const {
-    return Eigen::Translation2f(position.x(), position.y()) *
-           Eigen::Rotation2Df(2.0f * atan2f(orientation.z(), orientation.w()));
-  }
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-};
-
-struct MissionStatus {
-  double time;
-  uint8_t status;
-  int64_t mission_id;
-  int64_t next_goal_id;
-  std::vector<GPSPoint> goals;
-  std::vector<GPSPoint> goals_reached;
-
-  MissionStatus() : time(0), status(0), mission_id(-1), next_goal_id(-1) {}
-};
 
 struct SeenObstacle {
   Eigen::Vector2f location;
@@ -296,6 +256,9 @@ class Navigation {
   std::vector<GPSPoint> gps_nav_goals_loc_;
   GPSTranslator gps_translator_;
   MissionStatus mission_status_;
+
+  // Local carrot planner
+  std::unique_ptr<CarrotBase> carrot_planner_;
 
   NavigationState nav_state_;
 

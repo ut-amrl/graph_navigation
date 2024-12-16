@@ -80,6 +80,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/image_tiler.cc
                         src/navigation/deep_cost_map_evaluator.cc
                         src/navigation/image_based_evaluator.cc
+                        src/navigation/carrot_service.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
     shared_library 

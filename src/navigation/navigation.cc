@@ -221,10 +221,22 @@ void Navigation::Initialize(const NavigationParameters& params,
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*)new LinearEvaluator();
   } else {
-    printf("Uknown evaluator type %s\n", params_.evaluator_type.c_str());
+    printf("Unknown evaluator type %s\n", params_.evaluator_type.c_str());
     exit(1);
   }
   evaluator_ = std::unique_ptr<PathEvaluatorBase>(evaluator);
+
+  CarrotBase* carrot_planner = nullptr;
+  if (params_.carrot_planner_type == "service") {
+    carrot_planner = new CarrotService("/navigation/carrot_planner");
+  } else if (params_.carrot_planner_type == "geometric") {
+    printf("Geometric carrot planner is built in\n");
+  } else {
+    printf("Umknown carrot planner type %s\n",
+           params_.carrot_planner_type.c_str());
+    exit(1);
+  }
+  carrot_planner_ = std::unique_ptr<CarrotBase>(carrot_planner);
 }
 
 void Navigation::InitializeOSM(const OSMPlannerParameters& params) {
@@ -1050,17 +1062,29 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot) {
   Vector2f T_goal_map = nav_goal_loc_;
   Vector2f T_base_map = robot_loc_;
 
-  // Compute current odometry estimated location in map frame
-  // Affine2f T_odom_map =
-  //     OdometryToUTMTransform(initial_odom_msg_, initial_gps_loc_);
-  // Affine2f T_base_odom = Translation2f(odom_loc_) *
-  // Rotation2Df(odom_angle_); Affine2f T_base_map = T_odom_map *
-  // T_base_odom;
-
   // Goal carrot is a point on the carrot circle around robot
   Vector2f goal_vec_norm = (T_goal_map - T_base_map).normalized();
   // carrot = T_odom_map.translation() + goal_vec_norm * params_.carrot_dist;
-  carrot = T_base_map + goal_vec_norm * params_.carrot_dist;
+  Vector2f local_carrot = goal_vec_norm * params_.carrot_dist;
+
+  if (carrot_planner_ != nullptr) {
+    // Correct for heading to align with local frame
+    local_carrot = Rotation2Df(-robot_angle_) * local_carrot;
+
+    const CarrotPlan& plan =
+        carrot_planner_->GetCarrot(local_carrot, latest_odom_msg_);
+    if (plan.path.empty()) return false;
+    local_carrot =
+        plan.path[plan.path_idx];  // override local carrot with service planner
+
+    // Rotate back to global frame
+    local_carrot = Rotation2Df(robot_angle_) * local_carrot;
+
+    printf("GetLocalCarrotHeading(): Global carrot from planner %f %f\n",
+           local_carrot.x(), local_carrot.y());
+  }
+  carrot = T_base_map + local_carrot;  // Transform carrot to global frame
+
   return true;
 }
 

@@ -106,6 +106,7 @@ struct NavigationParameters {
   bool use_kinect;
 
   std::string evaluator_type;
+  std::string carrot_planner_type;
 
   std::string model_path;
 

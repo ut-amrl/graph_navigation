@@ -49,6 +49,7 @@ NavigationParameters = {
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "linear";
+  carrot_planner_type = "service"; -- geometric, service
   intermediate_goal_tolerance = 10; -- final goal distance will be half this (meters)
   max_inflation_radius = 1;
   min_inflation_radius = 0.3;
