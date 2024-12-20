@@ -53,6 +53,7 @@
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/TwistStamped.h"
+#include "geometry_msgs/TransformStamped.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "graph_navigation/graphNavSrv.h"
@@ -76,9 +77,13 @@
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "tf/transform_listener.h"
+
+#include "visualization/ros_visualization.h"
 #include "visualization/visualization.h"
-#include "visualization_msgs/Marker.h"
 #include "visualization_msgs/MarkerArray.h"
+
+// Foxglove includes
+#include "foxglove_msgs/GeoJSON.h"
 
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::GPSArrayMsg;
@@ -93,6 +98,8 @@ using Eigen::Vector2f;
 using Eigen::Vector3f;
 using geometry::kEpsilon;
 using geometry_msgs::TwistStamped;
+using geometry_msgs::TransformStamped;
+using geometry_msgs::PoseStamped;
 using graph_navigation::graphNavSrv;
 using math_util::DegToRad;
 using math_util::RadToDeg;
@@ -112,6 +119,8 @@ using sensor_msgs::PointCloud;
 using std::string;
 using std::unordered_map;
 using std::vector;
+using visualization_msgs::MarkerArray;
+using foxglove_msgs::GeoJSON;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 const string kOpenCVWindow = "Image window";
@@ -179,6 +188,10 @@ ros::Publisher next_gps_goal_pub_;
 ros::Publisher localization_pub_;
 ros::Publisher mission_status_pub_;
 image_transport::Publisher viz_img_pub_;
+
+// ROS Publishers
+ros::Publisher geojson_pub_;  // GeoJSON publisher
+ros::Publisher fox_path_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -340,20 +353,39 @@ void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
   navigation_.Resume();
 }
 
-// void GoToGPSGoalCallback(const std_msgs::Float64MultiArray& msg) {
-//   if (msg.data.size() % 2 != 0) {
-//     printf("Invalid GPS goal message, not divisible by 2\n");
-//     return;
-//   }
+void PublishTF() {
+  static tf::TransformBroadcaster tf_broadcaster_;
+  // Publish the transform from the map frame to the odom frame
+  Odom odom;
+  GPSPoint gps_loc;
+  if (!navigation_.GetInitialOdom(odom) || !navigation_.GetInitialGPS(gps_loc)) return;
+  const auto T_odom_map = navigation_.OdometryToUTMTransform(odom, gps_loc);
 
-//   vector<GPSPoint> goals;
-//   for (size_t i = 0; i < msg.data.size(); i += 2) {
-//     goals.emplace_back(GPSPoint(msg.data[i], msg.data[i + 1]));
-//     printf("GPS Goal: (%lf,%lf)\n", goals.back().lat, goals.back().lon);
-//   }
-//   navigation_.SetGPSNavGoal(goals);
-//   navigation_.Resume();
-// }
+  // Extract 2D translation (x, y) and rotation (theta) from the 2D transform
+  Eigen::Vector2f translation_2d = T_odom_map.translation().head<2>();
+  float theta = atan2(T_odom_map.linear()(1, 0), T_odom_map.linear()(0, 0));
+
+  // Construct a 3D TransformStamped message
+  geometry_msgs::TransformStamped transform_msg;
+  transform_msg.header.stamp = ros::Time::now();
+  transform_msg.header.frame_id = "map";
+  transform_msg.child_frame_id = "odom";
+
+  // Set the 3D translation
+  transform_msg.transform.translation.x = translation_2d.x();
+  transform_msg.transform.translation.y = translation_2d.y();
+  transform_msg.transform.translation.z = 0.0; // Assume z = 0 for 2D transform
+
+  // Convert 2D rotation (theta) to a quaternion
+  tf::Quaternion q = tf::createQuaternionFromYaw(theta);
+  transform_msg.transform.rotation.x = q.x();
+  transform_msg.transform.rotation.y = q.y();
+  transform_msg.transform.rotation.z = q.z();
+  transform_msg.transform.rotation.w = q.w();
+
+  // Broadcast the transform
+  tf_broadcaster_.sendTransform(transform_msg);
+}
 
 void ResetNavGoalsCallback(const std_msgs::Empty& msg) {
   printf("Resetting all nav goals.\n");
@@ -417,18 +449,6 @@ void SignalHandler(int) {
   printf("Exiting.\n");
   run_ = false;
 }
-
-// void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
-//   static string map = "";
-//   if (FLAGS_v > 2) {
-//     printf("Localization t=%f\n", GetWallTime());
-//   }
-//   navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y),
-//   msg.pose.theta); if (map != msg.map) {
-//     map = msg.map;
-//     navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
-//   }
-// }
 
 void HaltCallback(const std_msgs::Bool& msg) { navigation_.Pause(); }
 
@@ -560,6 +580,20 @@ nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
   return carrotNav;
 }
 
+PoseStamped CarrotToPoseStamped(const Vector2f& carrot) {
+  PoseStamped carrotPose;
+  carrotPose.header.stamp = ros::Time::now();
+  carrotPose.header.frame_id = "base_link";
+  carrotPose.pose.position.x = carrot.x();
+  carrotPose.pose.position.y = carrot.y();
+  carrotPose.pose.position.z = 0.0;
+  carrotPose.pose.orientation.x = 0;
+  carrotPose.pose.orientation.y = 0;
+  carrotPose.pose.orientation.z = 0;
+  carrotPose.pose.orientation.w = 1;
+  return carrotPose;
+}
+
 void PublishLocalization() {
   // Publishes robot pose
   Eigen::Vector3f robot_pose;
@@ -607,9 +641,10 @@ void PublishPath() {
                               0xA86032, global_viz_msg_);
     }
     Vector2f carrot;
-    bool foundCarrot = navigation_.GetLocalCarrot(carrot);
+    bool foundCarrot = navigation_.GetLocalCarrotHeading(carrot, false);
     if (foundCarrot) {
-      carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
+      // carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
+      carrot_pub_.publish(CarrotToPoseStamped(carrot));
     }
 
     bool foundGlobalCarrot = navigation_.GetGlobalCarrot(carrot);
@@ -701,12 +736,31 @@ void DrawPathOptions() {
     visualization::DrawPathOption(o.curvature, o.free_path_length, o.clearance,
                                   0x0000FF, false, local_viz_msg_);
   }
+
+  // Push best path option to the front of the vector
+  if (best_option != nullptr) {
+    path_options.insert(path_options.begin(), ToOptions({best_option})[0]);
+  }
+
+  // Create vector of colors for each path option (blue for all except best)
+  vector<vector<float> > colors(path_options.size(), {0.0, 0.0, 1.0, 1.0});
+  colors[0] = {1.0, 0.0, 0.0, 1.0};
+  ros_visualization::PathOptionToMarkerArray(fox_path_pub_, "base_link", path_options, colors, false);
+
   if (best_option != nullptr) {
     const ConstantCurvatureArc best_arc =
         *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
     visualization::DrawPathOption(best_arc.curvature, best_arc.length,
                                   best_arc.clearance, 0xFF0000, true,
                                   local_viz_msg_);
+  }
+}
+
+void PublishGlobalPlan() {
+  vector<GPSPoint> plan;
+  bool is_plan_valid = navigation_.GetGlobalPlan(plan);
+  if (is_plan_valid) {
+    ros_visualization::GPSRouteToGeoJSON(geojson_pub_, plan);
   }
 }
 
@@ -1059,10 +1113,14 @@ int main(int argc, char** argv) {
   viz_img_pub_ = it_.advertise("vis_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
-  carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
+  carrot_pub_ = n.advertise<PoseStamped>("carrot", 1, true);
   next_gps_goal_pub_ = n.advertise<GPSMsg>(
       "next_gps_goal", 1, true);  // Only publish if there is a goal
   localization_pub_ = n.advertise<Localization2DMsg>("localization", 1);
+  geojson_pub_ = n.advertise<GeoJSON>("navigation/geojson_waypoints", 10);
+
+  // ROS path publishers
+  fox_path_pub_ = n.advertise<MarkerArray>("/navigation/path_rollouts", 1);
 
   // Messages
   local_viz_msg_ =
@@ -1130,9 +1188,11 @@ int main(int argc, char** argv) {
         navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status
+    PublishTF();
     PublishNavStatus();
     PublishMissionStatus();
     PublishLocalization();
+    PublishGlobalPlan();
     if (nav_succeeded) {
       if (!FLAGS_no_intermed) {
         // Publish Visualizations

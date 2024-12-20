@@ -122,6 +122,7 @@ class Navigation {
                               const Eigen::Vector2f& end);
   std::vector<GPSPoint> GlobalPlan(const GPSPoint& inital,
                                    const std::vector<GPSPoint>& goals);
+  bool GetGlobalPlan(std::vector<GPSPoint>& plan) const;
   std::vector<GraphDomain::State> GetPlanPath();
   std::vector<GraphDomain::State> GetGlobalPath();
 
@@ -131,7 +132,7 @@ class Navigation {
   Eigen::Vector2f GetPathGoal(float target_distance);
   bool GetGlobalCarrot(Eigen::Vector2f& carrot);
   bool GetLocalCarrot(Eigen::Vector2f& carrot);
-  bool GetLocalCarrotHeading(Eigen::Vector2f& carrot);
+  bool GetLocalCarrotHeading(Eigen::Vector2f& carrot, bool global);
   bool GetCarrot(Eigen::Vector2f& carrot, bool global, float carrot_dist);
   // Enable or disable autonomy.
   void Enable(bool enable);
@@ -176,6 +177,8 @@ class Navigation {
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
   std::vector<ObstacleCost> GetCostmapObstacles();
   std::vector<ObstacleCost> GetGlobalCostmapObstacles();
+  bool GetInitialOdom(Odom& odom) const;
+  bool GetInitialGPS(GPSPoint& loc) const;
 
   Eigen::Vector2f GetIntermediateGoal();
   // Get the next best global gps goal

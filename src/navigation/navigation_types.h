@@ -18,6 +18,23 @@ struct PathOption {
   Eigen::Vector2f obstruction;
   Eigen::Vector2f closest_point;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+
+  // Define an equality operator
+  bool operator==(const PathOption& other) const {
+      const float epsilon = 1e-6; // Tolerance for floating-point comparison
+      return std::fabs(curvature - other.curvature) < epsilon &&
+              std::fabs(clearance - other.clearance) < epsilon &&
+              std::fabs(free_path_length - other.free_path_length) < epsilon &&
+              std::fabs(clearance_to_goal - other.clearance_to_goal) < epsilon &&
+              std::fabs(dist_to_goal - other.dist_to_goal) < epsilon &&
+              (obstruction - other.obstruction).norm() < epsilon &&
+              (closest_point - other.closest_point).norm() < epsilon;
+  }
+
+  // Define an inequality operator (optional, for convenience)
+  bool operator!=(const PathOption& other) const {
+      return !(*this == other);
+  }
 };
 
 struct Twist {

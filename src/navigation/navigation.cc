@@ -244,95 +244,6 @@ void Navigation::InitializeOSM(const OSMPlannerParameters& params) {
   osm_planner_ = OSMPlanner(params.osrm_file, params.osrm_path_resolution);
 }
 
-// void Navigation::LoadVectorMap(
-//     const string& map_file) {  // Assume map is given as MAP.navigation.json
-
-//   std::string vector_map_file = map_file;
-
-//   // Find the position of ".navigation.json"
-//   size_t found = vector_map_file.find(".navigation.json");
-
-//   // Replace ".navigation.json" with ".vectormap.json"
-//   if (found != std::string::npos) {
-//     vector_map_file.replace(found, std::string(".navigation.json").length(),
-//                             ".vectormap.json");
-//   }
-
-//   // Output the modified string
-//   std::cout << "Loading vectormap file: " << vector_map_file << std::endl;
-
-//   int x_max = global_costmap_.getSizeInCellsX();
-//   int y_max = global_costmap_.getSizeInCellsY();
-//   global_costmap_.resetMap(0, 0, x_max, y_max);
-//   global_costmap_obstacles_.clear();
-
-//   std::ifstream i(vector_map_file);
-//   json j;
-//   i >> j;
-//   i.close();
-
-//   unordered_map<uint32_t, unsigned char> inflation_cells;
-
-//   for (const auto& line : j) {
-//     // Access specific fields in each dictionary
-//     Vector2f p0(line["p0"]["x"], line["p0"]["y"]);
-//     Vector2f p1(line["p1"]["x"], line["p1"]["y"]);
-
-//     float length = (p0 - p1).norm();
-//     for (float i = 0; i < length; i += params_.global_costmap_resolution) {
-//       Vector2f costmap_point = p0 + i * (p1 - p0) / length;
-//       uint32_t unsigned_mx, unsigned_my;
-//       bool in_map = global_costmap_.worldToMap(
-//           costmap_point.x(), costmap_point.y(), unsigned_mx, unsigned_my);
-//       if (in_map) {
-//         int cell_inflation_size = std::ceil(params_.max_inflation_radius /
-//                                             global_costmap_.getResolution());
-//         int mx = static_cast<int>(unsigned_mx);
-//         int my = static_cast<int>(unsigned_my);
-//         for (int j = -cell_inflation_size; j <= cell_inflation_size; j++) {
-//           for (int k = -cell_inflation_size; k <= cell_inflation_size; k++) {
-//             float cell_dist = sqrt(pow(j, 2) + pow(k, 2));
-//             float dist = cell_dist * global_costmap_.getResolution();
-//             if ((cell_dist <= cell_inflation_size) && (mx + j >= 0) &&
-//                 (mx + j < x_max) && (my + k >= 0) && (my + k < y_max)) {
-//               unsigned char cost;
-//               if (j == 0 && k == 0) {
-//                 cost = costmap_2d::LETHAL_OBSTACLE;
-//               } else if (dist <= params_.min_inflation_radius) {
-//                 cost = costmap_2d::INSCRIBED_INFLATED_OBSTACLE;
-//               } else {
-//                 cost =
-//                     std::ceil(std::exp(-1 * params_.inflation_coeff *
-//                                        (dist - params_.min_inflation_radius))
-//                                        *
-//                               (costmap_2d::INSCRIBED_INFLATED_OBSTACLE - 1));
-//               }
-//               global_costmap_.setCost(
-//                   mx + j, my + k,
-//                   std::max(cost, global_costmap_.getCost(mx + j, my + k)));
-//               inflation_cells[global_costmap_.getIndex(mx + j, my + k)] =
-//                   std::max(cost, global_costmap_.getCost(mx + j, my + k));
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-
-//   for (const auto& pair : inflation_cells) {
-//     auto index = pair.first;
-//     uint32_t mx = 0;
-//     uint32_t my = 0;
-//     global_costmap_.indexToCells(index, mx, my);
-//     // global_costmap_.setCost(mx, my, costmap_2d::LETHAL_OBSTACLE);
-
-//     double wx, wy;
-//     global_costmap_.mapToWorld(mx, my, wx, wy);
-//     global_costmap_obstacles_.push_back(
-//         ObstacleCost{Vector2f(wx, wy), pair.second});
-//   }
-// }
-
 bool Navigation::Enabled() const { return enabled_; }
 
 void Navigation::Enable(bool enable) { enabled_ = enable; }
@@ -477,6 +388,17 @@ void Navigation::GetCompensatedOdomUTMTransform(Affine2f& T_tp_utm,
 
   T_tp_odom = sync_odom.toAffine2f();
   T_tp_utm = T_odom_utm * T_tp_odom;
+}
+
+bool Navigation::GetInitialOdom(Odom& odom) const {
+  if (!odom_initialized_) return false;
+  odom = initial_odom_msg_;
+  return true;
+}
+bool Navigation::GetInitialGPS(GPSPoint& loc) const {
+  if (!gps_initialized_) return false;
+  loc = initial_gps_loc_;
+  return true;
 }
 
 Affine2f Navigation::OdometryToUTMTransform(
@@ -958,7 +880,7 @@ void Navigation::GPSPlannerTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
          robot_angle_);
   printf("GPSPlannerTest(): %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
   Vector2f carrot;
-  GetLocalCarrotHeading(carrot);
+  GetLocalCarrotHeading(carrot, true);
 
   // Transform carrot to local frame
   local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
@@ -1039,7 +961,9 @@ Vector2f Navigation::GetPathGoal(float target_distance) {
 bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
   for (float carrot_dist = params_.intermediate_goal_tolerance;
        carrot_dist > params_.carrot_dist; carrot_dist -= 0.5) {
-    if (GetCarrot(carrot, true, carrot_dist)) {
+    // if (GetCarrot(carrot, true, carrot_dist)) {
+    if (GetLocalCarrotHeading(carrot, true)) {
+      printf("GetGlobalCarrot() %f %f\n", carrot.x(), carrot.y());
       Vector2f robot_frame_carrot = carrot - robot_loc_;
       uint32_t mx, my;
       bool in_map = costmap_.worldToMap(robot_frame_carrot.x(),
@@ -1054,7 +978,14 @@ bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
   return false;
 }
 
-bool Navigation::GetLocalCarrotHeading(Vector2f& carrot) {
+bool Navigation::GetGlobalPlan(std::vector<GPSPoint>& plan) const {
+  if (!gps_nav_goals_loc_.empty()) return false;
+
+  plan = gps_nav_goals_loc_;
+  return true;
+}
+
+bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
   if (gps_nav_goals_loc_.empty()) return false;
   if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size()))
     return false;
@@ -1064,26 +995,26 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot) {
 
   // Goal carrot is a point on the carrot circle around robot
   Vector2f goal_vec_norm = (T_goal_map - T_base_map).normalized();
-  // carrot = T_odom_map.translation() + goal_vec_norm * params_.carrot_dist;
   Vector2f local_carrot = goal_vec_norm * params_.carrot_dist;
+  // Correct for heading to align with local frame
+  local_carrot = Rotation2Df(-robot_angle_) * local_carrot;
 
   if (carrot_planner_ != nullptr) {
-    // Correct for heading to align with local frame
-    local_carrot = Rotation2Df(-robot_angle_) * local_carrot;
-
     const CarrotPlan& plan =
         carrot_planner_->GetCarrot(local_carrot, latest_odom_msg_);
     if (plan.path.empty()) return false;
-    local_carrot =
-        plan.path[plan.path_idx];  // override local carrot with service planner
-
-    // Rotate back to global frame
-    local_carrot = Rotation2Df(robot_angle_) * local_carrot;
+    local_carrot = plan.path[plan.path_idx];  // override local carrot with service planner
 
     printf("GetLocalCarrotHeading(): Global carrot from planner %f %f\n",
            local_carrot.x(), local_carrot.y());
   }
-  carrot = T_base_map + local_carrot;  // Transform carrot to global frame
+  if (global) {
+    // Rotate back to global frame
+    local_carrot = Rotation2Df(robot_angle_) * local_carrot;
+    carrot = T_base_map + local_carrot;  // Transform carrot to global frame
+  } else {
+    carrot = local_carrot;
+  }
 
   return true;
 }
@@ -1863,7 +1794,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
       /** Set local target */
       Vector2f carrot(0, 0);
-      bool foundCarrot = GetLocalCarrotHeading(carrot);
+      bool foundCarrot = GetLocalCarrotHeading(carrot, true);
       printf("Local carrot %f %f\n", carrot.x(), carrot.y());
       printf("Next GPS goal %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
       printf("Current Robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());
