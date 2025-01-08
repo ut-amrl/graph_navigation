@@ -52,8 +52,8 @@
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
-#include "geometry_msgs/TwistStamped.h"
 #include "geometry_msgs/TransformStamped.h"
+#include "geometry_msgs/TwistStamped.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "graph_navigation/graphNavSrv.h"
@@ -77,7 +77,6 @@
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
 #include "tf/transform_listener.h"
-
 #include "visualization/ros_visualization.h"
 #include "visualization/visualization.h"
 #include "visualization_msgs/MarkerArray.h"
@@ -96,10 +95,11 @@ using amrl_msgs::VisualizationMsg;
 using Eigen::Affine3f;
 using Eigen::Vector2f;
 using Eigen::Vector3f;
+using foxglove_msgs::GeoJSON;
 using geometry::kEpsilon;
-using geometry_msgs::TwistStamped;
-using geometry_msgs::TransformStamped;
 using geometry_msgs::PoseStamped;
+using geometry_msgs::TransformStamped;
+using geometry_msgs::TwistStamped;
 using graph_navigation::graphNavSrv;
 using math_util::DegToRad;
 using math_util::RadToDeg;
@@ -120,7 +120,6 @@ using std::string;
 using std::unordered_map;
 using std::vector;
 using visualization_msgs::MarkerArray;
-using foxglove_msgs::GeoJSON;
 
 const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 const string kOpenCVWindow = "Image window";
@@ -358,7 +357,8 @@ void PublishTF() {
   // Publish the transform from the map frame to the odom frame
   Odom odom;
   GPSPoint gps_loc;
-  if (!navigation_.GetInitialOdom(odom) || !navigation_.GetInitialGPS(gps_loc)) return;
+  if (!navigation_.GetInitialOdom(odom) || !navigation_.GetInitialGPS(gps_loc))
+    return;
   const auto T_odom_map = navigation_.OdometryToUTMTransform(odom, gps_loc);
 
   // Extract 2D translation (x, y) and rotation (theta) from the 2D transform
@@ -374,7 +374,7 @@ void PublishTF() {
   // Set the 3D translation
   transform_msg.transform.translation.x = translation_2d.x();
   transform_msg.transform.translation.y = translation_2d.y();
-  transform_msg.transform.translation.z = 0.0; // Assume z = 0 for 2D transform
+  transform_msg.transform.translation.z = 0.0;  // Assume z = 0 for 2D transform
 
   // Convert 2D rotation (theta) to a quaternion
   tf::Quaternion q = tf::createQuaternionFromYaw(theta);
@@ -743,9 +743,10 @@ void DrawPathOptions() {
   }
 
   // Create vector of colors for each path option (blue for all except best)
-  vector<vector<float> > colors(path_options.size(), {0.0, 0.0, 1.0, 1.0});
+  vector<vector<float>> colors(path_options.size(), {0.0, 0.0, 1.0, 1.0});
   colors[0] = {1.0, 0.0, 0.0, 1.0};
-  ros_visualization::PathOptionToMarkerArray(fox_path_pub_, "base_link", path_options, colors, false);
+  ros_visualization::PathOptionToMarkerArray(fox_path_pub_, "base_link",
+                                             path_options, colors, false);
 
   if (best_option != nullptr) {
     const ConstantCurvatureArc best_arc =
@@ -761,6 +762,8 @@ void PublishGlobalPlan() {
   bool is_plan_valid = navigation_.GetGlobalPlan(plan);
   if (is_plan_valid) {
     ros_visualization::GPSRouteToGeoJSON(geojson_pub_, plan);
+  } else {
+    ROS_WARN("Global plan is not valid. with path length %ld", plan.size());
   }
 }
 

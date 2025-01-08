@@ -979,7 +979,7 @@ bool Navigation::GetGlobalCarrot(Vector2f& carrot) {
 }
 
 bool Navigation::GetGlobalPlan(std::vector<GPSPoint>& plan) const {
-  if (!gps_nav_goals_loc_.empty()) return false;
+  if (gps_nav_goals_loc_.empty()) return false;
 
   plan = gps_nav_goals_loc_;
   return true;
@@ -1003,7 +1003,8 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
     const CarrotPlan& plan =
         carrot_planner_->GetCarrot(local_carrot, latest_odom_msg_);
     if (plan.path.empty()) return false;
-    local_carrot = plan.path[plan.path_idx];  // override local carrot with service planner
+    local_carrot =
+        plan.path[plan.path_idx];  // override local carrot with service planner
 
     printf("GetLocalCarrotHeading(): Global carrot from planner %f %f\n",
            local_carrot.x(), local_carrot.y());
