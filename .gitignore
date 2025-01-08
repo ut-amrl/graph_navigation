@@ -441,3 +441,4 @@ compile_commands.json
 
 # OSRM
 osrm*/**
+**/scripts/**
