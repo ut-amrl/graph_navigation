@@ -144,7 +144,7 @@ CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
-DEFINE_bool(simulate, true, "Simulate robot");
+DEFINE_bool(simulate, false, "Simulate robot");
 
 // DECLARE_int32(v);
 
@@ -655,7 +655,8 @@ void PublishPath() {
     CarrotPlan carrot_plan;
     bool foundCarrotPlan = navigation_.GetCarrotPlan(carrot_plan);
     if (foundCarrotPlan) {
-      ros_visualization::CarrotPlanToMarkerArray(carrot_plan_pub_, "base_link", carrot_plan);
+      ros_visualization::CarrotPlanToMarkerArray(carrot_plan_pub_, "base_link",
+                                                 carrot_plan);
     }
 
     bool foundGlobalCarrot = navigation_.GetGlobalCarrot(carrot);
@@ -1135,7 +1136,8 @@ int main(int argc, char** argv) {
 
   // ROS path publishers
   fox_path_pub_ = n.advertise<MarkerArray>("/navigation/path_rollouts", 1);
-  carrot_plan_pub_ = n.advertise<MarkerArray>("/navigation/carrot_path_rollout", 1);
+  carrot_plan_pub_ =
+      n.advertise<MarkerArray>("/navigation/carrot_path_rollout", 1);
 
   // Messages
   local_viz_msg_ =
@@ -1182,9 +1184,11 @@ int main(int argc, char** argv) {
   // std_msgs::Header viz_img_header;          // empty viz_img_header
   // viz_img_header.stamp = ros::Time::now();  // time
   // cv_bridge::CvImage viz_img;
-  // if (params.evaluator_type == "cost_map" || params.evaluator_type == "cost_map_service") {
+  // if (params.evaluator_type == "cost_map" || params.evaluator_type ==
+  // "cost_map_service") {
   //   viz_img =
-  //       cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8,
+  //       cv_bridge::CvImage(viz_img_header,
+  //       sensor_msgs::image_encodings::RGB8,
   //                          navigation_.GetVisualizationImage());
   // }
 
@@ -1247,7 +1251,8 @@ int main(int argc, char** argv) {
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
-      if (params.evaluator_type == "cost_map" || params.evaluator_type == "cost_map_service") {
+      if (params.evaluator_type == "cost_map" ||
+          params.evaluator_type == "cost_map_service") {
         cv_bridge::CvImage viz_img;
         viz_img.header.stamp = ros::Time::now();
         viz_img.encoding = sensor_msgs::image_encodings::BGR8;
