@@ -29,26 +29,26 @@ NavigationParameters = {
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
-  carrot_dist = 10.0;
+  carrot_dist = 5.0;
   system_latency = 0.24;
   obstacle_margin = 0.15;
-  num_options = 63;
+  num_options = 7;-- 63;
   robot_width = 0.44;
   robot_length = 0.5;
   robot_wheelbase = 0.26;
   base_link_offset = 0.1;
-  max_free_path_length = 10.0;
+  max_free_path_length = 8.0;
   max_clearance = 1.0; -- was 1.0
   can_traverse_stairs = false;
   use_map_speed = true;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(200);
+  local_fov = deg2rad(150);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
-  evaluator_type = "linear";
+  evaluator_type = "cost_map_service"; -- linear,  cost_map_service
   carrot_planner_type = "geometric"; -- geometric, service
   intermediate_goal_tolerance = 15; -- final goal distance will be half this (meters)
   max_inflation_radius = 1;
@@ -74,8 +74,23 @@ AckermannSampler = {
   clearance_path_clip_fraction = 0.05;
 };
 
--- LinearEvaluator = {
---   distance_weight = 1.0;
---   free_path_weight = 1.0;
---   clearance_weight = 1.0;
--- }
+DeepCostMapEvaluatorService = {
+  service_name = "/navigation/deep_cost_map_service";
+  patch_size_pixels = 1; 
+  bev_pixels_per_meter = 10;
+  min_cost = 0.0;
+  max_cost = 1.0;
+  discount_factor = 0.9;
+  rollout_density = 20;
+
+  dist_to_goal_weight = 0.0;
+  clearance_weight = 0.0;
+  clearance_weight_beta = 0.0;
+  fpl_weight = -0.00;
+  learned_weight = 5.0;
+  learned_weight_beta = 6.0;
+
+  -- visualization
+  viz_radius = 1;
+  viz_thickness = 1;
+};

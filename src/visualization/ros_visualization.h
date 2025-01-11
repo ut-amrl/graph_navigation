@@ -2,6 +2,7 @@
 #define ROS_VISUALIZATION_H
 
 #include <ros/ros.h>
+#include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
 #include <vector>
@@ -17,6 +18,7 @@
 using gps_util::GPSPoint;
 using json = nlohmann::json;
 using navigation::PathOption;
+using navigation::CarrotPlan;
 
 namespace ros_visualization {
 
@@ -158,6 +160,56 @@ void GPSRouteToGeoJSON(ros::Publisher& geojson_pub, const std::vector<GPSPoint>&
     // Publish the GeoJSON message
     geojson_pub.publish(geojson_msg);
 }
+
+void CarrotPlanToMarkerArray(ros::Publisher& marker_array_pub,
+                             const std::string& frame_id,
+                             const CarrotPlan& carrot_plan) {
+  // Create a MarkerArray and a single Marker for the line strip
+  visualization_msgs::MarkerArray marker_array;
+  visualization_msgs::Marker line_strip;
+
+  // Configure marker header
+  line_strip.header.frame_id = frame_id;
+  line_strip.header.stamp = ros::Time::now();
+
+  // Set a unique namespace and id for the marker
+  line_strip.ns = "carrot_path";
+  line_strip.id = 0;
+
+  // Use LINE_STRIP type to draw a connected line through all points
+  line_strip.type = visualization_msgs::Marker::LINE_STRIP;
+  line_strip.action = visualization_msgs::Marker::ADD;
+
+  // Set marker lifetime; 0 means forever
+  line_strip.lifetime = ros::Duration(0);
+
+  // Set line width (scale.x represents the width for LINE_STRIP markers)
+  line_strip.scale.x = 0.05;  // Adjust width as needed
+
+  // Set line color (RGBA) cyan
+  line_strip.color.r = 0.0f;
+  line_strip.color.g = 0.80f;
+  line_strip.color.b = 0.83f;
+  line_strip.color.a = 1.0f;  // Fully opaque
+
+  // Populate the points in the LINE_STRIP from the CarrotPlan
+  // Assuming CarrotPlan has a container of points with x, y coordinates.
+  for (const auto& path_point : carrot_plan.path) {
+    geometry_msgs::Point p;
+    // Convert path_point coordinates as needed
+    p.x = static_cast<double>(path_point.x());
+    p.y = static_cast<double>(path_point.y());
+    p.z = 0.0;  // If plan is 2D, set z to 0. Adjust if using 3D.
+    line_strip.points.push_back(p);
+  }
+
+  // Add the configured line strip marker to the marker array
+  marker_array.markers.push_back(line_strip);
+
+  // Publish the marker array
+  marker_array_pub.publish(marker_array);
+}
+\
 
 }  // namespace ros_visualization
 

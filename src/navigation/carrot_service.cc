@@ -10,6 +10,8 @@ using navigation::CarrotPlan;
 using navigation::Odom;
 using std::vector;
 
+DEFINE_double(carrot_radius, 8.0, "Radius of the carrot planner circle");
+
 // Constructor
 CarrotService::CarrotService(const std::string& service_name) {
   // Initialize the ROS service client
@@ -23,23 +25,38 @@ CarrotPlan CarrotService::GetCarrot(const Vector2f& local_waypoint,
     std::lock_guard<std::mutex> lock(mutex_);
     if (!service_request_ongoing_) {
       service_request_ongoing_ = true;
-      std::thread(&CarrotService::RequestCarrotUpdate, this, local_waypoint,
+      
+      // Project local_waypoint to a point on the circle around the robot
+      // float distance = local_waypoint.norm();
+      // Vector2f projected_waypoint;
+      // if (distance > 0.0f) {
+      //   projected_waypoint = FLAGS_carrot_radius * local_waypoint.normalized();
+      // } else {
+      //   // If the waypoint is at the origin, arbitrarily choose a direction.
+      //   projected_waypoint = Vector2f(FLAGS_carrot_radius, 0.0f);
+      // }
+      // printf("RequestCarrotUpdate start\n");
+      Vector2f projected_waypoint = local_waypoint;
+      std::thread(&CarrotService::RequestCarrotUpdate, this, projected_waypoint,
                   odom)
           .detach();
     }
   }
-
   // Transform the current path to the current odom frame
-  TransformCarrot(odom, latest_carrot_plan_);
-
-  return latest_carrot_plan_;
+  CarrotPlan carrot_plan;
+  TransformCarrot(odom, carrot_plan);
+  return carrot_plan;
 }
 
 void CarrotService::TransformCarrot(const Odom& odom, CarrotPlan& carrot_plan) {
   // Block until a carrot exists
   std::unique_lock<std::mutex> lock(mutex_);
   cv_.wait(lock, [this] { return has_carrot_; });
-
+  // Transform the path to the local frame at t''
+  CarrotPlan latest_carrot_plan;
+  latest_carrot_plan = latest_carrot_plan_;
+  lock.unlock();
+  
   // Transformations at time t0 and t1
   Eigen::Affine2f T_baset0_odom =
       latest_odom_.toAffine2f();  // Transformation from local @ t' to odom
@@ -49,8 +66,7 @@ void CarrotService::TransformCarrot(const Odom& odom, CarrotPlan& carrot_plan) {
   // Compute the relative transformation: local @ t' -> odom -> local @ t''
   Eigen::Affine2f T_baset0_baset1 = T_baset1_odom.inverse() * T_baset0_odom;
 
-  // Transform the path to the local frame at t''
-  for (const auto& point : latest_carrot_plan_.path) {
+  for (const auto& point : latest_carrot_plan.path) {
     // Transform local frame @ t' to odom frame, then to local frame @ t''
     carrot_plan.path.emplace_back(T_baset0_baset1 * point);
   }

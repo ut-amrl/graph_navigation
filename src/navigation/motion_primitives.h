@@ -26,6 +26,7 @@
 #include "math/line2d.h"
 #include "math/poses_2d.h"
 #include "navigation_parameters.h"
+#include "navigation_types.h"
 #include "opencv2/core/mat.hpp"
 
 #ifndef MOTION_PRIMITIVES_H
@@ -133,7 +134,8 @@ struct PathEvaluatorBase {
                       const Eigen::Vector2f& new_vel, const float new_ang_vel,
                       const Eigen::Vector2f& new_local_target,
                       const std::vector<Eigen::Vector2f>& new_point_cloud,
-                      const cv::Mat& new_image) {
+                      const cv::Mat& new_image,
+                      const navigation::Odom& new_odom) {
     curr_loc = new_loc;
     curr_ang = new_ang;
     vel = new_vel;
@@ -141,11 +143,16 @@ struct PathEvaluatorBase {
     local_target = new_local_target;
     point_cloud = new_point_cloud;
     image = new_image;
+    odom_ = new_odom;
   }
 
   // Return the best path rollout from the provided set of paths.
   virtual std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) = 0;
+
+  virtual std::vector<float> GetLearnedPathCosts() const {
+    return {};  // Empty vector by default
+  }
 
   // Current location
   Eigen::Vector2f curr_loc;
@@ -161,6 +168,8 @@ struct PathEvaluatorBase {
   std::vector<Eigen::Vector2f> point_cloud;
   // Latest image observation.
   cv::Mat image;
+  // Latest odometry message
+  navigation::Odom odom_;
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,

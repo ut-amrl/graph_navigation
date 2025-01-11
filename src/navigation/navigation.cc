@@ -38,6 +38,7 @@
 #include "amrl_msgs/Pose2Df.h"
 #include "astar.h"
 #include "deep_cost_map_evaluator.h"
+#include "deep_cost_map_evaluator_service.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "eight_connected_domain.h"
@@ -220,6 +221,8 @@ void Navigation::Initialize(const NavigationParameters& params,
     evaluator = (PathEvaluatorBase*)cost_map_evaluator;
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*)new LinearEvaluator();
+  } else if (params_.evaluator_type == "cost_map_service") {
+    evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(params_);
   } else {
     printf("Unknown evaluator type %s\n", params_.evaluator_type.c_str());
     exit(1);
@@ -986,10 +989,15 @@ bool Navigation::GetGlobalPlan(std::vector<GPSPoint>& plan) const {
 }
 
 bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
+  const bool kDebug = FLAGS_v > 1;
   if (gps_nav_goals_loc_.empty()) return false;
   if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size()))
     return false;
 
+  if (kDebug) {
+    printf("GetLocalCarrotHeading(): nav goal loc %f %f\n",
+                     nav_goal_loc_.x(), nav_goal_loc_.y());
+  }
   Vector2f T_goal_map = nav_goal_loc_;
   Vector2f T_base_map = robot_loc_;
 
@@ -999,12 +1007,18 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
   // Correct for heading to align with local frame
   local_carrot = Rotation2Df(-robot_angle_) * local_carrot;
 
+  CarrotPlan plan;
   if (carrot_planner_ != nullptr) {
-    const CarrotPlan& plan =
+    plan =
         carrot_planner_->GetCarrot(local_carrot, latest_odom_msg_);
     if (plan.path.empty()) return false;
     local_carrot =
         plan.path[plan.path_idx];  // override local carrot with service planner
+    printf("Carrot Path Start\n");
+    for (auto p : plan.path) {
+      printf("%f %f\n", p.x(), p.y());
+    }
+    printf("Carrot Path End\n");
 
     printf("GetLocalCarrotHeading(): Global carrot from planner %f %f\n",
            local_carrot.x(), local_carrot.y());
@@ -1013,8 +1027,16 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
     // Rotate back to global frame
     local_carrot = Rotation2Df(robot_angle_) * local_carrot;
     carrot = T_base_map + local_carrot;  // Transform carrot to global frame
+
+    // Update all the carrot points in the plan
+    for (auto plan_carrot : plan.path) {
+      plan_carrot = Rotation2Df(robot_angle_) * plan_carrot;
+      plan_carrot = T_base_map + plan_carrot;
+      latest_carrot_plan_.path.emplace_back(plan_carrot);
+    }
   } else {
     carrot = local_carrot;
+    latest_carrot_plan_ = plan;
   }
 
   return true;
@@ -1154,21 +1176,31 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     local_target = override_target_;
   }
 
+  // Handle evaluator specific updates
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_,
                    latest_image_);
   evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_,
-                     local_target, fp_point_cloud_, latest_image_);
+                     local_target, fp_point_cloud_, latest_image_, latest_odom_msg_);
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
-    printf("%lu options (fpl, length, curvature, clearance, dist_to_goal)\n",
+    std::vector<float> learned_costs;
+    if (params_.evaluator_type == "cost_map_service") {
+      learned_costs = evaluator_->GetLearnedPathCosts();
+    }
+    if (learned_costs.empty()) {
+      learned_costs = std::vector<float>(paths.size(), 0.0f);
+    }
+
+    printf("%lu options (fpl, length, curvature, clearance, dist_to_goal, learned_cost)\n",
            paths.size());
     int i = 0;
     for (auto p : paths) {
       float dist_to_goal = (p->EndPoint().translation - local_target).norm();
       ConstantCurvatureArc arc =
           *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f\n", i++, arc.fpl, arc.length,
-             arc.curvature, arc.clearance, dist_to_goal);
+      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f %7.3f\n", i, arc.fpl, arc.length,
+             arc.curvature, arc.clearance, dist_to_goal, learned_costs[i]);
+      i++;
     }
   }
   if (paths.size() == 0) {
@@ -1200,6 +1232,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   } else {
     num_unsolvable_iter = 0;
   }
+  if (debug) printf("Found best path\n");
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};
 
@@ -1212,6 +1245,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                          robot_vel_, robot_omega_, vel_cmd, ang_vel_cmd);
   last_options_ = paths;
   best_option_ = best_path;
+  if (debug) printf("Finished running obst av\n");
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
@@ -1382,6 +1416,9 @@ const cv::Mat& Navigation::GetVisualizationImage() {
   if (params_.evaluator_type == "cost_map") {
     return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())
         ->latest_vis_image_;
+  } else if (params_.evaluator_type == "cost_map_service") {
+    return dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
+        ->latest_vis_image_;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);
@@ -1404,6 +1441,18 @@ vector<ObstacleCost> Navigation::GetCostmapObstacles() {
 
 vector<ObstacleCost> Navigation::GetGlobalCostmapObstacles() {
   return global_costmap_obstacles_;
+}
+
+bool Navigation::GetCarrotPlan(CarrotPlan &plan) {
+  if (latest_carrot_plan_.path.empty()) return false;
+
+  // Transform carrot plan from global to local frame
+  for (const auto& p : latest_carrot_plan_.path) {
+    Vector2f plan_carrot = Rotation2Df(-robot_angle_) * (p - robot_loc_);
+    plan.path.push_back(plan_carrot);
+  }
+  plan.path_idx = 0;
+  return true;
 }
 
 Eigen::Vector2f Navigation::GetIntermediateGoal() { return intermediate_goal_; }
@@ -1771,7 +1820,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     case NavigationState::kGoto: {
       // Recompute global plan as necessary
       CHECK_GE(plan_path_.size(), 0u);
-
+      printf("Replanning to set next goal\n");
       /**
        * Conditions:
        *  1. If goal is invalid, replan global path.
@@ -1779,7 +1828,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
        */
       bool isGPSGoalValid = true;  // PlanStillValid();
       ReplanAndSetNextNavGoal(!isGPSGoalValid);
-
+      
       /** Run intermediate planner */
       if ((!params_.do_intermed && !PlanStillValid()) ||
           (params_.do_intermed &&
@@ -1792,13 +1841,14 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
         plan_path_ = Plan(robot_loc_, nav_goal_loc_);
       }
-
       /** Set local target */
       Vector2f carrot(0, 0);
       bool foundCarrot = GetLocalCarrotHeading(carrot, true);
-      printf("Local carrot %f %f\n", carrot.x(), carrot.y());
-      printf("Next GPS goal %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
-      printf("Current Robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());
+      if (kDebug) {
+        printf("Local carrot %f %f\n", carrot.x(), carrot.y());
+        printf("Next GPS goal %f %f\n", nav_goal_loc_.x(), nav_goal_loc_.y());
+        printf("Current Robot loc %f %f\n", robot_loc_.x(), robot_loc_.y());
+      }
       if (!foundCarrot) {
         Halt(cmd_vel, cmd_angle_vel);
         return false;

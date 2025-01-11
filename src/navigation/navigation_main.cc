@@ -144,6 +144,7 @@ CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(debug_images, false, "Show debug images");
+DEFINE_bool(simulate, true, "Simulate robot");
 
 // DECLARE_int32(v);
 
@@ -191,6 +192,7 @@ image_transport::Publisher viz_img_pub_;
 // ROS Publishers
 ros::Publisher geojson_pub_;  // GeoJSON publisher
 ros::Publisher fox_path_pub_;
+ros::Publisher carrot_plan_pub_;
 
 // Messages
 visualization_msgs::Marker line_list_marker_;
@@ -640,11 +642,20 @@ void PublishPath() {
       visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc,
                               0xA86032, global_viz_msg_);
     }
+
+    // Publish carrot
     Vector2f carrot;
     bool foundCarrot = navigation_.GetLocalCarrotHeading(carrot, false);
     if (foundCarrot) {
       // carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
       carrot_pub_.publish(CarrotToPoseStamped(carrot));
+    }
+
+    // Publish latest planned path
+    CarrotPlan carrot_plan;
+    bool foundCarrotPlan = navigation_.GetCarrotPlan(carrot_plan);
+    if (foundCarrotPlan) {
+      ros_visualization::CarrotPlanToMarkerArray(carrot_plan_pub_, "base_link", carrot_plan);
     }
 
     bool foundGlobalCarrot = navigation_.GetGlobalCarrot(carrot);
@@ -1113,7 +1124,7 @@ int main(int argc, char** argv) {
       "/navigation/mission_status", 1, true);  // Only publish
   status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
-  viz_img_pub_ = it_.advertise("vis_image", 1);
+  viz_img_pub_ = it_.advertise("/navigation/costmap_rollouts_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<PoseStamped>("carrot", 1, true);
@@ -1124,6 +1135,7 @@ int main(int argc, char** argv) {
 
   // ROS path publishers
   fox_path_pub_ = n.advertise<MarkerArray>("/navigation/path_rollouts", 1);
+  carrot_plan_pub_ = n.advertise<MarkerArray>("/navigation/carrot_path_rollout", 1);
 
   // Messages
   local_viz_msg_ =
@@ -1167,14 +1179,14 @@ int main(int argc, char** argv) {
   ros::Subscriber local_costmap_sub =
       n.subscribe("local_costmap", 1, &LocalCostmapCallback);
 
-  std_msgs::Header viz_img_header;          // empty viz_img_header
-  viz_img_header.stamp = ros::Time::now();  // time
-  cv_bridge::CvImage viz_img;
-  if (params.evaluator_type == "cost_map") {
-    viz_img =
-        cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8,
-                           navigation_.GetVisualizationImage());
-  }
+  // std_msgs::Header viz_img_header;          // empty viz_img_header
+  // viz_img_header.stamp = ros::Time::now();  // time
+  // cv_bridge::CvImage viz_img;
+  // if (params.evaluator_type == "cost_map" || params.evaluator_type == "cost_map_service") {
+  //   viz_img =
+  //       cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8,
+  //                          navigation_.GetVisualizationImage());
+  // }
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
@@ -1191,7 +1203,9 @@ int main(int argc, char** argv) {
         navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
 
     // Publish Nav Status
-    PublishTF();
+    if (!FLAGS_simulate) {
+      PublishTF();
+    }
     PublishNavStatus();
     PublishMissionStatus();
     PublishLocalization();
@@ -1233,7 +1247,10 @@ int main(int argc, char** argv) {
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
-      if (params.evaluator_type == "cost_map") {
+      if (params.evaluator_type == "cost_map" || params.evaluator_type == "cost_map_service") {
+        cv_bridge::CvImage viz_img;
+        viz_img.header.stamp = ros::Time::now();
+        viz_img.encoding = sensor_msgs::image_encodings::BGR8;
         viz_img.image = navigation_.GetVisualizationImage();
         viz_img_pub_.publish(viz_img.toImageMsg());
       }

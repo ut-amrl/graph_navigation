@@ -167,6 +167,7 @@ class Navigation {
   uint8_t GetNavStatusUint8();
   std::vector<Eigen::Vector2f> GetPredictedCloud();
   float GetCarrotDist();
+  bool GetCarrotPlan(CarrotPlan &plan);
   float GetObstacleMargin();
   bool GetRobotPose(Eigen::Vector3f& pose);
   float GetRobotWidth();
@@ -262,6 +263,7 @@ class Navigation {
 
   // Local carrot planner
   std::unique_ptr<CarrotBase> carrot_planner_;
+  CarrotPlan latest_carrot_plan_;
 
   NavigationState nav_state_;
 
