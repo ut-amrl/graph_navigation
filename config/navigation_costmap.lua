@@ -32,19 +32,19 @@ NavigationParameters = {
   carrot_dist = 5.0;
   system_latency = 0.24;
   obstacle_margin = 0.15;
-  num_options = 7;-- 63;
+  num_options = 63;-- 31, 63;
   robot_width = 0.44;
   robot_length = 0.5;
   robot_wheelbase = 0.26;
   base_link_offset = 0.1;
-  max_free_path_length = 8.0;
+  max_free_path_length = 3.0;
   max_clearance = 1.0; -- was 1.0
   can_traverse_stairs = false;
   use_map_speed = true;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(150);
+  local_fov = deg2rad(120);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
@@ -72,6 +72,7 @@ NavigationParameters = {
 AckermannSampler = {
   max_curvature = 2.5;
   clearance_path_clip_fraction = 0.05;
+  max_fov = deg2rad(120);
 };
 
 DeepCostMapEvaluatorService = {
@@ -81,14 +82,18 @@ DeepCostMapEvaluatorService = {
   min_cost = 0.0;
   max_cost = 1.0;
   discount_factor = 0.9;
-  rollout_density = 20;
+  rollout_density = 10;
 
-  dist_to_goal_weight = 0.0;
+  dist_to_goal_weight = 0.05;
   clearance_weight = 0.0;
-  clearance_weight_beta = 0.0;
-  fpl_weight = -0.00;
-  learned_weight = 5.0;
+  clearance_weight_beta = 1.0;
+  fpl_weight = -0.2;
+  learned_weight = 2.0;
   learned_weight_beta = 6.0;
+
+  -- physical params
+  base_link_offset_x = -0.2; -- m
+  base_link_offset_y = -0.25; -- m
 
   -- visualization
   viz_radius = 1;

@@ -30,7 +30,6 @@
 #include <vector>
 
 #include "amrl_msgs/CostmapSrv.h"
-#include "image_based_evaluator.h"
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
 #include "navigation_types.h"
@@ -60,6 +59,9 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
   void UpdateMap(const navigation::Odom& odom);
 
   std::vector<float> GetLearnedPathCosts() const override;
+
+  // Computes learned cost using weights
+  float ComputeLearnedCost(float cost);
 
   /**
    * Annotates the latest_costmap_ with intermediate points along each path
@@ -91,17 +93,21 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
   // Computes nonlinear clearance weight
   float ClearanceCost(const std::shared_ptr<PathRolloutBase>& path);
 
+  // Computes the pixel coordinates for each state on costmap
+  Eigen::Vector2f StateToPixel(
+    const pose_2d::Pose2Df& state, const cv::Mat1f& costmap);
+
+  bool ImageBoundCheck(const Eigen::Vector2i& pixel, const cv::Mat1f& costmap);
+
   // Called by UpdateMap to update map to local frame
   void UpdateMapToLocalFrame(const cv::Mat1f& costmap,
                              const navigation::Odom& prev_odom,
                              const navigation::Odom& odom);
 
-  float LearnedCost(float cost);
-
   // Returns sum of costs along each path
   std::vector<float> GetLearnedCosts(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
-      const cv::Mat1f& cost_map);
+      const cv::Mat1f& costmap);
 
   // Updates costmap
   void RequestMapUpdate(const navigation::Odom& odom);

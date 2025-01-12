@@ -43,6 +43,7 @@ using std::vector;
 using namespace math_util;
 
 CONFIG_FLOAT(max_curvature, "AckermannSampler.max_curvature");
+CONFIG_FLOAT(max_fov, "AckermannSampler.max_fov");
 CONFIG_FLOAT(clearance_clip, "AckermannSampler.clearance_path_clip_fraction");
 
 namespace {
@@ -62,7 +63,7 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
     return;
   }
   const float turn_radius = 1.0f / path.curvature;
-  const float quarter_circle_dist = fabs(turn_radius) * M_PI_2;
+  const float quarter_circle_dist = fabs(turn_radius) * CONFIG_max_fov;
   const Vector2f turn_center(0, turn_radius);
   const Vector2f target_radial = local_target - turn_center;
   const Vector2f middle_radial = fabs(turn_radius) * target_radial.normalized();

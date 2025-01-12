@@ -1186,6 +1186,11 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     std::vector<float> learned_costs;
     if (params_.evaluator_type == "cost_map_service") {
       learned_costs = evaluator_->GetLearnedPathCosts();
+      // for (size_t i = 0; i < learned_costs.size(); ++i) {
+      //   learned_costs[i] = dynamic_cast<DeepCostMapEvaluatorService*>(
+      //                         evaluator_.get())
+      //                         ->ComputeLearnedCost(learned_costs[i]);
+      // }
     }
     if (learned_costs.empty()) {
       learned_costs = std::vector<float>(paths.size(), 0.0f);

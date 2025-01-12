@@ -23,6 +23,10 @@ CONFIG_FLOAT(fpl_weight, "DeepCostMapEvaluatorService.fpl_weight");
 CONFIG_FLOAT(learned_weight, "DeepCostMapEvaluatorService.learned_weight");
 CONFIG_FLOAT(learned_weight_beta, "DeepCostMapEvaluatorService.learned_weight_beta");
 
+// PHYSICAL PARAMS
+CONFIG_FLOAT(base_link_offset_x, "DeepCostMapEvaluatorService.base_link_offset_x");
+CONFIG_FLOAT(base_link_offset_y, "DeepCostMapEvaluatorService.base_link_offset_y");
+
 // VISUALIZATION SETTINGs
 CONFIG_INT(viz_radius, "DeepCostMapEvaluatorService.viz_radius");
 CONFIG_INT(viz_thickness, "DeepCostMapEvaluatorService.viz_thickness");
@@ -102,7 +106,7 @@ std::shared_ptr<PathRolloutBase> DeepCostMapEvaluatorService::FindBest(
   float best_cost = CONFIG_dist_to_goal_weight * (best_path_length) + \
                     CONFIG_fpl_weight * best->Length() + \
                     ClearanceCost(best) + \
-                    LearnedCost(learned_path_costs[best_index]);
+                    ComputeLearnedCost(learned_path_costs[best_index]);
   path_costs_.resize(paths.size(), 0.0f);
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
@@ -112,7 +116,7 @@ std::shared_ptr<PathRolloutBase> DeepCostMapEvaluatorService::FindBest(
     const float cost =  ClearanceCost(paths[i]) + \
       CONFIG_dist_to_goal_weight * path_length + \
       CONFIG_fpl_weight * paths[i]->Length() + \
-      LearnedCost(learned_path_costs[i]);
+      ComputeLearnedCost(learned_path_costs[i]);
 
     path_costs_[i] = cost;
     if (cost < best_cost) {
@@ -130,12 +134,32 @@ float DeepCostMapEvaluatorService::ClearanceCost(const shared_ptr<PathRolloutBas
   return CONFIG_clearance_weight * exp(-CONFIG_clearance_weight_beta * path->Clearance());
 }
 
-float DeepCostMapEvaluatorService::LearnedCost(float cost) {
-  return CONFIG_learned_weight * exp(-CONFIG_learned_weight_beta * cost);
+float DeepCostMapEvaluatorService::ComputeLearnedCost(float cost) {
+  // printf("Learned cost: %f\n", cost);
+  // printf("Resulting cost: %f\n", CONFIG_learned_weight * exp(-CONFIG_learned_weight_beta * cost));
+  return CONFIG_learned_weight * cost;
 }
 
+Eigen::Vector2f DeepCostMapEvaluatorService::StateToPixel(
+    const pose_2d::Pose2Df& state, const cv::Mat1f& costmap) {
+  // Map the pose to pixel coordinates in the cost map.
+  // Assumption: world origin corresponds to the center of the image,
+  // and y-axis inversion because image coordinates have y increasing downward.
+  const Eigen::Vector2f P_image_robot(
+    (costmap.cols / 2) + CONFIG_base_link_offset_y * CONFIG_bev_pixels_per_meter, 
+    (costmap.rows / 2) + CONFIG_base_link_offset_x * CONFIG_bev_pixels_per_meter);
+  const Eigen::Vector2f& P_image_rel = 
+    Eigen::Vector2f(-state.translation(1), -state.translation(0)) * CONFIG_bev_pixels_per_meter;
+  const Eigen::Vector2f P_image = P_image_robot + P_image_rel;
+  return P_image;
+}
+
+ bool DeepCostMapEvaluatorService::ImageBoundCheck(const Eigen::Vector2i& pixel, const cv::Mat1f& costmap) {
+  return pixel.x() >= 0 && pixel.x() < costmap.cols && pixel.y() >= 0 && pixel.y() < costmap.rows;
+ }
+
 std::vector<float> DeepCostMapEvaluatorService::GetLearnedCosts(
-  const std::vector<std::shared_ptr<PathRolloutBase>>& paths, const cv::Mat1f& cost_map) {
+  const std::vector<std::shared_ptr<PathRolloutBase>>& paths, const cv::Mat1f& costmap) {
 
   // Iterate through each candidate path
   std::vector<float> learned_path_costs;
@@ -156,23 +180,37 @@ std::vector<float> DeepCostMapEvaluatorService::GetLearnedCosts(
       // Map the pose to pixel coordinates in the cost map.
       // Assumption: world origin corresponds to the center of the image,
       // and y-axis inversion because image coordinates have y increasing downward.
-      int px = static_cast<int>(-pose.translation(0) * CONFIG_bev_pixels_per_meter + cost_map.rows / 2);
-      int py = static_cast<int>(-pose.translation(1) * CONFIG_bev_pixels_per_meter + cost_map.cols / 2);
+      const auto& pixel = StateToPixel(pose, costmap).cast<int>();
 
       // Ensure pixel coordinates are within image bounds
-      if (px >= 0 && px < cost_map.rows && py >= 0 && py < cost_map.cols) {
-        float cost = cost_map(py, px);
+      if (ImageBoundCheck(pixel, costmap)) {
+        float cost = costmap.at<float>(pixel.y(), pixel.x());
 
         // Compute the discount based on distance along the path
         float discount = std::pow(CONFIG_discount_factor, f * path_length);
+        // float discount = std::pow(CONFIG_discount_factor, pose.translation.norm());
 
         // Accumulate the discounted cost
         total_cost += discount * cost;
       }
     }
-
+    
     // Store the total cost for the current path
     learned_path_costs.push_back(total_cost);
+  }
+
+  // Normalize learned costs from 0 to 1
+  float min_cost = *std::min_element(learned_path_costs.begin(), learned_path_costs.end());
+  float max_cost = *std::max_element(learned_path_costs.begin(), learned_path_costs.end());
+  for (auto& cost : learned_path_costs) {
+    cost = (cost - min_cost) / (max_cost - min_cost);
+    cost = exp(CONFIG_learned_weight_beta * cost);
+  } 
+  // Renoemalize costs to 0 - 1
+  min_cost = *std::min_element(learned_path_costs.begin(), learned_path_costs.end());
+  max_cost = *std::max_element(learned_path_costs.begin(), learned_path_costs.end());
+  for (auto& cost : learned_path_costs) {
+    cost = (cost - min_cost) / (max_cost - min_cost);
   }
 
   learned_path_costs_ = learned_path_costs;
@@ -252,7 +290,10 @@ void DeepCostMapEvaluatorService::RequestMapUpdate(const Odom& odom) {
         // Normalize costmap to 0 - 1
         cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
         cv::Mat1f costmap = cv_ptr->image;
-        cv::normalize(costmap, costmap, CONFIG_min_cost, CONFIG_max_cost, cv::NORM_MINMAX);
+
+        // Save costmap to image for visualization
+        // cv::imwrite("costmap.png", costmap);
+
         // Update shared cost map
         {
           std::lock_guard<std::mutex> lock(mutex_);
@@ -294,7 +335,6 @@ void DeepCostMapEvaluatorService::DrawPathCosts(
   cv::normalize(latest_costmap_, cost_map_scaled, 0, 255, cv::NORM_MINMAX);
   cv::applyColorMap(cost_map_scaled, latest_vis_image_, cv::COLORMAP_BONE);
 
-  // TODO: debug this and why all costs are red
   // Normalize all costs linearly to be within [0, 1]
   std::vector<float> normalized_path_costs(path_costs_);
   const auto minmax_costs =
@@ -304,8 +344,6 @@ void DeepCostMapEvaluatorService::DrawPathCosts(
   for (float& cost : normalized_path_costs) {
     cost = (cost - min_cost) / (max_cost - min_cost);
   }
-
-
   // Iterate through all paths and draw circles at the intermediate points.
   for (size_t i = 0; i < paths.size(); ++i) {
     const auto& path = paths[i];
@@ -313,7 +351,6 @@ void DeepCostMapEvaluatorService::DrawPathCosts(
 
     // Determine number of points to sample along the path.
     int num_samples = std::max(1, static_cast<int>(path->Length() * CONFIG_rollout_density));
-
     // Use a gradient color based on the cost of the path.
     cv::Vec3b color = GetColorFromCost(path_cost);
 
@@ -323,12 +360,11 @@ void DeepCostMapEvaluatorService::DrawPathCosts(
       pose_2d::Pose2Df pose = path->GetIntermediateState(f);
 
       // Map pose to pixel coordinates in the cost map.
-      int row = static_cast<int>(-pose.translation(0) * CONFIG_bev_pixels_per_meter + latest_costmap_.cols / 2);
-      int col = static_cast<int>(-pose.translation(1) * CONFIG_bev_pixels_per_meter + latest_costmap_.rows / 2);
+      const auto& pixel = StateToPixel(pose, latest_costmap_).cast<int>();
 
       // Ensure the pixel coordinates are within bounds before drawing.
-      if (row >= 0 && row < latest_vis_image_.rows && col >= 0 && col < latest_vis_image_.cols) {
-        cv::circle(latest_vis_image_, cv::Point(col, row), CONFIG_viz_radius, color, CONFIG_viz_thickness);
+      if (ImageBoundCheck(pixel, latest_costmap_)) {
+        cv::circle(latest_vis_image_, cv::Point(pixel.x(), pixel.y()), CONFIG_viz_radius, color, CONFIG_viz_thickness);
       }
     }
 
@@ -339,12 +375,10 @@ void DeepCostMapEvaluatorService::DrawPathCosts(
       for (int j = 0; j <= best_num_samples; ++j) {
         float f = static_cast<float>(j) / best_num_samples;
         pose_2d::Pose2Df pose = best_path->GetIntermediateState(f);
+        const auto& pixel = StateToPixel(pose, latest_costmap_).cast<int>();
 
-        int row = static_cast<int>(-pose.translation(0) * CONFIG_bev_pixels_per_meter + latest_costmap_.cols / 2);
-        int col = static_cast<int>(-pose.translation(1) * CONFIG_bev_pixels_per_meter + latest_costmap_.rows / 2);
-
-        if (row >= 0 && row < latest_vis_image_.rows && col >= 0 && col < latest_vis_image_.cols) {
-          cv::circle(latest_vis_image_, cv::Point(col, row), CONFIG_viz_radius, best_color, CONFIG_viz_thickness);
+        if (ImageBoundCheck(pixel, latest_costmap_)) {
+          cv::circle(latest_vis_image_, cv::Point(pixel.x(), pixel.y()), CONFIG_viz_radius, best_color, CONFIG_viz_thickness);
         }
       }
     }
