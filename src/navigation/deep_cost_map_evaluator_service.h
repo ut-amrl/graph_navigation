@@ -35,6 +35,7 @@
 #include "navigation_types.h"
 #include "ros/ros.h"
 #include "shared/util/timer.h"
+#include "shared/math/geometry.h"
 
 #ifndef DEEP_COST_MAP_EVALUATOR_SERVICE_H
 #define DEEP_COST_MAP_EVALUATOR_SERVICE_H
@@ -58,7 +59,17 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
   // was passed in
   void UpdateMap(const navigation::Odom& odom);
 
-  std::vector<float> GetLearnedPathCosts() const override;
+  // Returns learned cost of each path
+  std::vector<float> GetLearnedPathCosts() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return learned_path_costs_;
+  }
+
+  // Returns the cost of each path
+  std::vector<float> GetPathCosts() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return path_costs_;
+  }
 
   // Computes learned cost using weights
   float ComputeLearnedCost(float cost);
@@ -72,9 +83,19 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
    * calculated. Overwrites the latest_vis_image_ image.
    */
   void DrawPathCosts(const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
-                     std::shared_ptr<PathRolloutBase> best_path);
+                     int best_index);
 
-  cv::Mat3b latest_vis_image_;  // Latest visualization image
+  void UpdateImage(const cv::Mat& image);
+
+  cv::Mat GetAnnotatedBEVImage() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return latest_vis_bevimage_;
+  }
+  cv::Mat GetAnnotatedRGBImage() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return latest_vis_rgbimage_;
+  }
+
  private:
   ros::NodeHandle nh_;                 // ROS node handle
   ros::ServiceClient service_client_;  // ROS service client
@@ -85,19 +106,24 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
 
   std::vector<float> learned_path_costs_;  // Learned cost of each path
   std::vector<float> path_costs_;          // Cost of each path
+  cv::Mat3b latest_image_;             // Latest visualization image
   cv::Mat1f latest_costmap_;               // Latest cost map
   cv::Mat1f prev_costmap_;                 // Last up to date cost map
+  cv::Mat map1_, map2_;                    // Rectification maps
+  cv::Mat3b latest_vis_bevimage_;  // Latest bev visualization image
+  cv::Mat3b latest_vis_rgbimage_;  // Latest rgb vis image
+
   navigation::Odom prev_odom_;             // Last up to date odometry message
-  bool has_map_;                           // Indicates if a map exists
 
   // Computes nonlinear clearance weight
   float ClearanceCost(const std::shared_ptr<PathRolloutBase>& path);
 
   // Computes the pixel coordinates for each state on costmap
-  Eigen::Vector2f StateToPixel(
-    const pose_2d::Pose2Df& state, const cv::Mat1f& costmap);
+  Eigen::Vector2f StateToPixel(const Eigen::Vector2f& state);
 
-  bool ImageBoundCheck(const Eigen::Vector2i& pixel, const cv::Mat1f& costmap);
+  bool ImageBoundCheck(const Eigen::Vector2i& pixel, const cv::Mat& costmap);
+
+  std::vector<Eigen::Vector2f> GetWheelLocations(const pose_2d::Pose2Df& pose, float robot_width, float robot_length);
 
   // Called by UpdateMap to update map to local frame
   void UpdateMapToLocalFrame(const cv::Mat1f& costmap,
@@ -114,6 +140,17 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
 
   // Maps cost to colormap
   cv::Vec3b GetColorFromCost(float cost);
+
+  // Maps ranking to colormap
+  cv::Vec3b GetColorFromRanking(int rank, int num_paths);
+
+  // Crops and resizes image
+  cv::Mat CropAndResizeImage(const cv::Mat& input_img,
+                           const cv::Point& crop_center,
+                           int crop_width,
+                           int crop_height,
+                           int out_width,
+                           int out_height);
 };
 
 }  // namespace motion_primitives

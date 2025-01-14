@@ -50,6 +50,7 @@
 #include "motion_primitives.h"
 #include "nlohmann/json.hpp"
 #include "shared/math/math_util.h"
+#include "shared/math/geometry.h"
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
 #include "simple_queue.h"
@@ -615,6 +616,10 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
 void Navigation::ObserveImage(cv::Mat image, double time) {
   latest_image_ = image;
   t_image_ = time;
+  // Update latest image observation for cost map evaluators
+  if (params_.evaluator_type == "cost_map_service") {
+    dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())->UpdateImage(image);
+  }
 }
 
 vector<int> Navigation::GlobalPlan(const Vector2f& initial,
@@ -1184,27 +1189,25 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   auto paths = sampler_->GetSamples(params_.num_options);
   if (debug) {
     std::vector<float> learned_costs;
+    std::vector<float> path_costs;
     if (params_.evaluator_type == "cost_map_service") {
-      learned_costs = evaluator_->GetLearnedPathCosts();
-      // for (size_t i = 0; i < learned_costs.size(); ++i) {
-      //   learned_costs[i] = dynamic_cast<DeepCostMapEvaluatorService*>(
-      //                         evaluator_.get())
-      //                         ->ComputeLearnedCost(learned_costs[i]);
-      // }
+      learned_costs = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())->GetLearnedPathCosts();
+      path_costs = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())->GetPathCosts();
     }
-    if (learned_costs.empty()) {
+    if (learned_costs.empty() || path_costs.empty()) {
       learned_costs = std::vector<float>(paths.size(), 0.0f);
+      path_costs = std::vector<float>(paths.size(), 0.0f);
     }
-
-    printf("%lu options (fpl, length, curvature, clearance, dist_to_goal, learned_cost)\n",
+    printf("%lu options (fpl, length, curvature, clearance, dist_to_goal, angle_to_goal, learned_cost, path_cost)\n",
            paths.size());
     int i = 0;
     for (auto p : paths) {
       float dist_to_goal = (p->EndPoint().translation - local_target).norm();
+      float angle_to_goal = geometry::VectorAngle(local_target, p->EndPoint().translation);
       ConstantCurvatureArc arc =
           *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f %7.3f\n", i, arc.fpl, arc.length,
-             arc.curvature, arc.clearance, dist_to_goal, learned_costs[i]);
+      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f\n", i, arc.fpl, arc.length,
+             arc.curvature, arc.clearance, dist_to_goal, angle_to_goal, learned_costs[i], path_costs[i]);
       i++;
     }
   }
@@ -1417,17 +1420,22 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
   return last_options_;
 }
 
-const cv::Mat& Navigation::GetVisualizationImage() {
+bool Navigation::GetVisualizationImage(cv::Mat& image, cv::Mat& bev_image) {
   if (params_.evaluator_type == "cost_map") {
-    return dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())
+    image = dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())
         ->latest_vis_image_;
+    return true;
   } else if (params_.evaluator_type == "cost_map_service") {
-    return dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
-        ->latest_vis_image_;
+    image = dynamic_cast<DeepCostMapEvaluatorService*>(
+      evaluator_.get())->GetAnnotatedRGBImage();
+    bev_image = dynamic_cast<DeepCostMapEvaluatorService*>(
+      evaluator_.get())->GetAnnotatedBEVImage();
+    return true;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);
   }
+  return false;
 }
 
 std::shared_ptr<PathRolloutBase> Navigation::GetOption() {

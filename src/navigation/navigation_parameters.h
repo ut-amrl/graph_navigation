@@ -149,6 +149,9 @@ struct NavigationParameters {
   cv::Mat K;
   cv::Mat D;
   cv::Mat H;
+  cv::Mat R;
+  cv::Mat P;
+  cv::Mat W;
 
   // Default constructor, just set defaults.
   NavigationParameters()

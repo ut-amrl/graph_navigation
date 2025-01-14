@@ -188,6 +188,7 @@ ros::Publisher next_gps_goal_pub_;
 ros::Publisher localization_pub_;
 ros::Publisher mission_status_pub_;
 image_transport::Publisher viz_img_pub_;
+image_transport::Publisher viz_bev_img_pub_;
 
 // ROS Publishers
 ros::Publisher geojson_pub_;  // GeoJSON publisher
@@ -911,7 +912,10 @@ void PublishVisualizationMarkers() {
 int LoadCameraCalibrationCV(const std::string& calibration_file,
                             cv::Mat* camera_mat_ptr,
                             cv::Mat* dist_coeffs_cv_ptr,
-                            cv::Mat* homography_mat_ptr) {
+                            cv::Mat* homography_mat_ptr,
+                            cv::Mat* rectification_mat_ptr,
+                            cv::Mat* new_camera_mat_ptr,
+                            cv::Mat* projection_mat_ptr) {
   cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
 
   if (!camera_settings.isOpened()) {
@@ -941,6 +945,30 @@ int LoadCameraCalibrationCV(const std::string& calibration_file,
     *homography_mat_ptr = node.mat();
   } else {
     std::cerr << "Camera homography matrix not read! Check configuration file "
+                 "is in default yaml format.";
+  }
+
+  node = camera_settings["R"];
+  if (!node.empty() && rectification_mat_ptr != nullptr) {
+    *rectification_mat_ptr = node.mat();
+  } else {
+    std::cerr << "Camera rectification matrix not read! Check configuration "
+                 "file is in default yaml format.";
+  }
+
+  node = camera_settings["P"];
+  if (!node.empty() && new_camera_mat_ptr != nullptr) {
+    *new_camera_mat_ptr = node.mat();
+  } else {
+    std::cerr << "Camera new camera matrix not read! Check configuration file "
+                 "is in default yaml format.";
+  }
+
+  node = camera_settings["W"];
+  if (!node.empty() && projection_mat_ptr != nullptr) {
+    *projection_mat_ptr = node.mat();
+  } else {
+    std::cerr << "Camera projection matrix not read! Check configuration file "
                  "is in default yaml format.";
   }
 
@@ -1057,14 +1085,17 @@ void LoadConfig(navigation::NavigationParameters* params) {
   // TODO Rather than loading camera homography from a file, compute it from
   // camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K,
-                          &params->D, &params->H);
+                          &params->D, &params->H, &params->R, &params->P, &params->W);
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
   try {
-    cv_bridge::CvImagePtr image =
+    // Decode compressed image to cv::Mat
+    cv_bridge::CvImagePtr cv_ptr =
         cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-    last_image_ = image->image;
+
+    // Access the actual cv::Mat
+    last_image_ = cv_ptr->image;
   } catch (cv_bridge::Exception& e) {
     fprintf(stderr, "cv_bridge exception: %s\n", e.what());
     return;
@@ -1126,6 +1157,7 @@ int main(int argc, char** argv) {
   status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
   viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
   viz_img_pub_ = it_.advertise("/navigation/costmap_rollouts_image", 1);
+  viz_bev_img_pub_ = it_.advertise("/navigation/bev_costmap_rollouts_image", 1);
   fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
   path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
   carrot_pub_ = n.advertise<PoseStamped>("carrot", 1, true);
@@ -1180,17 +1212,6 @@ int main(int argc, char** argv) {
   ros::Subscriber gps_sub = n.subscribe(CONFIG_gps_topic, 1, &GPSCallback);
   ros::Subscriber local_costmap_sub =
       n.subscribe("local_costmap", 1, &LocalCostmapCallback);
-
-  // std_msgs::Header viz_img_header;          // empty viz_img_header
-  // viz_img_header.stamp = ros::Time::now();  // time
-  // cv_bridge::CvImage viz_img;
-  // if (params.evaluator_type == "cost_map" || params.evaluator_type ==
-  // "cost_map_service") {
-  //   viz_img =
-  //       cv_bridge::CvImage(viz_img_header,
-  //       sensor_msgs::image_encodings::RGB8,
-  //                          navigation_.GetVisualizationImage());
-  // }
 
   RateLoop loop(1.0 / params.dt);
   while (run_ && ros::ok()) {
@@ -1254,10 +1275,16 @@ int main(int argc, char** argv) {
       if (params.evaluator_type == "cost_map" ||
           params.evaluator_type == "cost_map_service") {
         cv_bridge::CvImage viz_img;
-        viz_img.header.stamp = ros::Time::now();
-        viz_img.encoding = sensor_msgs::image_encodings::BGR8;
-        viz_img.image = navigation_.GetVisualizationImage();
-        viz_img_pub_.publish(viz_img.toImageMsg());
+        cv_bridge::CvImage bev_viz_img;
+        bool result = navigation_.GetVisualizationImage(viz_img.image, bev_viz_img.image);
+        if (result) {
+          viz_img.header.stamp = ros::Time::now();
+          viz_img.encoding = sensor_msgs::image_encodings::BGR8;
+          viz_img_pub_.publish(viz_img.toImageMsg());
+          bev_viz_img.header.stamp = viz_img.header.stamp;
+          bev_viz_img.encoding = sensor_msgs::image_encodings::BGR8;
+          viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
+        }
       }
 
       // Publish Commands

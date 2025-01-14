@@ -172,7 +172,7 @@ class Navigation {
   bool GetRobotPose(Eigen::Vector3f& pose);
   float GetRobotWidth();
   float GetRobotLength();
-  const cv::Mat& GetVisualizationImage();
+  bool GetVisualizationImage(cv::Mat& image, cv::Mat& bev_image);
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
   GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();

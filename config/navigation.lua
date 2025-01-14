@@ -11,7 +11,7 @@ OSMPlannerParameters = {
 
 NavigationParameters = {
   laser_topics = {
-    "/scan",
+    -- "/scan",
     "/velodyne_2dscan_lowbeam",
     -- "/kinect_laserscan",
   };

@@ -170,6 +170,7 @@ struct PathEvaluatorBase {
   cv::Mat image;
   // Latest odometry message
   navigation::Odom odom_;
+
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits,
