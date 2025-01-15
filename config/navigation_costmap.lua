@@ -6,7 +6,7 @@ OSMPlannerParameters = {
   gps_topic = "/vectornav/GPSHeading";
   gps_goals_topic = "/gps_goals";
   osrm_file = "osrm_texas_cbf_mld/texas-latest.osrm";
-  osrm_path_resolution = 8; -- meters between GPS points
+  osrm_path_resolution = 10; -- meters between GPS points
 }
 
 NavigationParameters = {
@@ -94,8 +94,8 @@ DeepCostMapEvaluatorService = {
   discount_factor = 0.95;
   rollout_density = 3;
 
-  angle_weight = 0.15;
-  dist_to_goal_weight = 0.0;
+  angle_weight = 0.0;
+  dist_to_goal_weight = 0.1;
   clearance_weight = 0.0;
   clearance_weight_beta = 0.0;
   fpl_weight = -0.2;
