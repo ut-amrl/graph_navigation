@@ -743,6 +743,9 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
 void DrawPathOptions() {
   vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
       navigation_.GetLastPathOptions();
+  if (path_rollouts.empty()) {
+    return;
+  }
   auto path_options = ToOptions(path_rollouts);
   std::shared_ptr<PathRolloutBase> best_option = navigation_.GetOption();
   for (const auto& o : path_options) {
@@ -1085,7 +1088,8 @@ void LoadConfig(navigation::NavigationParameters* params) {
   // TODO Rather than loading camera homography from a file, compute it from
   // camera transformation info
   LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K,
-                          &params->D, &params->H, &params->R, &params->P, &params->W);
+                          &params->D, &params->H, &params->R, &params->P,
+                          &params->W);
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
@@ -1276,7 +1280,8 @@ int main(int argc, char** argv) {
           params.evaluator_type == "cost_map_service") {
         cv_bridge::CvImage viz_img;
         cv_bridge::CvImage bev_viz_img;
-        bool result = navigation_.GetVisualizationImage(viz_img.image, bev_viz_img.image);
+        bool result =
+            navigation_.GetVisualizationImage(viz_img.image, bev_viz_img.image);
         if (result) {
           viz_img.header.stamp = ros::Time::now();
           viz_img.encoding = sensor_msgs::image_encodings::BGR8;

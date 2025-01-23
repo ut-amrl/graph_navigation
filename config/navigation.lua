@@ -71,11 +71,14 @@ NavigationParameters = {
 
 AckermannSampler = {
   max_curvature = 2.5;
+  max_fov = deg2rad(120);
   clearance_path_clip_fraction = 0.05;
 };
 
--- LinearEvaluator = {
---   distance_weight = 1.0;
---   free_path_weight = 1.0;
---   clearance_weight = 1.0;
--- }
+LinearEvaluator = {
+  distance_weight = 2.0;
+  clearance_weight = 6.0;
+  free_path_weight = -20.0;
+  subopt = 0.0;
+  clearance_weight_beta = 5.0;
+}

@@ -49,8 +49,8 @@
 #include "linear_evaluator.h"
 #include "motion_primitives.h"
 #include "nlohmann/json.hpp"
-#include "shared/math/math_util.h"
 #include "shared/math/geometry.h"
+#include "shared/math/math_util.h"
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
 #include "simple_queue.h"
@@ -241,6 +241,8 @@ void Navigation::Initialize(const NavigationParameters& params,
     exit(1);
   }
   carrot_planner_ = std::unique_ptr<CarrotBase>(carrot_planner);
+  best_option_ = nullptr;
+  last_options_.clear();
 }
 
 void Navigation::InitializeOSM(const OSMPlannerParameters& params) {
@@ -618,7 +620,8 @@ void Navigation::ObserveImage(cv::Mat image, double time) {
   t_image_ = time;
   // Update latest image observation for cost map evaluators
   if (params_.evaluator_type == "cost_map_service") {
-    dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())->UpdateImage(image);
+    dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
+        ->UpdateImage(image);
   }
 }
 
@@ -1000,8 +1003,8 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
     return false;
 
   if (kDebug) {
-    printf("GetLocalCarrotHeading(): nav goal loc %f %f\n",
-                     nav_goal_loc_.x(), nav_goal_loc_.y());
+    printf("GetLocalCarrotHeading(): nav goal loc %f %f\n", nav_goal_loc_.x(),
+           nav_goal_loc_.y());
   }
   Vector2f T_goal_map = nav_goal_loc_;
   Vector2f T_base_map = robot_loc_;
@@ -1014,8 +1017,7 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
 
   CarrotPlan plan;
   if (carrot_planner_ != nullptr) {
-    plan =
-        carrot_planner_->GetCarrot(local_carrot, latest_odom_msg_);
+    plan = carrot_planner_->GetCarrot(local_carrot, latest_odom_msg_);
     if (plan.path.empty()) return false;
     local_carrot =
         plan.path[plan.path_idx];  // override local carrot with service planner
@@ -1185,39 +1187,49 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_,
                    latest_image_);
   evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_,
-                     local_target, fp_point_cloud_, latest_image_, latest_odom_msg_);
+                     local_target, fp_point_cloud_, latest_image_,
+                     latest_odom_msg_);
   auto paths = sampler_->GetSamples(params_.num_options);
-  if (debug) {
-    std::vector<float> learned_costs;
-    std::vector<float> path_costs;
-    if (params_.evaluator_type == "cost_map_service") {
-      learned_costs = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())->GetLearnedPathCosts();
-      path_costs = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())->GetPathCosts();
-    }
-    if (learned_costs.empty() || path_costs.empty()) {
-      learned_costs = std::vector<float>(paths.size(), 0.0f);
-      path_costs = std::vector<float>(paths.size(), 0.0f);
-    }
-    printf("%lu options (fpl, length, curvature, clearance, dist_to_goal, angle_to_goal, learned_cost, path_cost)\n",
-           paths.size());
-    int i = 0;
-    for (auto p : paths) {
-      float dist_to_goal = (p->EndPoint().translation - local_target).norm();
-      float angle_to_goal = geometry::VectorAngle(local_target, p->EndPoint().translation);
-      ConstantCurvatureArc arc =
-          *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f\n", i, arc.fpl, arc.length,
-             arc.curvature, arc.clearance, dist_to_goal, angle_to_goal, learned_costs[i], path_costs[i]);
-      i++;
-    }
-  }
   if (paths.size() == 0) {
     // No options, just stop.
     Halt(vel_cmd, ang_vel_cmd);
     if (debug) printf("No paths found\n");
     return;
   }
+  if (debug) {
+    std::vector<float> learned_costs;
+    std::vector<float> path_costs;
+    if (params_.evaluator_type == "cost_map_service") {
+      learned_costs =
+          dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
+              ->GetLearnedPathCosts();
+      path_costs = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
+                       ->GetPathCosts();
+    }
+    if (learned_costs.empty() || path_costs.empty()) {
+      learned_costs = std::vector<float>(paths.size(), 0.0f);
+      path_costs = std::vector<float>(paths.size(), 0.0f);
+    }
+    printf(
+        "%lu options (fpl, length, curvature, clearance, dist_to_goal, "
+        "angle_to_goal, learned_cost, path_cost)\n",
+        paths.size());
+    int i = 0;
+    for (auto p : paths) {
+      float dist_to_goal = (p->EndPoint().translation - local_target).norm();
+      float angle_to_goal =
+          geometry::VectorAngle(local_target, p->EndPoint().translation);
+      ConstantCurvatureArc arc =
+          *reinterpret_cast<ConstantCurvatureArc*>(p.get());
+      printf("%3d: %7.5f %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f\n", i,
+             arc.fpl, arc.length, arc.curvature, arc.clearance, dist_to_goal,
+             angle_to_goal, learned_costs[i], path_costs[i]);
+      i++;
+    }
+  }
   auto best_path = evaluator_->FindBest(paths);
+  // printf("RunObstacleAvoidance(): best_path is null %d\n",
+  //        best_path == nullptr);
   if (best_path == nullptr &&
       num_unsolvable_iter >= FLAGS_max_unsolvable_iterations) {
     if (debug) printf("No best path found\n");
@@ -1234,15 +1246,20 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     return;
   } else if (best_path == nullptr) {
     num_unsolvable_iter++;
-    // Simply execute last best path
+    // Simply execute last best path option if it exists
     best_path = best_option_;
-    if (debug) printf("No best path found, iter %d\n", num_unsolvable_iter);
+    if (debug) printf("No best path found, iter s%d\n", num_unsolvable_iter);
   } else {
     num_unsolvable_iter = 0;
   }
   if (debug) printf("Found best path\n");
   ang_vel_cmd = 0;
   vel_cmd = {0, 0};
+
+  if (best_path == nullptr) {
+    printf("Best option is null\n");
+    return;
+  }
 
   float max_map_speed = params_.linear_limits.max_speed;
   planning_domain_.GetClearanceAndSpeedFromLoc(robot_loc_, nullptr,
@@ -1423,13 +1440,13 @@ vector<std::shared_ptr<PathRolloutBase>> Navigation::GetLastPathOptions() {
 bool Navigation::GetVisualizationImage(cv::Mat& image, cv::Mat& bev_image) {
   if (params_.evaluator_type == "cost_map") {
     image = dynamic_cast<DeepCostMapEvaluator*>(evaluator_.get())
-        ->latest_vis_image_;
+                ->latest_vis_image_;
     return true;
   } else if (params_.evaluator_type == "cost_map_service") {
-    image = dynamic_cast<DeepCostMapEvaluatorService*>(
-      evaluator_.get())->GetAnnotatedRGBImage();
-    bev_image = dynamic_cast<DeepCostMapEvaluatorService*>(
-      evaluator_.get())->GetAnnotatedBEVImage();
+    image = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
+                ->GetAnnotatedRGBImage();
+    bev_image = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
+                    ->GetAnnotatedBEVImage();
     return true;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
@@ -1456,7 +1473,7 @@ vector<ObstacleCost> Navigation::GetGlobalCostmapObstacles() {
   return global_costmap_obstacles_;
 }
 
-bool Navigation::GetCarrotPlan(CarrotPlan &plan) {
+bool Navigation::GetCarrotPlan(CarrotPlan& plan) {
   if (latest_carrot_plan_.path.empty()) return false;
 
   // Transform carrot plan from global to local frame
@@ -1553,8 +1570,10 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     if (kDebug) printf("GPS translator not initialized\n");
     return false;
   }
+  printf("Navigation::Run() before forward predict\n");
 
   ForwardPredict(time + params_.system_latency);
+  printf("Navigation::Run() after forward predict\n");
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
     return true;
@@ -1841,7 +1860,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
        */
       bool isGPSGoalValid = true;  // PlanStillValid();
       ReplanAndSetNextNavGoal(!isGPSGoalValid);
-      
+
       /** Run intermediate planner */
       if ((!params_.do_intermed && !PlanStillValid()) ||
           (params_.do_intermed &&
@@ -1904,6 +1923,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
       } else {
         if (kDebug) printf("ObstAv\n");
         RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+        if (kDebug) printf("Finished ObstAv\n");
       }
     }
   } else if (nav_state_ == NavigationState::kTurnInPlace) {

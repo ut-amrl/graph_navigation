@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "ackermann_motion_primitives.h"
+#include "config_reader/config_reader.h"
 #include "constant_curvature_arcs.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
@@ -67,12 +68,17 @@ using namespace math_util;
 // DEFINE_double(subopt, 0.0, "Max path increase for clearance");
 // DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
 
-DEFINE_double(dw, 2.0, "Distance weight");
-DEFINE_double(cw, 6.0, "Clearance weight");
-DEFINE_double(fw, -20.0, "Free path weight");
-DEFINE_double(subopt, 0.0, "Max path increase for clearance");
-DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
+// DEFINE_double(dw, 2.0, "Distance weight");
+// DEFINE_double(cw, 6.0, "Clearance weight");
+// DEFINE_double(fw, -20.0, "Free path weight");
+// DEFINE_double(subopt, 0.0, "Max path increase for clearance");
+// DEFINE_double(cw_beta, 5.0, "Clearance weight beta");
 
+CONFIG_FLOAT(dw, "LinearEvaluator.distance_weight");
+CONFIG_FLOAT(cw, "LinearEvaluator.clearance_weight");
+CONFIG_FLOAT(fw, "LinearEvaluator.free_path_weight");
+CONFIG_FLOAT(subopt, "LinearEvaluator.subopt");
+CONFIG_FLOAT(cw_beta, "LinearEvaluator.clearance_weight_beta");
 namespace motion_primitives {
 
 shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
@@ -115,15 +121,15 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
   }
 
   // Next try to find better paths.
-  float best_cost = FLAGS_dw * (best_path_length) + FLAGS_fw * best->Length() +
-                    FLAGS_cw * ClearanceCost(best);
+  float best_cost = CONFIG_dw * (best_path_length) +
+                    CONFIG_fw * best->Length() + ClearanceCost(best);
   for (size_t i = 0; i < paths.size(); ++i) {
     if (paths[i]->Length() <= 0.0f) continue;
     const float path_length =
         (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i])
                              : dist_to_goal[i]);
-    const float cost = FLAGS_cw * ClearanceCost(paths[i]) +
-                       FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length();
+    const float cost = ClearanceCost(paths[i]) + CONFIG_dw * path_length +
+                       CONFIG_fw * paths[i]->Length();
     if (cost < best_cost) {
       best = paths[i];
       best_cost = cost;
@@ -133,23 +139,23 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(
 }
 
 float LinearEvaluator::ClearanceCost(const shared_ptr<PathRolloutBase> &path) {
-  return FLAGS_cw * exp(-FLAGS_cw_beta * path->Clearance());
+  return CONFIG_cw * exp(-CONFIG_cw_beta * path->Clearance());
 }
 
 void LinearEvaluator::SetClearanceWeight(const float &weight) {
-  FLAGS_cw = weight;
+  // Do nothing
 }
 
 void LinearEvaluator::SetDistanceWeight(const float &weight) {
-  FLAGS_dw = weight;
+  // Do nothing
 }
 
 void LinearEvaluator::SetFreePathWeight(const float &weight) {
-  FLAGS_fw = weight;
+  // Do nothing
 }
 
 void LinearEvaluator::SetSubOpt(const float &threshold) {
-  FLAGS_subopt = threshold;
+  // Do nothing
 }
 
 }  // namespace motion_primitives
