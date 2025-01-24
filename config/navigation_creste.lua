@@ -11,7 +11,7 @@ OSMPlannerParameters = {
 
 NavigationParameters = {
   laser_topics = {
-    "/scan",
+    -- "/scan",
     "/velodyne_2dscan_lowbeam",
     -- "/kinect_laserscan",
   };
@@ -44,13 +44,13 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(270);
+  local_fov = deg2rad(120);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_left_flir.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "cost_map_service"; -- linear,  cost_map_service
   carrot_planner_type = "geometric"; -- geometric, service
-  intermediate_goal_tolerance = 15; -- final goal distance will be half this (meters)
+  intermediate_goal_tolerance = 12; -- final goal distance will be half this (meters)
   max_inflation_radius = 1;
   min_inflation_radius = 0.3;
   local_costmap_resolution = 0.01; -- for bev homography
