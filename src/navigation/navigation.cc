@@ -997,7 +997,7 @@ bool Navigation::GetGlobalPlan(std::vector<GPSPoint>& plan) const {
 }
 
 bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
-  const bool kDebug = FLAGS_v > 1;
+  const bool kDebug = FLAGS_v > 3;
   if (gps_nav_goals_loc_.empty()) return false;
   if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size()))
     return false;
@@ -1021,15 +1021,16 @@ bool Navigation::GetLocalCarrotHeading(Vector2f& carrot, bool global) {
     if (plan.path.empty()) return false;
     local_carrot =
         plan.path[plan.path_idx];  // override local carrot with service planner
-    printf("Carrot Path Start\n");
+    // printf("Carrot Path Start\n");
     for (auto p : plan.path) {
       printf("%f %f\n", p.x(), p.y());
     }
-    printf("Carrot Path End\n");
+    // printf("Carrot Path End\n");
 
     printf("GetLocalCarrotHeading(): Global carrot from planner %f %f\n",
            local_carrot.x(), local_carrot.y());
   }
+
   if (global) {
     // Rotate back to global frame
     local_carrot = Rotation2Df(robot_angle_) * local_carrot;
@@ -1911,16 +1912,37 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     }
     // const float theta = atan2(local_target.y(), local_target.x());
 
+    // Handle local target edge cases
     if (local_target.squaredNorm() > Sq(params_.carrot_dist)) {
       local_target = params_.carrot_dist * local_target.normalized();
     }
 
+    bool isLocalTargetReached =
+        local_target.squaredNorm() < Sq(params_.target_dist_tolerance);
+
+    // TODO: Figure out why the robot_vel_ is always half of max even when we
+    // get close to local target
+    printf("Robot vel %f vel threshold %f\n", robot_vel_.squaredNorm(),
+           Sq(params_.target_vel_tolerance));
+    printf("Local target distance %f dist threshold %f\n",
+           local_target.squaredNorm(), Sq(params_.target_dist_tolerance));
+    printf("Is local target reached %d\n", isLocalTargetReached);
+
     // if (kDebug) printf("Theta to goal %f\n", theta);
     if (!FLAGS_no_local) {
-      if (!isGoalInFOV) {
+      /**
+       * Case 1: If local target is reached -> Halt!
+       * Case 2: Goal is not in FOV and local target is not reached ->
+       * TurnInPlace! Case 3: Goal is in FOV and local target is not reached ->
+       * Run!
+       */
+      if (isLocalTargetReached) {
+        if (kDebug) printf("Local target reached\n");
+        Halt(cmd_vel, cmd_angle_vel);
+      } else if (!isGoalInFOV) {
         if (kDebug) printf("TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
-      } else {
+      } else if (isGoalInFOV) {
         if (kDebug) printf("ObstAv\n");
         RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
         if (kDebug) printf("Finished ObstAv\n");

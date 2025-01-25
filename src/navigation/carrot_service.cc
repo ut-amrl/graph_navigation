@@ -25,12 +25,13 @@ CarrotPlan CarrotService::GetCarrot(const Vector2f& local_waypoint,
     std::lock_guard<std::mutex> lock(mutex_);
     if (!service_request_ongoing_) {
       service_request_ongoing_ = true;
-      
+
       // Project local_waypoint to a point on the circle around the robot
       // float distance = local_waypoint.norm();
       // Vector2f projected_waypoint;
       // if (distance > 0.0f) {
-      //   projected_waypoint = FLAGS_carrot_radius * local_waypoint.normalized();
+      //   projected_waypoint = FLAGS_carrot_radius *
+      //   local_waypoint.normalized();
       // } else {
       //   // If the waypoint is at the origin, arbitrarily choose a direction.
       //   projected_waypoint = Vector2f(FLAGS_carrot_radius, 0.0f);
@@ -52,11 +53,12 @@ void CarrotService::TransformCarrot(const Odom& odom, CarrotPlan& carrot_plan) {
   // Block until a carrot exists
   std::unique_lock<std::mutex> lock(mutex_);
   cv_.wait(lock, [this] { return has_carrot_; });
+
   // Transform the path to the local frame at t''
   CarrotPlan latest_carrot_plan;
   latest_carrot_plan = latest_carrot_plan_;
   lock.unlock();
-  
+
   // Transformations at time t0 and t1
   Eigen::Affine2f T_baset0_odom =
       latest_odom_.toAffine2f();  // Transformation from local @ t' to odom
@@ -80,7 +82,7 @@ void CarrotService::RequestCarrotUpdate(const Vector2f& local_waypoint,
 
     // Prepare service request
     srv.request.carrot.header.stamp = ros::Time::now();
-    srv.request.carrot.header.frame_id = "map";
+    srv.request.carrot.header.frame_id = "base_link";
     srv.request.carrot.pose.position.x = local_waypoint.x();
     srv.request.carrot.pose.position.y = local_waypoint.y();
     srv.request.carrot.pose.position.z = 0.0;
@@ -110,7 +112,7 @@ void CarrotService::RequestCarrotUpdate(const Vector2f& local_waypoint,
         // printf("Service call successful\n");
         cv_.notify_all();
       } else {
-        ROS_ERROR("Carrot planner service failed to compute a valid plan");
+        ROS_ERROR("Carrot planner service returned an empty path");
       }
     } else {
       ROS_ERROR("Failed to call carrot planner service");

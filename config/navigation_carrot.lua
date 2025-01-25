@@ -11,7 +11,7 @@ OSMPlannerParameters = {
 
 NavigationParameters = {
   laser_topics = {
-    -- "/scan",
+    "/scan",
     "/velodyne_2dscan_lowbeam",
     -- "/kinect_laserscan",
   };
@@ -41,7 +41,7 @@ NavigationParameters = {
   max_clearance = 1.0; -- was 1.0
   can_traverse_stairs = false;
   use_map_speed = true;
-  target_dist_tolerance = 0.1;
+  target_dist_tolerance = 0.5; -- for local target threshold
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
   local_fov = deg2rad(120);
