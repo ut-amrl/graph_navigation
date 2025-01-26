@@ -98,7 +98,7 @@ DeepCostMapEvaluatorService = {
   dist_to_goal_weight = 0.1;
   clearance_weight = 0.0;
   clearance_weight_beta = 0.0;
-  fpl_weight = -0.1;
+  fpl_weight = -0.5;
   learned_weight = 1.0;
   learned_weight_beta = 1.5;
 
