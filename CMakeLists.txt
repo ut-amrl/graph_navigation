@@ -83,6 +83,7 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/deep_cost_map_evaluator_service.cc
                         src/navigation/image_based_evaluator.cc
                         src/navigation/carrot_service.cc
+                        src/navigation/terrain_evaluator.cc
                         )
 TARGET_LINK_LIBRARIES(navigation 
     shared_library 
@@ -92,10 +93,17 @@ TARGET_LINK_LIBRARIES(navigation
     ${LibOSRM_LIBRARIES} 
     ${LibOSRM_DEPENDENT_LIBRARIES})
 
-ADD_EXECUTABLE(streetmap_test src/navigation/streetmap_planner.cc)
-TARGET_LINK_LIBRARIES(streetmap_test 
-    ${libs} 
-    ${LibOSRM_LIBRARIES} 
-    ${LibOSRM_DEPENDENT_LIBRARIES})
+ROSBUILD_ADD_EXECUTABLE(image_to_bev_node
+            src/navigation/bev_image_node_main.cc)
+TARGET_LINK_LIBRARIES(image_to_bev_node
+    shared_library
+    ${libs}
+    ${OpenCV_LIBS})
+
+# ADD_EXECUTABLE(streetmap_test src/navigation/streetmap_planner.cc)
+# TARGET_LINK_LIBRARIES(streetmap_test 
+#     ${libs} 
+#     ${LibOSRM_LIBRARIES} 
+#     ${LibOSRM_DEPENDENT_LIBRARIES})
 
 add_dependencies(navigation ${catkin_EXPORTED_TARGETS})

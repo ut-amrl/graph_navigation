@@ -1277,18 +1277,24 @@ int main(int argc, char** argv) {
       viz_pub_.publish(local_viz_msg_);
       viz_pub_.publish(global_viz_msg_);
       if (params.evaluator_type == "cost_map" ||
-          params.evaluator_type == "cost_map_service") {
+          params.evaluator_type == "cost_map_service" ||
+          params.evaluator_type == "terrain2") {
         cv_bridge::CvImage viz_img;
         cv_bridge::CvImage bev_viz_img;
         bool result =
             navigation_.GetVisualizationImage(viz_img.image, bev_viz_img.image);
         if (result) {
-          viz_img.header.stamp = ros::Time::now();
-          viz_img.encoding = sensor_msgs::image_encodings::BGR8;
-          viz_img_pub_.publish(viz_img.toImageMsg());
-          bev_viz_img.header.stamp = viz_img.header.stamp;
-          bev_viz_img.encoding = sensor_msgs::image_encodings::BGR8;
-          viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
+          if (!viz_img.image.empty()) {
+            viz_img.header.stamp = ros::Time::now();
+            viz_img.encoding = sensor_msgs::image_encodings::BGR8;
+            viz_img_pub_.publish(viz_img.toImageMsg());
+          }
+
+          if (!bev_viz_img.image.empty()) {
+            bev_viz_img.header.stamp = viz_img.header.stamp;
+            bev_viz_img.encoding = sensor_msgs::image_encodings::BGR8;
+            viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
+          } 
         }
       }
 

@@ -39,6 +39,8 @@
 #include "astar.h"
 #include "deep_cost_map_evaluator.h"
 #include "deep_cost_map_evaluator_service.h"
+#include "terrain_evaluator.h"
+#include "terrain_evaluator2.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "eight_connected_domain.h"
@@ -224,6 +226,8 @@ void Navigation::Initialize(const NavigationParameters& params,
     evaluator = (PathEvaluatorBase*)new LinearEvaluator();
   } else if (params_.evaluator_type == "cost_map_service") {
     evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(params_);
+  } else if (params_.evaluator_type == "terrain2") {
+    evaluator = (PathEvaluatorBase*)new CustomTerrainEvaluator();
   } else {
     printf("Unknown evaluator type %s\n", params_.evaluator_type.c_str());
     exit(1);
@@ -1183,7 +1187,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   if (nav_state_ == NavigationState::kOverride) {
     local_target = override_target_;
   }
-
   // Handle evaluator specific updates
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_,
                    latest_image_);
@@ -1449,6 +1452,8 @@ bool Navigation::GetVisualizationImage(cv::Mat& image, cv::Mat& bev_image) {
     bev_image = dynamic_cast<DeepCostMapEvaluatorService*>(evaluator_.get())
                     ->GetAnnotatedBEVImage();
     return true;
+  } else if (params_.evaluator_type == "terrain2") {
+    bev_image = dynamic_cast<TerrainEvaluator*>(evaluator_.get())->latest_vis_image_;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;
     exit(1);

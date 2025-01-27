@@ -19,7 +19,7 @@ NavigationParameters = {
   -- odom_topic = "/jackal_velocity_controller/odom";
   odom_topic = "/odometry/filtered";
   localization_topic = "localization";
-  image_topic = "/stereo/left/image_raw/compressed";
+  image_topic = "/bev_image";
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
   dt = 0.060;
@@ -75,6 +75,14 @@ AckermannSampler = {
   clearance_path_clip_fraction = 0.8;
 };
 
+ImageToBEVParameters = {
+  image_topic = "/stereo/left/image_raw/compressed";
+  bev_topic = "/bev_image";
+  bev_image_height = 640;
+  bev_image_width = 1280;
+  calibration_file = "config/camera_calibration_left_flir.yaml";
+};
+
 TerrainEvaluator = {
   patch_size_pixels = 1;
   bev_pixels_per_meter = 100;
@@ -85,7 +93,7 @@ TerrainEvaluator = {
   rollout_density = 10;
 
   model_path = "../terrain_models/model.pt";
-  context_path="../terrain_models/context.pt";
+  context_path="../terrain_models/concrete_peb_mulch.pt";
 
   -- dist_to_goal_weight = -0.2;
   -- dist_to_goal_weight = -0.7;
