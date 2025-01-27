@@ -6,7 +6,7 @@ OSMPlannerParameters = {
   gps_topic = "/vectornav/GPSHeading";
   gps_goals_topic = "/gps_goals";
   osrm_file = "osrm_texas_cbf_mld/texas-latest.osrm";
-  osrm_path_resolution = 8; -- meters between GPS points
+  osrm_path_resolution = 10; -- meters between GPS points
 }
 
 NavigationParameters = {
@@ -44,7 +44,7 @@ NavigationParameters = {
   target_dist_tolerance = 0.5; -- for local target threshold
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(120);
+  local_fov = deg2rad(150);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
