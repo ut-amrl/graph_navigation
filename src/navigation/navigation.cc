@@ -227,6 +227,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   } else if (params_.evaluator_type == "cost_map_service") {
     evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(params_);
   } else if (params_.evaluator_type == "terrain2") {
+    printf("Using Terrain2 Evaluator\n");
     evaluator = (PathEvaluatorBase*)new CustomTerrainEvaluator();
   } else {
     printf("Unknown evaluator type %s\n", params_.evaluator_type.c_str());
