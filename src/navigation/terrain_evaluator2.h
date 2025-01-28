@@ -1,16 +1,17 @@
-#include "terrain_evaluator.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "terrain_evaluator.h"
 
-DEFINE_int32(cost_map_shift, 100, "Shift to apply to cost map to get it to the correct start position");
+DEFINE_int32(
+    cost_map_shift, 100,
+    "Shift to apply to cost map to get it to the correct start position");
 
 namespace motion_primitives {
 CONFIG_STRING(context_path, "TerrainEvaluator.context_path");
 
-
 class CustomTerrainEvaluator : public TerrainEvaluator {
  public:
- torch::Tensor context_tensor_;
+  torch::Tensor context_tensor_;
   CustomTerrainEvaluator() : TerrainEvaluator() {
     // todo: store the context as private variable
     printf("Loading context tensor from %s\n", CONFIG_context_path.c_str());
@@ -18,117 +19,117 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
     context_tensor_ = tensors.run_method("return_tensor").toTensor();
   }
 
+  // latest bev image 749 1476
+  // latest bev image channels 3
+  // Image min: 0
+  // Image max: 255
 
-
-// latest bev image 749 1476
-// latest bev image channels 3
-// Image min: 0
-// Image max: 255
-
-cv::Mat1f GetScalarCostImage(const cv::Mat3b& bev_image) override {
+  cv::Mat1f GetScalarCostImage(const cv::Mat3b& bev_image) override {
     // print here
     // std::cout << "Custom GetScalarCostImage" << std::endl;
     cv::Mat3b latest_bev_image = image.clone();
     // print the shape
-    std::cout << "latest bev image " << latest_bev_image.rows << " " << latest_bev_image.cols << std::endl;
+    // std::cout << "latest bev image " << latest_bev_image.rows << " "
+    //           << latest_bev_image.cols << std::endl;
     int rows = latest_bev_image.rows;
     int cols = latest_bev_image.cols;
     // print the number of channels
-    std::cout << "latest bev image channels " << latest_bev_image.channels() << std::endl;
+    // std::cout << "latest bev image channels " << latest_bev_image.channels()
+    //           << std::endl;
 
     // for debugging
-    cv::Mat1f scalar_cost_map(rows, cols);
+    // cv::Mat1f scalar_cost_map(rows, cols);
     // make the left half of the image black and the right half white
-    for (int i = 0; i < scalar_cost_map.rows; i++) {
-      for (int j = 0; j < scalar_cost_map.cols; j++) {
-        if (j < scalar_cost_map.cols / 2) {
-          scalar_cost_map.at<float>(i, j) = 0;
-        } else {
-          scalar_cost_map.at<float>(i, j) = 1;
-        }
-      }
-    }
+    // for (int i = 0; i < scalar_cost_map.rows; i++) {
+    //   for (int j = 0; j < scalar_cost_map.cols; j++) {
+    //     if (j < scalar_cost_map.cols / 2) {
+    //       scalar_cost_map.at<float>(i, j) = 0;
+    //     } else {
+    //       scalar_cost_map.at<float>(i, j) = 1;
+    //     }
+    //   }
+    // }
 
     // write the latest_bev_image to a file
-    cv::imwrite("latest_bev_image.png", latest_bev_image);
+    // cv::imwrite("latest_bev_image.png", latest_bev_image);
     // write the scalar_cost_map to a file
-    cv::imwrite("scalar_cost_map.png", scalar_cost_map*255);
+    // cv::imwrite("scalar_cost_map.png", scalar_cost_map*255);
     // return scalar_cost_map;
-
 
     // resize the image
     cv::resize(latest_bev_image, latest_bev_image, cv::Size(256, 128));
 
     // swap the channels bgr to rgb
     cv::cvtColor(latest_bev_image, latest_bev_image, cv::COLOR_BGR2RGB);
-    auto img_tensor = torch::from_blob(latest_bev_image.data, {1, latest_bev_image.rows, latest_bev_image.cols, 3}, torch::kByte);
+    auto img_tensor = torch::from_blob(
+        latest_bev_image.data,
+        {1, latest_bev_image.rows, latest_bev_image.cols, 3}, torch::kByte);
     img_tensor = img_tensor.permute({0, 3, 1, 2});
     // convert to float between 0 and 1
     img_tensor = img_tensor.to(torch::kFloat32);
     img_tensor = img_tensor / 255.0;
 
     // print the context shape
-    std::cout << "Context shape: ";
-    for (auto& size : context_tensor_.sizes()) {
-    std::cout << size << " ";
-    }
-    std::cout << std::endl;
-    
+    // std::cout << "Context shape: ";
+    // for (auto& size : context_tensor_.sizes()) {
+    // std::cout << size << " ";
+    // }
+    // std::cout << std::endl;
 
     // print the shape
-    std::cout << "Image shape: ";
-    for (auto& size : img_tensor.sizes()) {
-    std::cout << size << " ";
-    }
+    // std::cout << "Image shape: ";
+    // for (auto& size : img_tensor.sizes()) {
+    //   std::cout << size << " ";
+    // }
 
     // print the min and max
     std::cout << std::endl;
-    std::cout << "Image min: " << img_tensor.min().item<float>() << std::endl;
-    std::cout << "Image max: " << img_tensor.max().item<float>() << std::endl;
-
+    // std::cout << "Image min: " << img_tensor.min().item<float>() <<
+    // std::endl; std::cout << "Image max: " << img_tensor.max().item<float>()
+    // << std::endl;
 
     std::vector<torch::jit::IValue> inputs;
     inputs.push_back(context_tensor_.to(torch_device_));
     inputs.push_back(img_tensor.to(torch_device_));
-    
+
     torch::NoGradGuard no_grad;
-    std::cout << "GetScalarCostImage() running model forward pass" << std::endl;
-    // Run the model with the inputs
+    // std::cout << "GetScalarCostImage() running model forward pass" <<
+    // std::endl; Run the model with the inputs
     auto output = cost_model_.forward(inputs).toTensor();
-    std::cout << "GetScalarCostImage() model forward pass done" << std::endl;
+    // std::cout << "GetScalarCostImage() model forward pass done" << std::endl;
     // apply sigmoid to the output
     output = torch::sigmoid(output).to(torch::kCPU);
 
-    
     // Print the shape of the output
-    std::cout << "Output shape: ";
-    for (auto& size : output.sizes()) {
-    std::cout << size << " ";
-    }
-    std::cout << std::endl;
+    // std::cout << "Output shape: ";
+    // for (auto& size : output.sizes()) {
+    //   std::cout << size << " ";
+    // }
+    // std::cout << std::endl;
 
     // Print the min and max of the output
-    std::cout << "Output min: " << output.min().item<float>() << std::endl;
-    std::cout << "Output max: " << output.max().item<float>() << std::endl;
+    // std::cout << "Output min: " << output.min().item<float>() << std::endl;
+    // std::cout << "Output max: " << output.max().item<float>() << std::endl;
 
     // Convert the output to a cv::Mat
-    // cv::Mat1f scalar_cost_map(output.size(2), output.size(3));
+    cv::Mat1f scalar_cost_map(output.size(2), output.size(3));
     scalar_cost_map = cv::Mat1f(output.size(2), output.size(3));
-    std::memcpy(scalar_cost_map.data, output.data_ptr(), output.numel() * sizeof(float));
+    std::memcpy(scalar_cost_map.data, output.data_ptr(),
+                output.numel() * sizeof(float));
 
     // resize the scalar_cost_map to the original size
     cv::resize(scalar_cost_map, scalar_cost_map, cv::Size(cols, rows));
     // print the new size
-    // std::cout << "Scalar cost map size: " << scalar_cost_map.rows << " " << scalar_cost_map.cols << std::endl;
+    // std::cout << "Scalar cost map size: " << scalar_cost_map.rows << " " <<
+    // scalar_cost_map.cols << std::endl;
 
     // Shift costmap down n pixels
-    cv::Mat M = (cv::Mat_<double>(2, 3) << 
-              1, 0, 0,    // x' = x + 0
-              0, 1, FLAGS_cost_map_shift);  // y' = y + shift_y
+    cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0,  // x' = x + 0
+                 0, 1, FLAGS_cost_map_shift);        // y' = y + shift_y
     cv::warpAffine(scalar_cost_map, scalar_cost_map, M, scalar_cost_map.size(),
-               cv::INTER_NEAREST,      // fast (nearest-neighbor) interpolation
-               cv::BORDER_CONSTANT,    // fill outside area with a constant
-               cv::Scalar(0));        // fill with 0 (or any constant you need)
+                   cv::INTER_NEAREST,  // fast (nearest-neighbor) interpolation
+                   cv::BORDER_CONSTANT,  // fill outside area with a constant
+                   cv::Scalar(0));  // fill with 0 (or any constant you need)
 
     // // write the latest_bev_image to a file
     // cv::imwrite("latest_bev_image.png", latest_bev_image);
@@ -137,8 +138,6 @@ cv::Mat1f GetScalarCostImage(const cv::Mat3b& bev_image) override {
 
     // return the output
     return scalar_cost_map;
-
-    
   }
 };
 
