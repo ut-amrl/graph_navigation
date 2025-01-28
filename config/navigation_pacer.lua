@@ -19,7 +19,7 @@ NavigationParameters = {
   -- odom_topic = "/jackal_velocity_controller/odom";
   odom_topic = "/odometry/filtered";
   localization_topic = "localization";
-  image_topic = "/bev_image";
+  image_topic = "/bev_image"; -- TODO: change back
   init_topic = "initialpose";
   enable_topic = "autonomy_arbiter/enabled";
   dt = 0.060;
@@ -37,7 +37,7 @@ NavigationParameters = {
   robot_length = 0.5;
   robot_wheelbase = 0.26;
   base_link_offset = 0.1;
-  max_free_path_length = 4.0;
+  max_free_path_length = 5.0;
   max_clearance = 1.0; -- was 1.0
   can_traverse_stairs = false;
   use_map_speed = true;
@@ -77,7 +77,7 @@ AckermannSampler = {
 
 ImageToBEVParameters = {
   image_topic = "/stereo/left/image_raw/compressed";
-  bev_topic = "/bev_image";
+  bev_topic = "/bev_image"; -- TODO change back
   bev_image_height = 640;
   bev_image_width = 1280;
   calibration_file = "config/camera_calibration_left_flir.yaml";
@@ -88,19 +88,22 @@ TerrainEvaluator = {
   bev_pixels_per_meter = 100;
   min_cost = 0.0;
   max_cost = 1;
-  discount_factor = 0.9;
+  discount_factor = 0.95;
   -- discount_factor = 0.8; -- ahg demo
-  rollout_density = 10;
+  rollout_density = 20;
 
-  model_path = "../terrain_models/model.pt";
-  context_path="../terrain_models/concrete_peb_mulch.pt";
+  model_path = "../terrain_models/arthur_cuda_model.pt";
+  -- context_path="../terrain_models/creste_urban_embedding.pt";
+
+  -- model_path = "../terrain_models/model.pt";
+  context_path = "../terrain_models/concrete_peb_mulch.pt";
 
   -- dist_to_goal_weight = -0.2;
   -- dist_to_goal_weight = -0.7;
   -- dist_to_goal_weight = -2.0;
-  dist_to_goal_weight = 0;
+  dist_to_goal_weight = 0.0;
 
-  clearance_weight = 0; -- -0.25;
-  fpl_weight = 0; -- -0.75;
-  terrain_weight = 4.0;
+  clearance_weight = -0.2; -- -0.25;
+  fpl_weight = -0.4; -- -0.75;
+  terrain_weight = 1.0;
 }

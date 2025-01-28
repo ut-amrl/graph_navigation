@@ -33,7 +33,7 @@ TerrainEvaluator::TerrainEvaluator()
 bool TerrainEvaluator::LoadModel() {
   // Following the pytorch tutorial:
   // https://pytorch.org/tutorials/advanced/cpp_export.html#step-3-loading-your-script-module-in-c
-
+  printf("Loading TerrainEvaluator model from %s\n", cost_model_path_.c_str());
   if (cost_model_path_.length() == 0) {
     return true;
   } else if (!boost::filesystem::exists(cost_model_path_)) {
@@ -372,10 +372,10 @@ void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRollo
       if (normalized_path_costs[i] < 0.5) {
         // green set to 255, increasing red changes color from green to yellow
         color[1] = 255.0;
-        color[0] = normalized_path_costs[i] * 2 * 255.0;
+        color[2] = normalized_path_costs[i] * 2 * 255.0;
       } else {
         // red set to 255, decreasing green changes color from yellow to red
-        color[0] = 255.0;
+        color[2] = 255.0;
         color[1] = 255.0 * (2 - 2 * normalized_path_costs[i]);
       }
 

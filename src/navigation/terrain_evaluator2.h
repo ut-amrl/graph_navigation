@@ -1,8 +1,11 @@
 #include "terrain_evaluator.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+
+DEFINE_int32(cost_map_shift, 100, "Shift to apply to cost map to get it to the correct start position");
 
 namespace motion_primitives {
 CONFIG_STRING(context_path, "TerrainEvaluator.context_path");
-
 
 
 class CustomTerrainEvaluator : public TerrainEvaluator {
@@ -10,6 +13,7 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
  torch::Tensor context_tensor_;
   CustomTerrainEvaluator() : TerrainEvaluator() {
     // todo: store the context as private variable
+    printf("Loading context tensor from %s\n", CONFIG_context_path.c_str());
     torch::jit::script::Module tensors = torch::jit::load(CONFIG_context_path);
     context_tensor_ = tensors.run_method("return_tensor").toTensor();
   }
@@ -21,7 +25,7 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
 // Image min: 0
 // Image max: 255
 
-  cv::Mat1f GetScalarCostImage(const cv::Mat3b& bev_image) override {
+cv::Mat1f GetScalarCostImage(const cv::Mat3b& bev_image) override {
     // print here
     // std::cout << "Custom GetScalarCostImage" << std::endl;
     cv::Mat3b latest_bev_image = image.clone();
@@ -117,9 +121,14 @@ class CustomTerrainEvaluator : public TerrainEvaluator {
     // print the new size
     // std::cout << "Scalar cost map size: " << scalar_cost_map.rows << " " << scalar_cost_map.cols << std::endl;
 
-    // todo: out-of-view cost
-
-
+    // Shift costmap down n pixels
+    cv::Mat M = (cv::Mat_<double>(2, 3) << 
+              1, 0, 0,    // x' = x + 0
+              0, 1, FLAGS_cost_map_shift);  // y' = y + shift_y
+    cv::warpAffine(scalar_cost_map, scalar_cost_map, M, scalar_cost_map.size(),
+               cv::INTER_NEAREST,      // fast (nearest-neighbor) interpolation
+               cv::BORDER_CONSTANT,    // fill outside area with a constant
+               cv::Scalar(0));        // fill with 0 (or any constant you need)
 
     // // write the latest_bev_image to a file
     // cv::imwrite("latest_bev_image.png", latest_bev_image);

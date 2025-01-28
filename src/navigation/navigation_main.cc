@@ -1283,6 +1283,7 @@ int main(int argc, char** argv) {
         cv_bridge::CvImage bev_viz_img;
         bool result =
             navigation_.GetVisualizationImage(viz_img.image, bev_viz_img.image);
+        printf("Does result exist? %d\n", result);
         if (result) {
           if (!viz_img.image.empty()) {
             viz_img.header.stamp = ros::Time::now();
@@ -1291,6 +1292,7 @@ int main(int argc, char** argv) {
           }
 
           if (!bev_viz_img.image.empty()) {
+            printf("Publishing bev_viz_img\n");
             bev_viz_img.header.stamp = viz_img.header.stamp;
             bev_viz_img.encoding = sensor_msgs::image_encodings::BGR8;
             viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
