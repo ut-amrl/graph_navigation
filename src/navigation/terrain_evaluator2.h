@@ -3,7 +3,7 @@
 #include "terrain_evaluator.h"
 
 DEFINE_int32(
-    cost_map_shift, 100,
+    cost_map_shift, 50,
     "Shift to apply to cost map to get it to the correct start position");
 
 namespace motion_primitives {
