@@ -1,2 +1,2 @@
 #!/bin/bash
-./bin/navigation --robot_config config/navigation_pacer.lua -v 2
+./bin/navigation --robot_config config/navigation_pacer_mueller_longhorizon.lua -v 2
