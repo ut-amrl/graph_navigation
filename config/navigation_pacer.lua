@@ -92,10 +92,10 @@ TerrainEvaluator = {
   -- discount_factor = 0.8; -- ahg demo
   rollout_density = 20;
 
-  model_path = "../terrain_models/arthur_cuda_model.pt";
+  -- model_path = "../terrain_models/arthur_cuda_model.pt";
   -- context_path="../terrain_models/creste_urban_embedding.pt";
 
-  -- model_path = "../terrain_models/model.pt";
+  model_path = "../terrain_models/model.pt";
   context_path = "../terrain_models/concrete_peb_mulch.pt";
 
   -- dist_to_goal_weight = -0.2;

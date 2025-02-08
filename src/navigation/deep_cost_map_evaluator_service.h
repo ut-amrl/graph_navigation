@@ -113,6 +113,10 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
   cv::Mat3b latest_vis_bevimage_;  // Latest bev visualization image
   cv::Mat3b latest_vis_rgbimage_;  // Latest rgb vis image
 
+  // Used to store the persistent costmap and odometry
+  cv::Mat1f persistent_costmap_;  // The accumulated (merged) costmap.
+  navigation::Odom persistent_odom_;          // The odometry associated with the persistent costmap.
+
   navigation::Odom prev_odom_;             // Last up to date odometry message
 
   // Computes nonlinear clearance weight
@@ -125,8 +129,11 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
 
   std::vector<Eigen::Vector2f> GetWheelLocations(const pose_2d::Pose2Df& pose, float robot_width, float robot_length);
 
+  // Accumulates costmaps into persistent costmap
+  void AccumulateCostmap(const cv::Mat1f& newCostmap, const navigation::Odom& newOdom);
+
   // Called by UpdateMap to update map to local frame
-  void UpdateMapToLocalFrame(const cv::Mat1f& costmap,
+  cv::Mat1f UpdateMapToLocalFrame(const cv::Mat1f& costmap,
                              const navigation::Odom& prev_odom,
                              const navigation::Odom& odom);
 

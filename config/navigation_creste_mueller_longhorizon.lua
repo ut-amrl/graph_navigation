@@ -33,7 +33,7 @@ NavigationParameters = {
   system_latency = 0.24;
   obstacle_margin = 0.15;
   num_options = 63;-- 31, 63;
-  robot_width = 0.5; -- 0.44;
+  robot_width = 0.44; -- 0.5;
   robot_length = 0.5;
   robot_wheelbase = 0.26;
   base_link_offset = 0.1;
@@ -44,7 +44,7 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(120);
+  local_fov = deg2rad(160); -- was 120
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_left_flir.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
@@ -72,7 +72,7 @@ NavigationParameters = {
 AckermannSampler = {
   max_curvature = 1.5;
   clearance_path_clip_fraction = 0.05;
-  max_fov = deg2rad(90);
+  max_fov = deg2rad(120);
 };
 
 DeepCostMapEvaluatorService = {
@@ -94,11 +94,14 @@ DeepCostMapEvaluatorService = {
   discount_factor = 0.95;
   rollout_density = 3;
 
+  robot_inflation_radius = 0.9; -- percentage of robot width
+  costmap_inflation_rate = 30; -- discount factor for merging maps
+
   angle_weight = 0.0;
   dist_to_goal_weight = 0.1;
   clearance_weight = 0.0;
   clearance_weight_beta = 0.0;
-  fpl_weight = -0.1;
+  fpl_weight = -0.2;
   learned_weight = 1.0;
   learned_weight_beta = 1.5;
 
