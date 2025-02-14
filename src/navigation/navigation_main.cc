@@ -1287,14 +1287,14 @@ int main(int argc, char** argv) {
         if (result) {
           if (!viz_img.image.empty()) {
             viz_img.header.stamp = ros::Time::now();
-            viz_img.encoding = sensor_msgs::image_encodings::BGR8;
+            viz_img.encoding = sensor_msgs::image_encodings::BGRA8;
             viz_img_pub_.publish(viz_img.toImageMsg());
           }
 
           if (!bev_viz_img.image.empty()) {
             printf("Publishing bev_viz_img\n");
             bev_viz_img.header.stamp = viz_img.header.stamp;
-            bev_viz_img.encoding = sensor_msgs::image_encodings::BGR8;
+            bev_viz_img.encoding = sensor_msgs::image_encodings::BGRA8;
             viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
           } 
         }
