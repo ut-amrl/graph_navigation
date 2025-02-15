@@ -900,15 +900,15 @@ void LoadConfig(navigation::NavigationParameters* params) {
 }
 
 void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
-  try {
-    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
-        msg, sensor_msgs::image_encodings::BGR8);
-    last_image_ = image->image;
-  } catch (cv_bridge::Exception& e) {
-    fprintf(stderr, "cv_bridge exception: %s\n", e.what());
-    return;
-  }
-  navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
+  //try {
+  //  cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
+  //      msg, sensor_msgs::image_encodings::BGR8);
+  //  last_image_ = image->image;
+  //} catch (cv_bridge::Exception& e) {
+  //  fprintf(stderr, "cv_bridge exception: %s\n", e.what());
+  //  return;
+  //}
+  //navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
 
   if (FLAGS_ldos_pub_overlay_carrot) {
       // add overlay to image
@@ -925,10 +925,10 @@ void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
   }
 
   // Update GUI Window
-  if (FLAGS_debug_images) {
-    cv::imshow(kOpenCVWindow, last_image_);
-    cv::waitKey(3);
-  }
+  //if (FLAGS_debug_images) {
+  //  cv::imshow(kOpenCVWindow, last_image_);
+  //  cv::waitKey(3);
+  //}
 }
 
 int main(int argc, char** argv) {
