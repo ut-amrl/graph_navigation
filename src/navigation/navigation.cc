@@ -1456,6 +1456,7 @@ bool Navigation::GetVisualizationImage(cv::Mat& image, cv::Mat& bev_image) {
                     ->GetAnnotatedBEVImage();
     return true;
   } else if (params_.evaluator_type == "terrain2") {
+    image = dynamic_cast<TerrainEvaluator*>(evaluator_.get())->annotated_rgb_image_;
     bev_image = dynamic_cast<TerrainEvaluator*>(evaluator_.get())->latest_vis_image_;
     return true;
   } else {

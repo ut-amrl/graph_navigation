@@ -394,40 +394,6 @@ void DeepCostMapEvaluatorService::UpdateMap(const Odom& odom) {
   // latest_costmap_ = this->UpdateMapToLocalFrame(cost_map, prev_odom, odom);
 }
 
-// void DeepCostMapEvaluatorService::AccumulateCostmap(const cv::Mat1f& newCostmap, const Odom& newOdom) {
-//   // If no persistent costmap exists, initialize it with the current costmap.
-//   if (persistent_costmap_.empty()) {
-//     persistent_costmap_ = newCostmap.clone();
-//     persistent_odom_ = newOdom;
-//     return;
-//   }
-
-//   // --- Step 1: Transform the persistent costmap into the current frame ---
-//   // Use your helper function to transform persistent_costmap_ from persistent_odom_ to newOdom.
-//   cv::Mat1f warpedPersistent = UpdateMapToLocalFrame(persistent_costmap_, persistent_odom_, newOdom);
-
-//   // // Merge the transformed persistent costmap with the new costmap.
-//   cv::Mat1f mergedCostmap = newCostmap.clone();
-//   cv::Mat1b maskNew = newCostmap == 255.0f;
-
-//   for (int y = 0; y < mergedCostmap.rows; ++y) {
-//     for (int x = 0; x < mergedCostmap.cols; ++x) {
-//       if (maskNew.at<uchar>(y, x)) {
-//         mergedCostmap.at<float>(y, x) = warpedPersistent.at<float>(y, x);
-//       }
-//       // mergedCostmap.at<float>(y, x) = newCostmap.at<float>(y, x) * CONFIG_map_merge_discount_factor +
-//       //                                 warpedPersistent.at<float>(y, x) * (1.0f - CONFIG_map_merge_discount_factor);
-//       // if (maskNew.at<uchar>(y, x) == 255) {
-//         // mergedCostmap.at<float>(y, x) = warpedPersistent.at<float>(y, x);
-//       // }
-//     }
-//   }
-
-//   // --- Step 4: Update persistent costmap and its associated odometry ---
-//   persistent_costmap_ = mergedCostmap.clone();
-//   persistent_odom_ = newOdom;
-// }
-
 void DeepCostMapEvaluatorService::AccumulateCostmap(const cv::Mat1f& newCostmap, const Odom& newOdom) {
   // If no persistent costmap exists, initialize it with the current costmap.
   if (persistent_costmap_.empty()) {
@@ -510,89 +476,6 @@ cv::Mat1f DeepCostMapEvaluatorService::UpdateMapToLocalFrame(const cv::Mat1f& co
   cv::flip(flipped_image, new_costmap, 0);
   return new_costmap;
 }
-
-// cv::Mat1f DeepCostMapEvaluatorService::UpdateMapToLocalFrame(
-//     const cv::Mat1f& costmap,
-//     const Odom& prev_odom,
-//     const Odom& odom) 
-// {
-//   // 1) Build old->new in your odometry frame. 
-//   //    Or new->old if that is your convention; the key is consistency.
-//   //    Suppose you want old->new:
-//   Eigen::Affine2f T_old2new = odom.toAffine2f() * prev_odom.toAffine2f().inverse();
-
-//   // 2) Insert a rotation for coordinate mismatch.
-//   //    +x in odom might be "up" in the image =>  -90 deg rotation or +90 deg, etc.
-//   //    Adjust angle to suit your system. For example, a -90 deg:
-//   Eigen::Affine2f R_correction(Eigen::Rotation2Df(-M_PI_2));
-
-//   // 3) Multiply them to incorporate that rotation into the final transform.
-//   //    If you want to rotate first, then apply T_old2new, or T_old2new then rotate. 
-//   //    Typically you do R * T if you want to "post-rotate" the entire transform.
-//   Eigen::Affine2f T_corrected = R_correction * T_old2new;
-
-//   // 4) Convert to 2×3 for warpAffine.
-//   Eigen::Matrix<float, 2, 3> block2x3 = T_corrected.matrix().block<2,3>(0,0);
-
-//   // Optionally multiply the last column by your scale factor if needed:
-//   float scale = 40.0f; // e.g. 100 px/m
-//   block2x3(0,2) *= scale;
-//   block2x3(1,2) *= scale;
-
-//   cv::Mat1f cv_aff(2, 3, CV_32F);
-//   for (int r = 0; r < 2; ++r) {
-//     for (int c = 0; c < 3; ++c) {
-//       cv_aff(r, c) = block2x3(r, c);
-//     }
-//   }
-
-//   // 5) Warp the old costmap.
-//   //    Fill out-of-bounds with 255.
-//   cv::Mat transformed;
-//   cv::warpAffine(costmap, transformed,
-//                  cv_aff,
-//                  costmap.size(),
-//                  cv::INTER_LINEAR,
-//                  cv::BORDER_CONSTANT,
-//                  255.0f);
-
-//   return transformed;
-// }
-
-// void UpdateFrame(const cv::Mat& costmap, const Odom& prev_odom, const Odom& odom) {
-//   auto current_transform = prev_odom.ToAffine2f();
-//   auto new_transform = odom.ToAffine2f();
-//   Eigen::Affine2f delta_transform = current_transform.inverse() * new_transform;
-
-//   cv::Mat flipped_image;
-//   cv::flip(bev_image_, flipped_image, 0);
-
-//   cv::Mat translation_mat;
-//   Eigen::Matrix2f eigen_rot = Eigen::Rotation2Df(-M_PI_2) *
-//                               delta_transform.rotation().matrix().inverse() *
-//                               Eigen::Rotation2Df(M_PI_2);
-//   Eigen::Vector2f eigen_trans = -eigen_rot * Eigen::Rotation2Df(-M_PI_2) *
-//                                 delta_transform.translation().matrix();
-//   eigen_trans = eigen_trans.cwiseProduct(Eigen::Vector2f{100, 100});
-//   cv::eigen2cv(eigen_trans, translation_mat);
-
-//   Eigen::Rotation2Df rot;
-//   rot.fromRotationMatrix(eigen_rot);
-
-//   auto transform_matrix = cv::getRotationMatrix2D(
-//       cv::Point2f{(float)CONFIG_image_width / 2, (float)CONFIG_image_height},
-//       -rot.angle() * (180 / M_PI), 1.0);
-
-//   transform_matrix(cv::Rect(2, 0, 1, 2)) -= translation_mat;
-
-//   auto prev_map = flipped_image.clone();
-//   flipped_image.setTo(0);
-//   cv::warpAffine(prev_map, flipped_image, transform_matrix,
-//                  flipped_image.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT,
-//                  0);
-//   bev_image_.setTo(0);
-//   cv::flip(flipped_image, bev_image_, 0);
-// }
 
 void DeepCostMapEvaluatorService::RequestMapUpdate(const Odom& odom) {
   try {

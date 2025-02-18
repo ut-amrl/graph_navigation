@@ -1284,17 +1284,21 @@ int main(int argc, char** argv) {
         bool result =
             navigation_.GetVisualizationImage(viz_img.image, bev_viz_img.image);
         printf("Does result exist? %d\n", result);
+
+        auto img_encoding = params.evaluator_type == "cost_map_service"
+                            ? sensor_msgs::image_encodings::BGRA8
+                            : sensor_msgs::image_encodings::BGR8;
         if (result) {
           if (!viz_img.image.empty()) {
             viz_img.header.stamp = ros::Time::now();
-            viz_img.encoding = sensor_msgs::image_encodings::BGRA8;
+            viz_img.encoding = img_encoding;
             viz_img_pub_.publish(viz_img.toImageMsg());
           }
 
           if (!bev_viz_img.image.empty()) {
             printf("Publishing bev_viz_img\n");
             bev_viz_img.header.stamp = viz_img.header.stamp;
-            bev_viz_img.encoding = sensor_msgs::image_encodings::BGRA8;
+            bev_viz_img.encoding = img_encoding;
             viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
           } 
         }
