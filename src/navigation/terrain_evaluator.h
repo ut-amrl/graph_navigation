@@ -66,11 +66,17 @@ class TerrainEvaluator : public PathEvaluatorBase {
    */
   void DrawPathCosts(const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
                      std::shared_ptr<PathRolloutBase> best_path);
+
+  /**
+   * Utility function for alpha-blending a BGRA overlay onto a BGRA base.
+   */
+  void AlphaBlend(const cv::Mat& overlay, cv::Mat& base);          
  public:
   // TODO: this is public to match DeepCostMapEvaluator: perhaps an accessor method
   // is more appropriate.
   cv::Mat3b latest_vis_image_ = cv::Mat3b::zeros(8, 8);  // has trajectory rollouts
   cv::Mat3b latest_cost_image_ = cv::Mat3b::zeros(8, 8);  // does not have trajectory rollouts
+  cv::Mat3b annotated_rgb_image_; // annotated bev rgb image
 
   std::vector<float> path_costs_;
 

@@ -106,12 +106,12 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
 
   std::vector<float> learned_path_costs_;  // Learned cost of each path
   std::vector<float> path_costs_;          // Cost of each path
-  cv::Mat3b latest_image_;             // Latest visualization image
+  cv::Mat latest_image_;             // Latest visualization image
   cv::Mat1f latest_costmap_;               // Latest cost map
   cv::Mat1f prev_costmap_;                 // Last up to date cost map
   cv::Mat map1_, map2_;                    // Rectification maps
-  cv::Mat3b latest_vis_bevimage_;  // Latest bev visualization image
-  cv::Mat3b latest_vis_rgbimage_;  // Latest rgb vis image
+  cv::Mat latest_vis_bevimage_;  // Latest bev visualization image
+  cv::Mat latest_vis_rgbimage_;  // Latest rgb vis image
 
   // Used to store the persistent costmap and odometry
   cv::Mat1f persistent_costmap_;  // The accumulated (merged) costmap.

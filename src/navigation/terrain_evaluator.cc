@@ -345,60 +345,189 @@ cv::Rect TerrainEvaluator::GetPatchRectAtLocation(const cv::Mat3b& img,
   return {patch_tl_x, patch_tl_y, CONFIG_patch_size_pixels, CONFIG_patch_size_pixels};
 }
 
+// Simple alpha-blending helper; we can define it as a member or free function
+void TerrainEvaluator::AlphaBlend(const cv::Mat& overlay, cv::Mat& base) {
+  // overlay and base must both be BGRA
+  for (int y = 0; y < base.rows; ++y) {
+    const cv::Vec4b* oRow = overlay.ptr<cv::Vec4b>(y);
+    cv::Vec4b* bRow       = base.ptr<cv::Vec4b>(y);
+    for (int x = 0; x < base.cols; ++x) {
+      const cv::Vec4b& oPix = oRow[x];
+      if (oPix[3] > 0) {
+        float alpha = oPix[3] / 255.0f;
+        cv::Vec4b& bPix = bRow[x];
+        for (int c = 0; c < 3; ++c) {
+          bPix[c] = cv::saturate_cast<uchar>(
+              oPix[c] * alpha + bPix[c] * (1.0f - alpha));
+        }
+        bPix[3] = 255;
+      }
+    }
+  }
+}
+
 void TerrainEvaluator::DrawPathCosts(const std::vector<std::shared_ptr<PathRolloutBase>>& paths,
                                      std::shared_ptr<PathRolloutBase> best_path) {
-  // TODO(eyang): perhaps have some toggle between the cost map image and the
-  // BEV image? might be useful to have both options. Maybe this toggle should
-  // be in FindBest, because that's where the latest_vis_image_ is set.
-
-  // Normalize all costs linearly to be within [0, 1]
-  std::vector<float> normalized_path_costs(path_costs_);
-  const auto minmax_costs =
-      std::minmax_element(normalized_path_costs.begin(), normalized_path_costs.end());
-  const float min_cost = *minmax_costs.first;
-  const float max_cost = *minmax_costs.second;
-  for (float& cost : normalized_path_costs) {
-    cost = (cost - min_cost) / (max_cost - min_cost);
+  if (paths.empty() || latest_vis_image_.empty()) {
+    return;
   }
 
-  for (size_t i = 0; i < paths.size(); i++) {
-    for (int j = 0; j < CONFIG_rollout_density; j++) {
-      const pose_2d::Pose2Df state =
-          paths[i]->GetIntermediateState(static_cast<float>(j) / CONFIG_rollout_density);
-      const Eigen::Vector2f P_image_state = GetImageLocation(latest_vis_image_, state.translation);
+  // 1) Prepare the "cost-based" image (latest_vis_image_) for annotation
+  cv::Mat bev_base;
+  cv::cvtColor(latest_vis_image_, bev_base, cv::COLOR_BGR2BGRA);
+  cv::Mat line_overlay = cv::Mat::zeros(bev_base.size(), bev_base.type());
 
-      // Scale the color from green to yellow to red based on the normalized cost
-      cv::Scalar color;  // RGB
-      if (normalized_path_costs[i] < 0.5) {
-        // green set to 255, increasing red changes color from green to yellow
-        color[1] = 255.0;
-        color[2] = normalized_path_costs[i] * 2 * 255.0;
-      } else {
-        // red set to 255, decreasing green changes color from yellow to red
-        color[2] = 255.0;
-        color[1] = 255.0 * (2 - 2 * normalized_path_costs[i]);
-      }
+  cv::Mat rgb = image.clone();
 
-      int thickness = 2;
-      if (paths[i] == best_path) {
-        // a negative thickness value fills in the drawn circle
-        thickness = -thickness;
-      }
-      cv::circle(latest_vis_image_, cv::Point(P_image_state.x(), P_image_state.y()), 8, color,
-                 thickness, cv::LineTypes::LINE_AA);
+  // 2) Prepare the "raw RGB" image (rgb_) for annotation
+  cv::Mat rgb_base;
+  if (!rgb.empty()) {
+    cv::cvtColor(rgb, rgb_base, cv::COLOR_BGR2BGRA);
+  } else {
+    LOG(WARNING) << "rgb_ image is empty, skipping separate RGB annotation.";
+  }
+  // Create an overlay for the RGB image if valid
+  cv::Mat line_overlay_rgb;
+  if (!rgb_base.empty()) {
+    line_overlay_rgb = cv::Mat::zeros(rgb_base.size(), rgb_base.type());
+  }
+
+  // 3) Identify best path index
+  int best_index = -1;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (paths[i] == best_path) {
+      best_index = static_cast<int>(i);
+      break;
+    }
+  }
+
+  // 4) Normalize path costs to [0,1] for coloring
+  if (path_costs_.size() != paths.size()) {
+    LOG(WARNING) << "path_costs_ size != paths.size(), skipping DrawPathCosts.";
+    return;
+  }
+  float min_val = std::numeric_limits<float>::infinity();
+  float max_val = -std::numeric_limits<float>::infinity();
+  for (float c : path_costs_) {
+    min_val = std::min(min_val, c);
+    max_val = std::max(max_val, c);
+  }
+  float denom = (max_val - min_val) + 1e-6f;
+  auto normalize_cost = [&](float c) {
+    return (c - min_val) / denom; // [0..1]
+  };
+
+  // A small helper for mapping normalized cost to a BGR color (green→yellow→red)
+  auto costToBGR = [&](float norm_cost) -> cv::Vec3b {
+    if (norm_cost <= 0.5f) {
+      float t = norm_cost / 0.5f;
+      // B=0, G=255, R ~ [0..255]
+      uchar red = static_cast<uchar>(255.0f * t);
+      return cv::Vec3b(0, 255, red);
+    } else {
+      float t = (norm_cost - 0.5f) / 0.5f;
+      uchar green = static_cast<uchar>(255.0f * (1.0f - t));
+      return cv::Vec3b(0, green, 255);
+    }
+  };
+
+  // 5) Draw polylines for each path on both images
+  int thickness_best = 4;
+  int thickness_regular = 2;
+  int circle_radius = 6;
+
+  for (size_t i = 0; i < paths.size(); ++i) {
+    bool is_best = (static_cast<int>(i) == best_index);
+    // Best path = Aqua BGRA(255,255,0,255) fully opaque
+    // Other path = Yellow BGRA(0,255,255,128) half alpha
+    cv::Scalar line_color_bgra = is_best
+        ? cv::Scalar(255,255,0,255)
+        : cv::Scalar(0,255,255,128);
+    int thickness = is_best ? thickness_best : thickness_regular;
+
+    // Compute normalized cost → circle color
+    float norm_c = normalize_cost(path_costs_[i]);
+    cv::Vec3b bgr_col = costToBGR(norm_c);
+    cv::Vec4b end_circle_color(bgr_col[0], bgr_col[1], bgr_col[2], 255);
+
+    // Gather discrete points along the path
+    std::vector<cv::Point> poly_points;
+    int num_samples = std::max(1, CONFIG_rollout_density);
+    for (int j = 0; j <= num_samples; ++j) {
+      float alpha = static_cast<float>(j) / num_samples;
+      pose_2d::Pose2Df st = paths[i]->GetIntermediateState(alpha);
+      // (A) For the cost-based image
+      Eigen::Vector2f P_img = GetImageLocation(latest_vis_image_, st.translation);
+      poly_points.emplace_back((int)P_img.x(), (int)P_img.y());
     }
 
-    // print normalized path costs[i]
-    std::cout << "Normalized path costs " << normalized_path_costs[i] << std::endl;
+    // Draw polylines on the cost-based overlay
+    if (poly_points.size() >= 2) {
+      std::vector<std::vector<cv::Point>> contour{ poly_points };
+      cv::polylines(line_overlay, contour, false, line_color_bgra, thickness, cv::LINE_AA);
+    }
+
+    // Draw the end circle on the cost-based image
+    if (!poly_points.empty()) {
+      cv::circle(bev_base, poly_points.back(), circle_radius, end_circle_color, -1, cv::LINE_AA);
+    }
+
+    // --- (B) If we have a valid rgb_ image, do the same logic for that image ---
+    if (!rgb_base.empty()) {
+      // Gather points for the RGB image
+      std::vector<cv::Point> rgb_points;
+      for (int j = 0; j <= num_samples; ++j) {
+        float alpha = static_cast<float>(j) / num_samples;
+        pose_2d::Pose2Df st = paths[i]->GetIntermediateState(alpha);
+        // Possibly you need a different transform for the RGB image?
+        // For now, reuse the same function:
+        Eigen::Vector2f P_img_rgb = GetImageLocation(rgb, st.translation);
+        rgb_points.emplace_back((int)P_img_rgb.x(), (int)P_img_rgb.y());
+      }
+
+      // Draw polylines on the rgb overlay
+      if (rgb_points.size() >= 2) {
+        std::vector<std::vector<cv::Point>> contour{ rgb_points };
+        cv::polylines(line_overlay_rgb, contour, false, line_color_bgra, thickness, cv::LINE_AA);
+      }
+
+      // Draw end circle fully opaque
+      if (!rgb_points.empty()) {
+        cv::circle(rgb_base, rgb_points.back(), circle_radius, end_circle_color, -1, cv::LINE_AA);
+      }
+    }
   }
 
-  const Eigen::Vector2f P_image_goal = GetImageLocation(latest_vis_image_, local_target);
-  cv::drawMarker(latest_vis_image_, cv::Point(P_image_goal.x(), P_image_goal.y()), {255, 255, 255},
-                 cv::MARKER_TILTED_CROSS, 32, 8, cv::LineTypes::LINE_AA);
-  
-  // print he best path and its cost
-  std::cout << "Best path " << best_path << " " << normalized_path_costs[0] << std::endl;
+  // 6) Alpha blend the polylines onto each base
+  AlphaBlend(line_overlay, bev_base);
+  if (!rgb_base.empty()) {
+    AlphaBlend(line_overlay_rgb, rgb_base);
+  }
 
+  // 7) Optionally draw the local_target marker on each image
+  {
+    // Cost-based image target
+    Eigen::Vector2f tgt_img = GetImageLocation(latest_vis_image_, local_target);
+    cv::Point tgt_pt((int)tgt_img.x(), (int)tgt_img.y());
+    cv::drawMarker(bev_base, tgt_pt, cv::Scalar(255,255,255,255),
+                   cv::MARKER_TILTED_CROSS, 20, 2, cv::LINE_AA);
+
+    // RGB-based image target
+    if (!rgb_base.empty()) {
+      Eigen::Vector2f tgt_img_rgb = GetImageLocation(rgb, local_target);
+      cv::Point tgt_pt_rgb((int)tgt_img_rgb.x(), (int)tgt_img_rgb.y());
+      cv::drawMarker(rgb_base, tgt_pt_rgb, cv::Scalar(255,255,255,255),
+                     cv::MARKER_TILTED_CROSS, 20, 2, cv::LINE_AA);
+    }
+  }
+
+  // 8) Convert both BGRA images back to BGR
+  cv::cvtColor(bev_base, latest_vis_image_, cv::COLOR_BGRA2BGR);
+  if (!rgb_base.empty()) {
+    cv::Mat annotated_bgr;
+    cv::cvtColor(rgb_base, annotated_bgr, cv::COLOR_BGRA2BGR);
+    annotated_rgb_image_ = annotated_bgr.clone();
+  }
 }
 
 }  // namespace motion_primitives

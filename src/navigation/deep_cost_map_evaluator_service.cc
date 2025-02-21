@@ -394,40 +394,6 @@ void DeepCostMapEvaluatorService::UpdateMap(const Odom& odom) {
   // latest_costmap_ = this->UpdateMapToLocalFrame(cost_map, prev_odom, odom);
 }
 
-// void DeepCostMapEvaluatorService::AccumulateCostmap(const cv::Mat1f& newCostmap, const Odom& newOdom) {
-//   // If no persistent costmap exists, initialize it with the current costmap.
-//   if (persistent_costmap_.empty()) {
-//     persistent_costmap_ = newCostmap.clone();
-//     persistent_odom_ = newOdom;
-//     return;
-//   }
-
-//   // --- Step 1: Transform the persistent costmap into the current frame ---
-//   // Use your helper function to transform persistent_costmap_ from persistent_odom_ to newOdom.
-//   cv::Mat1f warpedPersistent = UpdateMapToLocalFrame(persistent_costmap_, persistent_odom_, newOdom);
-
-//   // // Merge the transformed persistent costmap with the new costmap.
-//   cv::Mat1f mergedCostmap = newCostmap.clone();
-//   cv::Mat1b maskNew = newCostmap == 255.0f;
-
-//   for (int y = 0; y < mergedCostmap.rows; ++y) {
-//     for (int x = 0; x < mergedCostmap.cols; ++x) {
-//       if (maskNew.at<uchar>(y, x)) {
-//         mergedCostmap.at<float>(y, x) = warpedPersistent.at<float>(y, x);
-//       }
-//       // mergedCostmap.at<float>(y, x) = newCostmap.at<float>(y, x) * CONFIG_map_merge_discount_factor +
-//       //                                 warpedPersistent.at<float>(y, x) * (1.0f - CONFIG_map_merge_discount_factor);
-//       // if (maskNew.at<uchar>(y, x) == 255) {
-//         // mergedCostmap.at<float>(y, x) = warpedPersistent.at<float>(y, x);
-//       // }
-//     }
-//   }
-
-//   // --- Step 4: Update persistent costmap and its associated odometry ---
-//   persistent_costmap_ = mergedCostmap.clone();
-//   persistent_odom_ = newOdom;
-// }
-
 void DeepCostMapEvaluatorService::AccumulateCostmap(const cv::Mat1f& newCostmap, const Odom& newOdom) {
   // If no persistent costmap exists, initialize it with the current costmap.
   if (persistent_costmap_.empty()) {
@@ -511,89 +477,6 @@ cv::Mat1f DeepCostMapEvaluatorService::UpdateMapToLocalFrame(const cv::Mat1f& co
   return new_costmap;
 }
 
-// cv::Mat1f DeepCostMapEvaluatorService::UpdateMapToLocalFrame(
-//     const cv::Mat1f& costmap,
-//     const Odom& prev_odom,
-//     const Odom& odom) 
-// {
-//   // 1) Build old->new in your odometry frame. 
-//   //    Or new->old if that is your convention; the key is consistency.
-//   //    Suppose you want old->new:
-//   Eigen::Affine2f T_old2new = odom.toAffine2f() * prev_odom.toAffine2f().inverse();
-
-//   // 2) Insert a rotation for coordinate mismatch.
-//   //    +x in odom might be "up" in the image =>  -90 deg rotation or +90 deg, etc.
-//   //    Adjust angle to suit your system. For example, a -90 deg:
-//   Eigen::Affine2f R_correction(Eigen::Rotation2Df(-M_PI_2));
-
-//   // 3) Multiply them to incorporate that rotation into the final transform.
-//   //    If you want to rotate first, then apply T_old2new, or T_old2new then rotate. 
-//   //    Typically you do R * T if you want to "post-rotate" the entire transform.
-//   Eigen::Affine2f T_corrected = R_correction * T_old2new;
-
-//   // 4) Convert to 2×3 for warpAffine.
-//   Eigen::Matrix<float, 2, 3> block2x3 = T_corrected.matrix().block<2,3>(0,0);
-
-//   // Optionally multiply the last column by your scale factor if needed:
-//   float scale = 40.0f; // e.g. 100 px/m
-//   block2x3(0,2) *= scale;
-//   block2x3(1,2) *= scale;
-
-//   cv::Mat1f cv_aff(2, 3, CV_32F);
-//   for (int r = 0; r < 2; ++r) {
-//     for (int c = 0; c < 3; ++c) {
-//       cv_aff(r, c) = block2x3(r, c);
-//     }
-//   }
-
-//   // 5) Warp the old costmap.
-//   //    Fill out-of-bounds with 255.
-//   cv::Mat transformed;
-//   cv::warpAffine(costmap, transformed,
-//                  cv_aff,
-//                  costmap.size(),
-//                  cv::INTER_LINEAR,
-//                  cv::BORDER_CONSTANT,
-//                  255.0f);
-
-//   return transformed;
-// }
-
-// void UpdateFrame(const cv::Mat& costmap, const Odom& prev_odom, const Odom& odom) {
-//   auto current_transform = prev_odom.ToAffine2f();
-//   auto new_transform = odom.ToAffine2f();
-//   Eigen::Affine2f delta_transform = current_transform.inverse() * new_transform;
-
-//   cv::Mat flipped_image;
-//   cv::flip(bev_image_, flipped_image, 0);
-
-//   cv::Mat translation_mat;
-//   Eigen::Matrix2f eigen_rot = Eigen::Rotation2Df(-M_PI_2) *
-//                               delta_transform.rotation().matrix().inverse() *
-//                               Eigen::Rotation2Df(M_PI_2);
-//   Eigen::Vector2f eigen_trans = -eigen_rot * Eigen::Rotation2Df(-M_PI_2) *
-//                                 delta_transform.translation().matrix();
-//   eigen_trans = eigen_trans.cwiseProduct(Eigen::Vector2f{100, 100});
-//   cv::eigen2cv(eigen_trans, translation_mat);
-
-//   Eigen::Rotation2Df rot;
-//   rot.fromRotationMatrix(eigen_rot);
-
-//   auto transform_matrix = cv::getRotationMatrix2D(
-//       cv::Point2f{(float)CONFIG_image_width / 2, (float)CONFIG_image_height},
-//       -rot.angle() * (180 / M_PI), 1.0);
-
-//   transform_matrix(cv::Rect(2, 0, 1, 2)) -= translation_mat;
-
-//   auto prev_map = flipped_image.clone();
-//   flipped_image.setTo(0);
-//   cv::warpAffine(prev_map, flipped_image, transform_matrix,
-//                  flipped_image.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT,
-//                  0);
-//   bev_image_.setTo(0);
-//   cv::flip(flipped_image, bev_image_, 0);
-// }
-
 void DeepCostMapEvaluatorService::RequestMapUpdate(const Odom& odom) {
   try {
     amrl_msgs::CostmapSrv srv;
@@ -652,101 +535,172 @@ void DeepCostMapEvaluatorService::RequestMapUpdate(const Odom& odom) {
 }
 
 void DeepCostMapEvaluatorService::DrawPathCosts(
-    const std::vector<std::shared_ptr<PathRolloutBase>>& paths, int best_index) {
+    const std::vector<std::shared_ptr<PathRolloutBase>>& paths, 
+    int best_index) 
+{
   // Guard against empty images.
   if (latest_costmap_.empty() || latest_image_.empty()) {
     return;
   }
-  const auto& best_path = paths[best_index];
-
-  // Colorize costmap for visualization.
+  
+  // 1) Colorize the costmap.
   cv::Mat cost_map_scaled;
   cv::normalize(latest_costmap_, cost_map_scaled, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-
+  
   cv::Mat latest_annotated_bev = cost_map_scaled.clone();
   cv::applyColorMap(latest_annotated_bev, latest_annotated_bev, cv::COLORMAP_BONE);
-
-  // Normalize path costs
+  
+  // Clone the forward-facing image.
+  cv::Mat latest_annotated_bgr = latest_image_.clone();
+  
+  // Convert both images to 4-channel (BGRA) so we can handle alpha.
+  cv::Mat bev_base, cam_base;
+  cv::cvtColor(latest_annotated_bev, bev_base, cv::COLOR_BGR2BGRA);
+  cv::cvtColor(latest_annotated_bgr, cam_base, cv::COLOR_BGR2BGRA);
+  
+  // Create transparent overlays for drawing semi-transparent lines.
+  cv::Mat line_overlay_bev = cv::Mat::zeros(bev_base.size(), bev_base.type());
+  cv::Mat line_overlay_cam = cv::Mat::zeros(cam_base.size(), cam_base.type());
+  
+  // 2) Normalize path costs to use for the end-circle color.
   float min_cost = *std::min_element(path_costs_.begin(), path_costs_.end());
   float max_cost = *std::max_element(path_costs_.begin(), path_costs_.end());
-  vector<float> normalized_costs(path_costs_.size(), 0.0f);
-  // printf("Normalized costs: \n");
-  for (size_t i = 0; i < path_costs_.size(); ++i) {
-    normalized_costs[i] = (path_costs_[i] - min_cost) / (max_cost - min_cost + 1e-6);
-    // printf("%f\n", normalized_costs[i]);
-  }
-
-  // Compute sorted indices of paths by increasing cost.
-  std::vector<int> sorted_indices(path_costs_.size());
-  std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
-  std::sort(sorted_indices.begin(), sorted_indices.end(), [&](int i, int j) {
-    return path_costs_[i] < path_costs_[j];
-  });
-
-  // Create a ranks array such that ranks[i] is the rank of path i.
-  std::vector<int> ranks(path_costs_.size());
-  for (size_t rank = 0; rank < sorted_indices.size(); ++rank) {
-    int path_index = sorted_indices[rank];
-    ranks[path_index] = static_cast<int>(rank);
-  }
-  // Draw paths on the overlay.
-  cv::Mat latest_annotated_bgr = latest_image_.clone();
+  auto normalize_cost = [&](float c) {
+      float denom = (max_cost - min_cost) + 1e-6f;
+      return (c - min_cost) / denom; // normalized to [0,1]
+  };
+  
+  // Helper for mapping normalized cost to a color (Green -> Yellow -> Red) in BGR.
+  auto endCircleColor = [&](float norm_cost) -> cv::Vec3b {
+      if (norm_cost <= 0.5f) {
+          float t = norm_cost / 0.5f;
+          uchar red = static_cast<uchar>(255.0f * t);
+          return cv::Vec3b(0, 255, red);
+      } else {
+          float t = (norm_cost - 0.5f) / 0.5f;
+          uchar green = static_cast<uchar>(255.0f * (1.0f - t));
+          return cv::Vec3b(0, green, 255);
+      }
+  };
+  
+  // For projecting points in the forward-facing camera, extract the projection matrix.
   Eigen::Matrix<float, 3, 4> W;
   cv::cv2eigen(params_.W, W);
+  
+  // 3) Process each path.
   for (size_t i = 0; i < paths.size(); ++i) {
-    const auto& path = paths[i];
-    const auto& rank = ranks[i];
-    int thickness = (best_path == path) ? -1 : CONFIG_viz_thickness;
-    // Or if you're just using path_costs_ directly:
-    // float path_cost = normalized_costs[i];
-
-    // cv::Vec3b color = GetColorFromCost(path_cost);
-    cv::Vec3b color = GetColorFromRanking(rank, (int) paths.size());
-
-    // Determine number of points to sample along the path.
-    int num_samples = std::max(1,
-        static_cast<int>(path->Length() * CONFIG_rollout_density));
-
-    for (int j = 0; j <= num_samples; ++j) {
-      float f = static_cast<float>(j) / num_samples;
-      pose_2d::Pose2Df pose = path->GetIntermediateState(f);
-
-      // Construct world point assuming ground plane height of -0.30.
-      Eigen::Vector4f homogeneous_point(pose.translation.x(), pose.translation.y(), -0.3f, 1.0f);
-      Eigen::Vector3f camera_point = W * homogeneous_point; // 3x1
-
-      // Project onto image plane using camera intrinsics.
-      float depth = camera_point.z();
-      Eigen::Vector3f projected = camera_point / depth;
-      cv::Point2f image_point(projected.x(), projected.y());
-
-      // Draw a circle at the projected point on the RGB image.
-      if (image_point.x >= 0 && image_point.x < latest_annotated_bgr.cols &&
-          image_point.y >= 0 && image_point.y < latest_annotated_bgr.rows &&
-          depth >= 0.05f
-          ) {
-        cv::circle(latest_annotated_bgr, image_point, CONFIG_viz_radius*2, color, thickness);
+      // Choose line color: best path is blue; others are yellow.
+      // In BGRA: aqua = (255, 255, 0, 128), Yellow = (0, 255, 255, 128)
+      cv::Scalar line_color = (static_cast<int>(i) == best_index) 
+                              ? cv::Scalar(255, 255, 0, 255)    // aqua at 50% opacity.
+                              : cv::Scalar(0, 255, 255, 128); // Yellow at 50% opacity.
+      int line_thickness = (static_cast<int>(i) == best_index) 
+                                  ? 2*CONFIG_viz_thickness
+                                  : CONFIG_viz_thickness;
+      
+      // Determine the color for the end circle (full opacity).
+      float path_norm_cost = normalize_cost(path_costs_[i]);
+      cv::Vec3b circle_color_bgr = endCircleColor(path_norm_cost);
+      // Convert 3-channel BGR to 4-channel BGRA with full opacity.
+      cv::Vec4b circle_color = cv::Vec4b(circle_color_bgr[0],
+                                        circle_color_bgr[1],
+                                        circle_color_bgr[2],
+                                        255);
+      
+      const auto &path = paths[i];
+      int num_samples = std::max(1, static_cast<int>(path->Length() * CONFIG_rollout_density));
+      
+      // Gather points for the BEV and forward camera images.
+      std::vector<cv::Point> bev_points;
+      bev_points.reserve(num_samples + 1);
+      std::vector<cv::Point> cam_points;
+      cam_points.reserve(num_samples + 1);
+      
+      for (int j = 0; j <= num_samples; ++j) {
+          float f = static_cast<float>(j) / num_samples;
+          pose_2d::Pose2Df pose = path->GetIntermediateState(f);
+          
+          // (A) BEV: convert state to pixel.
+          Eigen::Vector2i pixel = StateToPixel(pose.translation).cast<int>();
+          if (ImageBoundCheck(pixel, bev_base)) {
+              bev_points.emplace_back(pixel.x(), pixel.y());
+          }
+          
+          // (B) Forward camera: project using W.
+          Eigen::Vector4f homogeneous_point(pose.translation.x(),
+                                             pose.translation.y(),
+                                             -0.45f, 1.0f);
+          Eigen::Vector3f camera_point = W * homogeneous_point;
+          float depth = camera_point.z();
+          if (depth > -0.2f) {
+              float px = camera_point.x() / depth;
+              float py = camera_point.y() / depth;
+              cv::Point2f image_pt(px, py);
+              if (image_pt.x >= 0 && image_pt.x < cam_base.cols &&
+                  image_pt.y >= 0 && image_pt.y < cam_base.rows) {
+                  cam_points.emplace_back(static_cast<int>(std::round(image_pt.x)),
+                                            static_cast<int>(std::round(image_pt.y)));
+              }
+          }
       }
-
-      // Convert from path coordinates to pixel coordinates in overlay.
-      Eigen::Vector2i pixel = StateToPixel(pose.translation).cast<int>();
-
-      // Make sure it's in bounds. We check latest_vis_image_ now (the same size
-      // as the BEV).
-      if (ImageBoundCheck(pixel, latest_annotated_bev)) {
-        cv::circle(latest_annotated_bev, cv::Point(pixel.x(), pixel.y()),
-                   CONFIG_viz_radius, color, thickness);
+      
+      // Draw the polyline for the path on the line overlays.
+      if (!bev_points.empty()) {
+          const std::vector<std::vector<cv::Point>> contour{ bev_points };
+          cv::polylines(line_overlay_bev, contour, false, line_color, 
+                        line_thickness, cv::LINE_AA);
       }
-    }
+      if (!cam_points.empty()) {
+          const std::vector<std::vector<cv::Point>> contour{ cam_points };
+          cv::polylines(line_overlay_cam, contour, false, line_color, 
+                        int(line_thickness*2), cv::LINE_AA);
+      }
+      
+      // Draw the end circle with full opacity directly on the base images.
+      if (!bev_points.empty()) {
+          cv::circle(bev_base, bev_points.back(), CONFIG_viz_radius * 2, 
+                     circle_color, -1, cv::LINE_AA);
+      }
+      if (!cam_points.empty()) {
+          cv::circle(cam_base, cam_points.back(), CONFIG_viz_radius * 2, 
+                     circle_color, -1, cv::LINE_AA);
+      }
   }
-
+  
+  // 4) Blend the line overlays onto the base images using per-pixel alpha blending.
+  auto alphaBlend = [](const cv::Mat &overlay, cv::Mat &base) {
+      for (int y = 0; y < base.rows; ++y) {
+          for (int x = 0; x < base.cols; ++x) {
+              cv::Vec4b overlayPixel = overlay.at<cv::Vec4b>(y, x);
+              if (overlayPixel[3] > 0) { // if there's any opacity
+                  float alpha = overlayPixel[3] / 255.0f;
+                  cv::Vec4b &basePixel = base.at<cv::Vec4b>(y, x);
+                  for (int c = 0; c < 3; ++c) {
+                      basePixel[c] = cv::saturate_cast<uchar>(
+                          overlayPixel[c] * alpha + basePixel[c] * (1.0f - alpha));
+                  }
+                  basePixel[3] = 255; // ensure full opacity in the result
+              }
+          }
+      }
+  };
+  
+  alphaBlend(line_overlay_bev, bev_base);
+  alphaBlend(line_overlay_cam, cam_base);
+  
+  // 5) Convert the final images from BGRA to RGBA (if you require RGBA ordering).
+  // cv::cvtColor(bev_base, bev_base, cv::COLOR_BGRA2RGBA);
+  // cv::cvtColor(cam_base, cam_base, cv::COLOR_BGRA2RGBA);
+  
+  // 6) Store the annotated images.
   {
-    std::lock_guard<std::mutex> lock(mutex_);
-    // Update the latest visualization images
-    latest_vis_bevimage_ = latest_annotated_bev;
-    latest_vis_rgbimage_ = latest_annotated_bgr;
+      std::lock_guard<std::mutex> lock(mutex_);
+      latest_vis_bevimage_ = bev_base;
+      latest_vis_rgbimage_ = cam_base;
   }
 }
+
+
 
 // Helper functrion to map ranks to color
 cv::Vec3b DeepCostMapEvaluatorService::GetColorFromRanking(int rank, int num_paths) {
