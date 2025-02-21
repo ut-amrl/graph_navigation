@@ -1296,7 +1296,7 @@ int main(int argc, char** argv) {
             bev_viz_img.header.stamp = viz_img.header.stamp;
             bev_viz_img.encoding = sensor_msgs::image_encodings::BGR8;
             viz_bev_img_pub_.publish(bev_viz_img.toImageMsg());
-          } 
+          }
         }
       }
 
