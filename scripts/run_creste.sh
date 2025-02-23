@@ -1,2 +1,2 @@
 #!/bin/bash
-./bin/navigation --robot_config config/navigation_creste_mueller_longhorizon.lua -v 2
+./bin/navigation --robot_config config/navigation_creste.lua -v 2
