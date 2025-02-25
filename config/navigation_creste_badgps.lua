@@ -44,13 +44,13 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(210);
+  local_fov = deg2rad(300);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_left_flir.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
   evaluator_type = "cost_map_service"; -- linear,  cost_map_service
   carrot_planner_type = "geometric"; -- geometric, service
-  intermediate_goal_tolerance = 15; -- final goal distance will be half this (meters)
+  intermediate_goal_tolerance = 35; -- final goal distance will be half this (meters)
   max_inflation_radius = 1;
   min_inflation_radius = 0.3;
   local_costmap_resolution = 0.01; -- for bev homography
@@ -95,7 +95,7 @@ DeepCostMapEvaluatorService = {
   rollout_density = 3;
 
   robot_inflation_radius = 1.3; -- percentage of robot width
-  costmap_inflation_rate = 50; -- discount factor for merging maps
+  costmap_inflation_rate = 30; -- discount factor for merging maps
 
   angle_weight = 0.0;
   dist_to_goal_weight = 0.1;
