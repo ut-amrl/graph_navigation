@@ -94,16 +94,19 @@ DeepCostMapEvaluatorService = {
   discount_factor = 0.95;
   rollout_density = 3;
 
+  robot_inflation_radius = 1.0; -- percentage of robot width
+  costmap_inflation_rate = 50; -- discount factor for merging maps
+
   angle_weight = 0.0;
   dist_to_goal_weight = 0.1;
   clearance_weight = 0.0;
   clearance_weight_beta = 0.0;
-  fpl_weight = -0.1;
+  fpl_weight = -0.3;
   learned_weight = 1.0;
   learned_weight_beta = 1.5;
 
   -- physical params
-  base_link_offset_x = -0.2; -- m
+  base_link_offset_x = -0.1; -- m
   base_link_offset_y = 0.0; -- m
 
   -- visualization

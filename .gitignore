@@ -441,4 +441,6 @@ compile_commands.json
 
 # OSRM
 osrm*/**
-
+**/osrm_texas_cbf_mld/**
+**/offline/**
+*.png
