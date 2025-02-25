@@ -444,3 +444,5 @@ osrm*/**
 **/osrm_texas_cbf_mld/**
 **/offline/**
 *.png
+
+**/terrain_models/**

@@ -25,7 +25,7 @@ NavigationParameters = {
   dt = 0.060;
   max_linear_accel = 0.5;
   max_linear_decel = 0.5;
-  max_linear_speed = 0.8;
+  max_linear_speed = 1.0;
   max_angular_accel = 0.5;
   max_angular_decel = 0.5;
   max_angular_speed = 1.0;
@@ -44,7 +44,7 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(120);
+  local_fov = deg2rad(210);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_left_flir.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
@@ -94,7 +94,7 @@ DeepCostMapEvaluatorService = {
   discount_factor = 0.95;
   rollout_density = 3;
 
-  robot_inflation_radius = 1.0; -- percentage of robot width
+  robot_inflation_radius = 1.3; -- percentage of robot width
   costmap_inflation_rate = 50; -- discount factor for merging maps
 
   angle_weight = 0.0;
