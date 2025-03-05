@@ -37,6 +37,12 @@ struct PathOption {
   }
 };
 
+struct GoalSE2 {
+  double time;
+  Eigen::Vector2f pose;
+  float angle;
+};
+
 struct Twist {
   double time;
   Eigen::Vector3f linear;

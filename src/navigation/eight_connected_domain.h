@@ -30,13 +30,9 @@
 // Library headers.
 #include "eigen3/Eigen/Dense"
 #include "glog/logging.h"
-#include "ros/ros.h"
-#include "std_msgs/ColorRGBA.h"
-#include "visualization_msgs/Marker.h"
 
 // Project headers.
 #include "shared/math/math_util.h"
-#include "shared/ros/ros_helpers.h"
 #include "simple_queue.h"
 #include "vector_map/vector_map.h"
 

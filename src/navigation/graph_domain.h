@@ -36,9 +36,6 @@
 // Library headers.
 #include "eigen3/Eigen/Dense"
 #include "glog/logging.h"
-#include "ros/ros.h"
-#include "std_msgs/ColorRGBA.h"
-#include "visualization_msgs/Marker.h"
 
 // Project headers.
 #include "math/geometry.h"
@@ -46,7 +43,6 @@
 #include "math/math_util.h"
 #include "navigation_parameters.h"
 #include "nlohmann/json.hpp"
-#include "ros/ros_helpers.h"
 #include "util/helpers.h"
 #include "vector_map/vector_map.h"
 using json = nlohmann::json;
@@ -201,9 +197,12 @@ struct GraphDomain {
 
   bool GetClosestEdge(const Eigen::Vector2f& v, NavigationEdge* closest_edge,
                       float* closest_dist) const {
-    bool found;
+    bool found = false;
     closest_edge->s0_id = -1;
     closest_edge->s1_id = -1;
+    closest_edge->edge.p0 = Eigen::Vector2f::Zero();
+    closest_edge->edge.p1 = Eigen::Vector2f::Zero();
+
     if (edges.empty()) return closest_dist;
     for (const NavigationEdge& e : edges) {
       const float dist = e.edge.Distance(v);

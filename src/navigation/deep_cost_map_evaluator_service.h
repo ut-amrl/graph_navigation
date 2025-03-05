@@ -19,9 +19,16 @@
 */
 //========================================================================
 
-#include <cv_bridge/cv_bridge.h>
-#include <image_transport/image_transport.h>
+#ifdef ROS1
+  #include <ros/ros.h>
+  #include <amrl_msgs/CostmapSrv.h>  // from catkin-based amrl_msgs
+#else
+  #include <rclcpp/rclcpp.hpp>
+  #include <amrl_msgs/srv/costmap_srv.hpp>  // from ament-based amrl_msgs
+#endif
 
+#include <cv_bridge/cv_bridge.h>
+// #include <image_transport/image_transport.h>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -29,11 +36,9 @@
 #include <string>
 #include <vector>
 
-#include "amrl_msgs/CostmapSrv.h"
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
 #include "navigation_types.h"
-#include "ros/ros.h"
 #include "shared/util/timer.h"
 #include "shared/math/geometry.h"
 
@@ -44,7 +49,8 @@ namespace motion_primitives {
 
 class DeepCostMapEvaluatorService : public PathEvaluatorBase {
  public:
-  DeepCostMapEvaluatorService(const navigation::NavigationParameters& params);
+  explicit DeepCostMapEvaluatorService(
+    const navigation::NavigationParameters& params);
 
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
@@ -97,12 +103,30 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
   }
 
  private:
-  ros::NodeHandle nh_;                 // ROS node handle
-  ros::ServiceClient service_client_;  // ROS service client
+    // ---------- Conditional ROS1 or ROS2 members ----------
+  #ifdef ROS1
+    ros::NodeHandle nh_;
+    ros::ServiceClient service_client_;  
+  #else
+    rclcpp::Node::SharedPtr node_;
+    rclcpp::Client<amrl_msgs::srv::CostmapSrv>::SharedPtr service_client_;
+  #endif
+
+  bool callCostmapService(
+    #ifdef ROS1
+          amrl_msgs::CostmapSrv &srv
+    #else
+          amrl_msgs::srv::CostmapSrv::Request req,
+          amrl_msgs::srv::CostmapSrv::Response &res
+    #endif
+  );
+
   navigation::NavigationParameters params_;
   std::mutex mutex_;              // Mutex for thread-safe access
   std::condition_variable cv_;    // Condition variable for blocking
   bool service_request_ongoing_;  // Indicates if a service request is ongoing
+  std::string node_name_;         // Name of the node
+  std::string service_name_;      // Name of the costmap service
 
   std::vector<float> learned_path_costs_;  // Learned cost of each path
   std::vector<float> path_costs_;          // Cost of each path
@@ -118,6 +142,9 @@ class DeepCostMapEvaluatorService : public PathEvaluatorBase {
   navigation::Odom persistent_odom_;          // The odometry associated with the persistent costmap.
 
   navigation::Odom prev_odom_;             // Last up to date odometry message
+
+  // High level costmap retrieval service
+  cv::Mat1f RetrieveCostmapFromService(const navigation::Odom& odom);
 
   // Computes nonlinear clearance weight
   float ClearanceCost(const std::shared_ptr<PathRolloutBase>& path);

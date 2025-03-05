@@ -44,7 +44,7 @@ NavigationParameters = {
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = 0.05;
-  local_fov = deg2rad(300);
+  local_fov = deg2rad(330);
   use_kinect = true;
   camera_calibration_path = "config/camera_calibration_left_flir.yaml";
   model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
@@ -72,7 +72,7 @@ NavigationParameters = {
 AckermannSampler = {
   max_curvature = 1.5;
   clearance_path_clip_fraction = 0.05;
-  max_fov = deg2rad(110);
+  max_fov = deg2rad(120);
 };
 
 DeepCostMapEvaluatorService = {

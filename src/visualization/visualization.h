@@ -18,58 +18,55 @@
 \author  Joydeep Biswas, (C) 2019
 */
 //========================================================================
+#pragma once
 
 #include <stdint.h>
-
 #include <string>
-
 #include "eigen3/Eigen/Dense"
-#include "amrl_msgs/VisualizationMsg.h"
+
+#ifdef ROS1
+  #include "amrl_msgs/VisualizationMsg.h"
+#else
+  #include "amrl_msgs/msg/visualization_msg.hpp"
+#endif
 
 namespace visualization {
 
-// Clear all elements in the message.
-void ClearVisualizationMsg(amrl_msgs::VisualizationMsg& msg);
+#ifdef ROS1
+  using VisualizationMsgType = amrl_msgs::VisualizationMsg;
+#else
+  using VisualizationMsgType = amrl_msgs::msg::VisualizationMsg;
+#endif
 
-// Return new visualization message, with initialized headers and namespace.
-amrl_msgs::VisualizationMsg NewVisualizationMessage(
-    const std::string& frame, const std::string& ns);
+// Clear all elements in the message.
+void ClearVisualizationMsg(VisualizationMsgType & msg);
+
+// Return a new visualization message, with initialized headers and namespace.
+VisualizationMsgType NewVisualizationMessage(const std::string & frame,
+                                               const std::string & ns);
 
 // Add a single point to the visualization message.
-void DrawPoint(const Eigen::Vector2f& p,
-               uint32_t color,
-               amrl_msgs::VisualizationMsg& msg);
+void DrawPoint(const Eigen::Vector2f & p, uint32_t color, VisualizationMsgType & msg);
 
 // Add a single line to the visualization message.
-void DrawLine(const Eigen::Vector2f& p0,
-              const Eigen::Vector2f& p1,
-              uint32_t color,
-              amrl_msgs::VisualizationMsg& msg);
+void DrawLine(const Eigen::Vector2f & p0, const Eigen::Vector2f & p1,
+              uint32_t color, VisualizationMsgType & msg);
 
-// Add a "X" to the visualization message.
-void DrawCross(const Eigen::Vector2f& location,
-               float size,
-               uint32_t color,
-               amrl_msgs::VisualizationMsg& msg);
+// Add a "cross" to the visualization message.
+void DrawCross(const Eigen::Vector2f & location, float size,
+               uint32_t color, VisualizationMsgType & msg);
 
-// Add a single line to the visualization message.
-void DrawArc(const Eigen::Vector2f& center,
-             float radius,
-             float start_angle,
-             float end_angle,
-             uint32_t color,
-             amrl_msgs::VisualizationMsg& msg);
+// Add an arc to the visualization message.
+void DrawArc(const Eigen::Vector2f & center, float radius,
+             float start_angle, float end_angle, uint32_t color,
+             VisualizationMsgType & msg);
 
 // Add a particle to the visualization message.
-void DrawParticle(const Eigen::Vector2f& loc,
-                  float angle,
-                  amrl_msgs::VisualizationMsg& msg);
+void DrawParticle(const Eigen::Vector2f & loc, float angle,
+                  VisualizationMsgType & msg);
 
-void DrawPathOption(const float curvature,
-                    const float distance,
-                    const float clearance,
-                    const uint32_t color,
-                    bool show_clearance,
-                    amrl_msgs::VisualizationMsg& msg);
+void DrawPathOption(const float curvature, const float distance,
+                    const float clearance, const uint32_t color,
+                    bool show_clearance, VisualizationMsgType & msg);
 
-}  // namespace visualization
+} // namespace visualization

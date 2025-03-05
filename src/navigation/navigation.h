@@ -19,7 +19,7 @@
 */
 //========================================================================
 
-#include <costmap_2d/costmap_2d_ros.h>
+#include <string>
 
 #include <ctime>
 #include <deque>
@@ -29,47 +29,38 @@
 #include <unordered_set>
 #include <vector>
 
-#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
-#include "amrl_msgs/GPSMsg.h"
-#include "amrl_msgs/Localization2DMsg.h"
-#include "amrl_msgs/MissionStatusMsg.h"
-#include "amrl_msgs/VisualizationMsg.h"
+// External Libraries 
+#include "eigen3/Eigen/Dense"
+
+// AMRL Specific Libraries
 #include "carrot_service.h"
 #include "config_reader/config_reader.h"
-#include "eigen3/Eigen/Dense"
-#include "eight_connected_domain.h"
 #include "graph_domain.h"
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
 #include "navigation_types.h"
 #include "osm_planner.h"
-#include "visualization/visualization.h"
-#include "visualization_msgs/Marker.h"
-#include "visualization_msgs/MarkerArray.h"
+#include "shared/math/gps_util.h"
+#include "ros_adapter.h"
+
+// #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
+// #include "amrl_msgs/GPSMsg.h"
+// #include "amrl_msgs/Localization2DMsg.h"
+// #include "amrl_msgs/MissionStatusMsg.h"
+// #include "amrl_msgs/VisualizationMsg.h"
+
+// #include "eight_connected_domain.h"
+// #include "visualization/visualization.h"
+// #include "visualization_msgs/Marker.h"
+// #include "visualization_msgs/MarkerArray.h"
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
 
 namespace navigation {
 
-inline std::string GetMapPath(const std::string& dir, const std::string& name) {
-  return dir + "/" + name + "/" + name + ".navigation.json";
-}
-
-inline std::string GetDeprecatedMapPath(const std::string& dir,
-                                        const std::string& name) {
-  return dir + "/" + name + "/" + name + ".navigation.txt";
-}
-
-struct SeenObstacle {
-  Eigen::Vector2f location;
-  std::time_t last_seen;
-};
-
-struct ObstacleCost {
-  Eigen::Vector2f location;
-  unsigned char cost;
-};
+// Forward declaration for the ros adapter
+class RosAdapter;
 
 enum class NavigationState {
   kStopped = 0,
@@ -99,7 +90,6 @@ class Navigation {
   void SetGPSNavGoals(const vector<GPSPoint>& goals);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
   void ResetNavGoals();
-  void UpdateLocalCostmap(const costmap_2d::Costmap2D& costmap);
   void SetOverride(const Eigen::Vector2f& loc, float angle);
   void Resume();
   bool PlanStillValid();
@@ -111,7 +101,7 @@ class Navigation {
   Eigen::Affine2f OdometryToUTMTransform(const Odom& odom,
                                          const GPSPoint& gps_loc);
   int GetNextGPSGlobalGoal(int start_goal_index);
-  bool GetNextGPSGoal(amrl_msgs::GPSMsg& goal_msg);
+  bool GetNextGPSGoal(gps_util::GPSPoint& goal);
 
   void Plan(Eigen::Vector2f goal_loc);
   void PlanIntermediate(const Eigen::Vector2f& initial,
@@ -141,8 +131,10 @@ class Navigation {
   // Stop all navigation functions.
   void Pause();
   // Set parameters for navigation.
-  void Initialize(const NavigationParameters& params, const string& maps_dir,
-                  const string& map);
+  void Initialize(const NavigationParameters& params, 
+    std::shared_ptr<RosAdapter> ros_adapter,
+    const string& maps_dir,
+    const string& map);
   void InitializeOSM(const OSMPlannerParameters& params);
   // Map obstacles into global costmap
   void LoadVectorMap(const std::string& map_file);
@@ -176,8 +168,6 @@ class Navigation {
   std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>>
   GetLastPathOptions();
   std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
-  std::vector<ObstacleCost> GetCostmapObstacles();
-  std::vector<ObstacleCost> GetGlobalCostmapObstacles();
   bool GetInitialOdom(Odom& odom) const;
   bool GetInitialGPS(GPSPoint& loc) const;
 
@@ -187,6 +177,9 @@ class Navigation {
 
   // Converts a route of GPS points to a route of map points
   std::vector<Vector2d> GPSRouteToMap(const std::vector<GPSPoint>& route);
+
+  protected:
+    std::weak_ptr<RosAdapter> ros_adapter_;
 
  private:
   // Test 1D TOC motion in a straight line.
@@ -230,9 +223,9 @@ class Navigation {
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
 
-  // // Current map frame robot location (OdometryCallback).
+  // Current map frame robot location (OdometryCallback).
   Eigen::Vector2f robot_loc_;
-  // // Current map frame robot orientation (OdometryCallback).
+  // Current map frame robot orientation (OdometryCallback).
   float robot_angle_;
   // Current robot velocity.
   Eigen::Vector2f robot_vel_;
@@ -331,18 +324,8 @@ class Navigation {
   // Last PathOption taken
   std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
 
-  // Local 2D cost map from lidar
-  costmap_2d::Costmap2D costmap_;
-  // List of obstacle points in local costmap for viewing/debugging
-  std::vector<ObstacleCost> costmap_obstacles_;
-  // List of locations of obstacles in previous costmap relative to robot
-  std::vector<SeenObstacle> prev_obstacles_;
   // Location of robot at last cost map generation
   Eigen::Vector2f prev_robot_loc_;
-  // Global 2D cost map from loaded map
-  costmap_2d::Costmap2D global_costmap_;
-  // List of obstacle points in local costmap for viewing/debugging
-  std::vector<ObstacleCost> global_costmap_obstacles_;
   //
   bool intermediate_path_found_;
 

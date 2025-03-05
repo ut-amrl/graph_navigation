@@ -4,6 +4,7 @@
 #include <config_reader/config_reader.h>
 #include <glog/logging.h>
 #include <torch/script.h>
+#include "shared/ros/ros_macros.h"
 
 CONFIG_STRING(service_name, "DeepCostMapEvaluatorService.service_name");
 
@@ -51,19 +52,61 @@ using namespace geometry;
 using namespace math_util;
 
 namespace motion_primitives {
+DeepCostMapEvaluatorService::DeepCostMapEvaluatorService(
+  const navigation::NavigationParameters& params) : 
+    params_(params),
+    service_request_ongoing_(false),
+    node_name_("DeepCostMapEvaluatorService"),
+    service_name_("costmap_service") {
+  
+  #ifdef ROS1
+  service_client_ = nh_.serviceClient<amrl_msgs::CostmapSrv>(service_name_);
+  #else
+  // Create node_ with default name
+  node_ = rclcpp::Node::make_shared(node_name_);
 
-DeepCostMapEvaluatorService::DeepCostMapEvaluatorService(const navigation::NavigationParameters& params)
-  : params_(params), service_request_ongoing_(false) {
-  // Initialize ROS service client
-  service_client_ = nh_.serviceClient<amrl_msgs::CostmapSrv>(CONFIG_service_name);
-  latest_vis_bevimage_ = cv::Mat3b(1, 1, cv::Vec3b(0, 0, 0));
-  latest_vis_rgbimage_ = cv::Mat3b(1, 1, cv::Vec3b(0, 0, 0));
+  // Create the service client:
+  service_client_ = node_->create_client<amrl_msgs::srv::CostmapSrv>(service_name_);
+  #endif
 
-  // Check that matrices are not empty
-  if (params_.K.empty() || params_.D.empty() || params_.H.empty() || params_.R.empty() || params_.P.empty(), params_.W.empty()) {
-    LOG(FATAL) << "Camera calibration matrices are empty!";
+  // The rest of your original checks:
+  if (params_.K.empty() || params_.D.empty()) {
+    LOG_ERROR("Camera calibration matrices are empty!");
   }
 }
+
+bool DeepCostMapEvaluatorService::callCostmapService(
+  #ifdef ROS1
+      amrl_msgs::CostmapSrv &srv
+  #else
+      amrl_msgs::srv::CostmapSrv::Request req,
+      amrl_msgs::srv::CostmapSrv::Response &res
+  #endif
+  )
+  {
+  #ifdef ROS1
+    // ------------- ROS1 service call -------------
+    return service_client_.call(srv);
+  
+  #else
+    // ------------- ROS2 service call -------------
+    if (!service_client_->wait_for_service(std::chrono::seconds(1))) {
+      LOG_ERROR("Service not available after waiting, CostmapSrv call failed!");
+      return false;
+    }
+    auto future_result = service_client_->async_send_request(std::make_shared<decltype(req)>(req));
+    // Wait (blocking) for the result; in real usage, you might do it asynchronously
+    auto status = rclcpp::spin_until_future_complete(node_, future_result);
+    if (status == rclcpp::FutureReturnCode::SUCCESS) {
+      // Fill `res` with the returned data
+      res = *(future_result.get());
+      return true;
+    } else {
+      LOG_ERROR("Service call failed or timed out (ROS2)!");
+      return false;
+    }
+  #endif
+  }
 
 void DeepCostMapEvaluatorService::UpdateImage(const cv::Mat& image) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -477,57 +520,100 @@ cv::Mat1f DeepCostMapEvaluatorService::UpdateMapToLocalFrame(const cv::Mat1f& co
   return new_costmap;
 }
 
-void DeepCostMapEvaluatorService::RequestMapUpdate(const Odom& odom) {
+cv::Mat1f DeepCostMapEvaluatorService::RetrieveCostmapFromService(const navigation::Odom& odom) {
+  cv::Mat1f costmap; // Will remain empty on failure
+
   try {
+#ifdef USE_ROS1
+    // -------------------- ROS1 version --------------------
     amrl_msgs::CostmapSrv srv;
-
-    // Prepare service request
-    srv.request.header.stamp = ros::Time::now();
+    srv.request.header.stamp = GET_TIME();
     srv.request.header.frame_id = "base_link";
-    printf("Requesting deep cost map service\n");
-    // Call the service
-    if (service_client_.call(srv)) {
+
+    LOG_INFO("Requesting deep cost map service (ROS1)...");
+    if (callCostmapService(srv)) {
       if (srv.response.success.data) {
-        printf("Deep cost map service returned a valid cost map\n");
         auto msg = srv.response.costmap;
-        // Normalize costmap to 0 - 1
-        cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
-        cv::Mat1f costmap = cv_ptr->image;
-
-        // // Save costmap to image for visualization
-        // cv::imwrite("costmap.png", costmap);
-
-        // Resize and crop costmap to be larger
-        cv::Mat1f cropped_costmap = CropAndResizeImage(
-          costmap, cv::Point(CONFIG_center_crop_x, CONFIG_center_crop_y), 
-          CONFIG_center_crop_width, CONFIG_center_crop_height, 
-          CONFIG_output_width, CONFIG_output_height);
-
-        // cv::imwrite("cropped_costmap.png", cropped_costmap);
-        // Update shared cost map
-        {
-          std::lock_guard<std::mutex> lock(mutex_);
-          prev_costmap_ = cropped_costmap;
-          prev_odom_ = odom;
-
-          // Accumulate the previous costmap into the current costmap.
-          this->AccumulateCostmap(prev_costmap_, prev_odom_);
-
-        }
-        printf("Completed deep cost map service");
-        cv_.notify_all();
+        // Convert to cv::Mat1f using cv_bridge
+        cv_bridge::CvImagePtr cv_ptr =
+            cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
+        costmap = cv_ptr->image;
       } else {
-        cv_.notify_all();
-        ROS_ERROR("Deep cost map service failed to return a valid cost map");
+        LOG_ERROR("Deep cost map service returned success=false (ROS1)!");
       }
     } else {
-      ROS_ERROR("Failed to call deep cost map service");
+      LOG_ERROR("Failed to call deep cost map service (ROS1)!");
     }
+
+#else
+    // -------------------- ROS2 version --------------------
+    amrl_msgs::srv::CostmapSrv::Request req;
+    amrl_msgs::srv::CostmapSrv::Response res;
+    req.header.stamp = GET_TIME();
+    req.header.frame_id = "base_link";
+
+    LOG_INFO("Requesting deep cost map service (ROS2)...");
+    if (callCostmapService(req, res)) {
+      if (res.success.data) {
+        auto msg = res.costmap;
+        // Convert to cv::Mat1f using cv_bridge
+        cv_bridge::CvImagePtr cv_ptr =
+            cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_32FC1);
+        costmap = cv_ptr->image;
+      } else {
+        LOG_ERROR("Deep cost map service returned success=false (ROS2)!");
+      }
+    } else {
+      LOG_ERROR("Failed to call deep cost map service (ROS2)!");
+    }
+#endif
+
   } catch (const std::exception& e) {
-    ROS_ERROR("Exception in deep cost map service: %s", e.what());
+    LOG_ERROR("Exception in deep cost map service: %s", e.what());
   }
 
-  // Mark service request as completed
+  return costmap;
+}
+
+void DeepCostMapEvaluatorService::RequestMapUpdate(const Odom& odom) {
+  try {
+    // 1. Retrieve the raw costmap as cv::Mat1f
+    cv::Mat1f costmap = RetrieveCostmapFromService(odom);
+    if (costmap.empty()) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        cv_.notify_all();
+      }
+      return;
+    }
+
+    // 2. Crop and resize costmap (still outside #ifdef)
+    cv::Mat1f cropped_costmap = CropAndResizeImage(
+      costmap, 
+      cv::Point(CONFIG_center_crop_x, CONFIG_center_crop_y), 
+      CONFIG_center_crop_width, 
+      CONFIG_center_crop_height, 
+      CONFIG_output_width, 
+      CONFIG_output_height
+    );
+
+    // 3. Lock and update shared data
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      prev_costmap_ = cropped_costmap;
+      prev_odom_    = odom;
+      // Accumulate the previous costmap into the persistent costmap
+      this->AccumulateCostmap(prev_costmap_, prev_odom_);
+      cv_.notify_all();
+    }
+
+    LOG_INFO("Completed deep cost map service update.");
+  }
+  catch (const std::exception& e) {
+    LOG_ERROR("Exception in deep cost map service: %s", e.what());
+  }
+
+  // 4. Mark service request as completed
   {
     std::lock_guard<std::mutex> lock(mutex_);
     service_request_ongoing_ = false;
