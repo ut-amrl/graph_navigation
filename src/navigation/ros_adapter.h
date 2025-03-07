@@ -41,8 +41,7 @@ class RosAdapter {
     static std::shared_ptr<RosAdapter> create(rclcpp::Node::SharedPtr node, const navigation::NavigationParameters& params);
   #endif
 
-  protected:
-    std::weak_ptr<Navigation> navigation_;
+  std::weak_ptr<Navigation> navigation_;
 };
 
 }  // namespace navigation
