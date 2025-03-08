@@ -666,7 +666,7 @@ private:
         "localization", 10);
 
     geojson_pub_ = node_->create_publisher<GeoJSON>(
-        "navigation/geojson_waypoints", 10);
+        "/navigation/geojson_waypoints", 10);
 
     // Path rollouts
     fox_path_pub_ = node_->create_publisher<MarkerArray>(
@@ -745,7 +745,7 @@ private:
   }
 
   void setupServices() {
-    node_->create_service<GraphNavGPSSrv>(
+    gps_nav_srv_ = node_->create_service<GraphNavGPSSrv>(
         "graphNavGPSSrv", std::bind(&Ros2AdapterImpl::GPSPlanServiceCb, this,
                                    std::placeholders::_1, std::placeholders::_2));
   }
@@ -765,7 +765,8 @@ private:
 
     // Build the start GPSPoint from the request.
     const GPSPoint start(request->start.latitude, request->start.longitude);
-    
+    LOG_INFO("Start: (%f, %f)", start.lat, start.lon);
+    LOG_INFO("Goals: %d", int(request->goals.data.size())); 
     // Build the goals vector from the request.
     std::vector<GPSPoint> goals;
     for (const auto& goal : request->goals.data) {

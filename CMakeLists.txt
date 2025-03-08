@@ -10,7 +10,7 @@ message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -Werror -fmax-errors=1")
+set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -Werror") # -fmax-errors=1
 set(LIBRARY_NAME "graph_nav_lib" CACHE STRING "Name of compiled library")
 
 if("${CMAKE_BUILD_TYPE}" MATCHES "Release")
