@@ -36,8 +36,6 @@
 #include "astar.h"
 #include "deep_cost_map_evaluator.h"
 #include "deep_cost_map_evaluator_service.h"
-#include "terrain_evaluator.h"
-#include "terrain_evaluator2.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "eight_connected_domain.h"
@@ -52,6 +50,8 @@
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
 #include "simple_queue.h"
+#include "terrain_evaluator.h"
+#include "terrain_evaluator2.h"
 using json = nlohmann::json;
 
 using Eigen::Affine2f;
@@ -137,21 +137,6 @@ struct GraphVisualizer {
   }
 
   const bool kVisualize;
-};
-
-struct PointCost {
-  int index;
-  double cost;
-
-  // Constructor
-  PointCost(int k, double c) : index(k), cost(c) {}
-};
-
-struct CompareCost {
-  bool operator()(const PointCost& lhs, const PointCost& rhs) const {
-    // Using > for max heap (change to < for min heap)
-    return lhs.cost > rhs.cost;
-  }
 };
 
 }  // namespace
@@ -1223,7 +1208,7 @@ float Navigation::GetCarrotDist() { return params_.carrot_dist; }
 float Navigation::GetObstacleMargin() { return params_.obstacle_margin; }
 
 bool Navigation::GetRobotPose(Eigen::Vector3f& pose) {
-  if (!gps_initialized_) {
+  if (!gps_initialized_ || !odom_initialized_) {
     return false;
   }
   // Retrieve uncomponensated robot pose
@@ -1256,8 +1241,10 @@ bool Navigation::GetVisualizationImage(cv::Mat& image, cv::Mat& bev_image) {
                     ->GetAnnotatedBEVImage();
     return true;
   } else if (params_.evaluator_type == "terrain2") {
-    image = dynamic_cast<TerrainEvaluator*>(evaluator_.get())->annotated_rgb_image_;
-    bev_image = dynamic_cast<TerrainEvaluator*>(evaluator_.get())->latest_vis_image_;
+    image =
+        dynamic_cast<TerrainEvaluator*>(evaluator_.get())->annotated_rgb_image_;
+    bev_image =
+        dynamic_cast<TerrainEvaluator*>(evaluator_.get())->latest_vis_image_;
     return true;
   } else {
     std::cerr << "No visualization image for linear evaluator" << std::endl;

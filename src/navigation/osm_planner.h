@@ -74,10 +74,12 @@ class OSMPlanner {
     params.coordinates.push_back({osrm::util::FloatLongitude{end.lon},
                                   osrm::util::FloatLatitude{end.lat}});
     params.geometries = osrm::RouteParameters::GeometriesType::Polyline;
-
+    printf("Planning route from (%f, %f) to (%f, %f)\n", start.lat, start.lon,
+           end.lat, end.lon);
     osrm::engine::api::ResultT result = osrm::util::json::Object();
     const auto status = osrm->Route(params, result);
     vector<GPSPoint> path_coordinates;
+    printf("Planned route\n");
 
     if (status == osrm::Status::Ok) {
       auto &json_result = result.get<osrm::util::json::Object>();

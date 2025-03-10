@@ -3,27 +3,27 @@
 #include "ros_adapter.h"
 
 // ROS 2 includes
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp/time.hpp>
+#include <tf2_ros/transform_broadcaster.h>
+
+#include <geometry_msgs/msg/point32.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <sensor_msgs/msg/image.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/time.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/point_cloud.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
-#include "tf2/LinearMath/Quaternion.h"
-#include <tf2_ros/transform_broadcaster.h>
-#include <geometry_msgs/msg/point32.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <geometry_msgs/msg/twist_stamped.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
 #include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include "amrl_msgs/msg/ackermann_curvature_drive_msg.hpp"
 #include "amrl_msgs/msg/gps_array_msg.hpp"
@@ -35,39 +35,42 @@
 #include "amrl_msgs/msg/visualization_msg.hpp"
 #include "amrl_msgs/srv/graph_nav_gps_srv.hpp"
 #include "foxglove_msgs/msg/geo_json.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
+#include "tf2/LinearMath/Quaternion.h"
 #include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 // Navigation includes
+#include "config_reader/config_reader.h"
+#include "constant_curvature_arcs.h"
+#include "motion_primitives.h"
+#include "navigation.h"
 #include "navigation_flags.h"
 #include "navigation_types.h"
-#include "config_reader/config_reader.h"
-#include "shared/math/math_util.h"
-#include "shared/math/gps_util.h"
 #include "shared/math/geometry.h"
+#include "shared/math/gps_util.h"
+#include "shared/math/math_util.h"
 #include "shared/ros/ros_helpers.h"
 #include "shared/ros/ros_macros.h"
 #include "shared/util/helpers.h"
 #include "shared/util/timer.h"
-#include "visualization/visualization.h"
 #include "visualization/ros_visualization.h"
-#include "motion_primitives.h"
-#include "constant_curvature_arcs.h"
-#include "navigation.h"
+#include "visualization/visualization.h"
 
 // Built in Libraries
-#include <memory>
-#include <vector>
-#include <unordered_map>
-#include <string>
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 // Third Party Libraries
-#include "gflags/gflags.h"
 #include <cv_bridge/cv_bridge.h>
+
 #include <opencv2/opencv.hpp>
+
+#include "gflags/gflags.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -79,10 +82,9 @@ using ros_helpers::InitRosHeader;
 
 // Aliases for custom datatypes
 using gps_util::GPSPoint;
-using navigation::PathOption;
-using motion_primitives::PathRolloutBase;
 using motion_primitives::ConstantCurvatureArc;
-
+using motion_primitives::PathRolloutBase;
+using navigation::PathOption;
 
 // Aliases for ROS2 messages
 using AckermannCurvatureDriveMsg = amrl_msgs::msg::AckermannCurvatureDriveMsg;
@@ -97,10 +99,11 @@ using GraphNavGPSSrv = amrl_msgs::srv::GraphNavGPSSrv;
 
 using geometry::kEpsilon;
 
-using geometry_msgs::msg::PoseStamped;
-using geometry_msgs::msg::TwistStamped;
-using geometry_msgs::msg::TransformStamped;
+using foxglove_msgs::msg::GeoJSON;
 using geometry_msgs::msg::Point32;
+using geometry_msgs::msg::PoseStamped;
+using geometry_msgs::msg::TransformStamped;
+using geometry_msgs::msg::TwistStamped;
 using nav_msgs::msg::OccupancyGrid;
 using nav_msgs::msg::Odometry;
 using nav_msgs::msg::Path;
@@ -113,11 +116,10 @@ using std_msgs::msg::Empty;
 using std_msgs::msg::Float64MultiArray;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
-using foxglove_msgs::msg::GeoJSON;
 
 using std::string;
-using std::vector;
 using std::unordered_map;
+using std::vector;
 
 // Configuration macros from config_reader (assumed to be defined)
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
@@ -131,9 +133,7 @@ CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
 
 // Convenience: convert rclcpp::Time to seconds.
-inline double to_seconds(const rclcpp::Time& t) {
-  return t.seconds();
-}
+inline double to_seconds(const rclcpp::Time &t) { return t.seconds(); }
 
 namespace navigation {
 
@@ -141,7 +141,7 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
   vector<PathOption> options;
   for (size_t i = 0; i < paths.size(); ++i) {
     const ConstantCurvatureArc arc =
-        *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
+        *reinterpret_cast<ConstantCurvatureArc *>(paths[i].get());
     PathOption option;
     option.curvature = arc.curvature;
     option.free_path_length = arc.Length();
@@ -154,18 +154,17 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
 navigation::Odom OdomHandler(const Odometry::SharedPtr &msg) {
   navigation::Odom odom;
   odom.time = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
-  odom.position = { static_cast<float>(msg->pose.pose.position.x),
-                    static_cast<float>(msg->pose.pose.position.y),
-                    static_cast<float>(msg->pose.pose.position.z) };
-  odom.orientation = { static_cast<float>(msg->pose.pose.orientation.w),
-                        static_cast<float>(msg->pose.pose.orientation.x),
-                        static_cast<float>(msg->pose.pose.orientation.y),
-                        static_cast<float>(msg->pose.pose.orientation.z) };
+  odom.position = {static_cast<float>(msg->pose.pose.position.x),
+                   static_cast<float>(msg->pose.pose.position.y),
+                   static_cast<float>(msg->pose.pose.position.z)};
+  odom.orientation = {static_cast<float>(msg->pose.pose.orientation.w),
+                      static_cast<float>(msg->pose.pose.orientation.x),
+                      static_cast<float>(msg->pose.pose.orientation.y),
+                      static_cast<float>(msg->pose.pose.orientation.z)};
   return odom;
 }
 
-AckermannCurvatureDriveMsg TwistToAckermann(
-  const TwistStamped& twist) {
+AckermannCurvatureDriveMsg TwistToAckermann(const TwistStamped &twist) {
   AckermannCurvatureDriveMsg ackermann_msg;
   ackermann_msg.header = twist.header;
   ackermann_msg.velocity = twist.twist.linear.x;
@@ -181,10 +180,10 @@ AckermannCurvatureDriveMsg TwistToAckermann(
 // Ros2AdapterImpl: Implements the RosAdapter interface for ROS2.
 //============================================================================
 class Ros2AdapterImpl : public RosAdapter {
-public:
-  explicit Ros2AdapterImpl(rclcpp::Node::SharedPtr node, const navigation::NavigationParameters& params) : node_(node), params_(params)
-  {
-  }
+ public:
+  explicit Ros2AdapterImpl(rclcpp::Node::SharedPtr node,
+                           const navigation::NavigationParameters &params)
+      : node_(node), params_(params) {}
 
   // Initialize ROS2: create the node, publishers, subscribers, services.
   void Initialize(std::shared_ptr<Navigation> navigation) override {
@@ -213,7 +212,8 @@ public:
 
       bool nav_succeeded = false;
       if (auto nav = navigation_.lock()) {
-        // Run the navigation update: use current time (in seconds) to update and get command outputs.
+        // Run the navigation update: use current time (in seconds) to update
+        // and get command outputs.
         nav_succeeded = nav->Run(now.seconds(), cmd_vel, cmd_angle_vel);
       }
 
@@ -229,7 +229,8 @@ public:
         if (nav_succeeded) {
           PublishForwardPredictedPCL(nav->GetPredictedCloud());
           DrawRobot();
-          if (nav->GetNavStatusUint8() != static_cast<uint8_t>(NavigationState::kStopped)) {
+          if (nav->GetNavStatusUint8() !=
+              static_cast<uint8_t>(NavigationState::kStopped)) {
             DrawTarget();
             DrawPathOptions();
           }
@@ -243,25 +244,28 @@ public:
           viz_pub_->publish(local_viz_msg_);
           viz_pub_->publish(global_viz_msg_);
 
-          // Optionally, if using a cost map evaluator, get and publish visualization images.
+          // Optionally, if using a cost map evaluator, get and publish
           if (params_.evaluator_type == "cost_map" ||
               params_.evaluator_type == "cost_map_service" ||
               params_.evaluator_type == "terrain2") {
             cv_bridge::CvImage viz_img, bev_viz_img;
-            bool result = nav->GetVisualizationImage(viz_img.image, bev_viz_img.image);
+            bool result =
+                nav->GetVisualizationImage(viz_img.image, bev_viz_img.image);
             if (result) {
               if (!viz_img.image.empty()) {
                 viz_img.header.stamp = now;
-                viz_img.encoding = (params_.evaluator_type == "cost_map_service")
-                    ? sensor_msgs::image_encodings::BGRA8
-                    : sensor_msgs::image_encodings::BGR8;
+                viz_img.encoding =
+                    (params_.evaluator_type == "cost_map_service")
+                        ? sensor_msgs::image_encodings::BGRA8
+                        : sensor_msgs::image_encodings::BGR8;
                 viz_img_pub_->publish(*viz_img.toImageMsg());
               }
               if (!bev_viz_img.image.empty()) {
                 bev_viz_img.header.stamp = now;
-                bev_viz_img.encoding = (params_.evaluator_type == "cost_map_service")
-                    ? sensor_msgs::image_encodings::BGRA8
-                    : sensor_msgs::image_encodings::BGR8;
+                bev_viz_img.encoding =
+                    (params_.evaluator_type == "cost_map_service")
+                        ? sensor_msgs::image_encodings::BGRA8
+                        : sensor_msgs::image_encodings::BGR8;
                 viz_bev_img_pub_->publish(*bev_viz_img.toImageMsg());
               }
             }
@@ -274,7 +278,7 @@ public:
     }
   }
 
-private:
+ private:
   bool enabled_ = false;
   navigation::Odom odom_;
   vector<Vector2f> point_cloud_;
@@ -288,8 +292,7 @@ private:
     if (auto nav = navigation_.lock()) {
       navigation::Odom odom;
       GPSPoint gps_loc;
-      if (!nav->GetInitialOdom(odom) || !nav->GetInitialGPS(gps_loc))
-        return;
+      if (!nav->GetInitialOdom(odom) || !nav->GetInitialGPS(gps_loc)) return;
       auto T_odom_map = nav->OdometryToUTMTransform(odom, gps_loc);
       Vector2f translation_2d = T_odom_map.translation().head<2>();
       float theta = atan2(T_odom_map.linear()(1, 0), T_odom_map.linear()(0, 0));
@@ -337,7 +340,8 @@ private:
         status_msg.goals.data.push_back(goal_msg);
         if (i < missionStatus.goals_reached.size()) {
           GPSMsg goal_reached_msg;
-          goal_reached_msg.header.stamp = rclcpp::Time(missionStatus.goals_reached[i].time);
+          goal_reached_msg.header.stamp =
+              rclcpp::Time(missionStatus.goals_reached[i].time);
           goal_reached_msg.latitude = missionStatus.goals_reached[i].lat;
           goal_reached_msg.longitude = missionStatus.goals_reached[i].lon;
           status_msg.goals_reached.data.push_back(goal_reached_msg);
@@ -364,19 +368,23 @@ private:
     if (auto nav = navigation_.lock()) {
       vector<GPSPoint> plan;
       if (nav->GetGlobalPlan(plan)) {
+        // Publish global plan on vectormap
         global_viz_msg_.lines.clear();
         auto map_route = nav->GPSRouteToMap(plan);
         for (const auto &p : map_route) {
           visualization::DrawPoint(p.cast<float>(), 0xFF0000, global_viz_msg_);
         }
         viz_pub_->publish(global_viz_msg_);
+
+        // Publish global plan on foxglove
+        ros_visualization::GPSRouteToGeoJSON(geojson_pub_, plan);
       } else {
         RCLCPP_WARN(node_->get_logger(), "Global plan is not valid.");
       }
     }
   }
 
-  void PublishForwardPredictedPCL(const vector<Vector2f>& pcl) {
+  void PublishForwardPredictedPCL(const vector<Vector2f> &pcl) {
     PointCloud fp_pcl_msg;
     fp_pcl_msg.points.resize(pcl.size());
     for (size_t i = 0; i < pcl.size(); ++i) {
@@ -397,18 +405,26 @@ private:
       float l1 = -0.5f * kRobotLength - kRearAxleOffset - kObstacleMargin;
       float l2 = 0.5f * kRobotLength - kRearAxleOffset + kObstacleMargin;
       float w = 0.5f * kRobotWidth + kObstacleMargin;
-      visualization::DrawLine(Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
-      visualization::DrawLine(Vector2f(l2, w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-      visualization::DrawLine(Vector2f(l1, w), Vector2f(l2, w), 0xC0C0C0, local_viz_msg_);
-      visualization::DrawLine(Vector2f(l1, -w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
+      visualization::DrawLine(Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0,
+                              local_viz_msg_);
+      visualization::DrawLine(Vector2f(l2, w), Vector2f(l2, -w), 0xC0C0C0,
+                              local_viz_msg_);
+      visualization::DrawLine(Vector2f(l1, w), Vector2f(l2, w), 0xC0C0C0,
+                              local_viz_msg_);
+      visualization::DrawLine(Vector2f(l1, -w), Vector2f(l2, -w), 0xC0C0C0,
+                              local_viz_msg_);
 
       l1 = -0.5f * kRobotLength - kRearAxleOffset;
       l2 = 0.5f * kRobotLength - kRearAxleOffset;
       w = 0.5f * kRobotWidth;
-      visualization::DrawLine(Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);
-      visualization::DrawLine(Vector2f(l2, w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
-      visualization::DrawLine(Vector2f(l1, w), Vector2f(l2, w), 0x000000, local_viz_msg_);
-      visualization::DrawLine(Vector2f(l1, -w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
+      visualization::DrawLine(Vector2f(l1, w), Vector2f(l1, -w), 0x000000,
+                              local_viz_msg_);
+      visualization::DrawLine(Vector2f(l2, w), Vector2f(l2, -w), 0x000000,
+                              local_viz_msg_);
+      visualization::DrawLine(Vector2f(l1, w), Vector2f(l2, w), 0x000000,
+                              local_viz_msg_);
+      visualization::DrawLine(Vector2f(l1, -w), Vector2f(l2, -w), 0x000000,
+                              local_viz_msg_);
     }
   }
 
@@ -416,8 +432,10 @@ private:
     if (auto nav = navigation_.lock()) {
       float carrot_dist = nav->GetCarrotDist();
       Vector2f target = nav->GetTarget();
-      visualization::DrawCross(nav->GetIntermediateGoal(), 0.2f, 0x0000FF, global_viz_msg_);
-      visualization::DrawArc(Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+      visualization::DrawCross(nav->GetIntermediateGoal(), 0.2f, 0x0000FF,
+                               global_viz_msg_);
+      visualization::DrawArc(Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0,
+                             local_viz_msg_);
       viz_pub_->publish(global_viz_msg_);
       visualization::DrawCross(target, 0.2f, 0xFF0080, local_viz_msg_);
     }
@@ -430,18 +448,25 @@ private:
       auto path_options = navigation::ToOptions(path_rollouts);
       auto best_option = nav->GetOption();
       for (const auto &o : path_options) {
-        visualization::DrawPathOption(o.curvature, o.free_path_length, o.clearance, 0x0000FF, false, local_viz_msg_);
+        visualization::DrawPathOption(o.curvature, o.free_path_length,
+                                      o.clearance, 0x0000FF, false,
+                                      local_viz_msg_);
       }
       if (best_option != nullptr) {
         auto best_option_as_option = navigation::ToOptions({best_option})[0];
         path_options.insert(path_options.begin(), best_option_as_option);
       }
-      vector<vector<float>> colors(path_options.size(), {0.0f, 0.0f, 1.0f, 1.0f});
+      vector<vector<float>> colors(path_options.size(),
+                                   {0.0f, 0.0f, 1.0f, 1.0f});
       colors[0] = {1.0f, 0.0f, 0.0f, 1.0f};
-      ros_visualization::PathOptionToMarkerArray(fox_path_pub_, "base_link", path_options, colors, false);
+      ros_visualization::PathOptionToMarkerArray(fox_path_pub_, "base_link",
+                                                 path_options, colors, false);
       if (best_option != nullptr) {
-        ConstantCurvatureArc best_arc = *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
-        visualization::DrawPathOption(best_arc.curvature, best_arc.length, best_arc.clearance, 0xFF0000, true, local_viz_msg_);
+        ConstantCurvatureArc best_arc =
+            *reinterpret_cast<ConstantCurvatureArc *>(best_option.get());
+        visualization::DrawPathOption(best_arc.curvature, best_arc.length,
+                                      best_arc.clearance, 0xFF0000, true,
+                                      local_viz_msg_);
       }
     }
   }
@@ -455,8 +480,8 @@ private:
 
     pose_marker_.header.stamp = node_->now();
     pose_marker_.header.frame_id = "base_link";
-    pose_marker_.pose.position.x = current_loc.x() - cos(current_angle)*0.0f;
-    pose_marker_.pose.position.y = current_loc.y() - sin(current_angle)*0.0f;
+    pose_marker_.pose.position.x = current_loc.x() - cos(current_angle) * 0.0f;
+    pose_marker_.pose.position.y = current_loc.y() - sin(current_angle) * 0.0f;
     pose_marker_.pose.position.z = 0.25f;
     pose_marker_.pose.orientation.x = robotQ.x();
     pose_marker_.pose.orientation.y = robotQ.y();
@@ -501,11 +526,13 @@ private:
           path_pub_->publish(path_msg);
         }
         for (size_t i = 1; i < path.size(); i++) {
-          visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, global_viz_msg_);
+          visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00,
+                                  global_viz_msg_);
         }
         auto global_path = nav->GetGlobalPath();
         for (size_t i = 1; i < global_path.size(); i++) {
-          visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, global_viz_msg_);
+          visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc,
+                                  0xA86032, global_viz_msg_);
         }
         Vector2f carrot;
         bool foundCarrot = nav->GetLocalCarrotHeading(carrot, false);
@@ -515,7 +542,8 @@ private:
         CarrotPlan carrot_plan;
         bool foundCarrotPlan = nav->GetCarrotPlan(carrot_plan);
         if (foundCarrotPlan) {
-          ros_visualization::CarrotPlanToMarkerArray(carrot_plan_pub_, "base_link", carrot_plan);
+          ros_visualization::CarrotPlanToMarkerArray(carrot_plan_pub_,
+                                                     "base_link", carrot_plan);
         }
         bool foundGlobalCarrot = nav->GetGlobalCarrot(carrot);
         if (foundGlobalCarrot) {
@@ -548,7 +576,8 @@ private:
     InitRosHeader("base_link", &drive_msg.header);
     drive_msg.header.stamp = node_->now();
     if (!FLAGS_no_joystick && !enabled_) {
-      // In original code, if joystick is not used and not enabled, zero out velocity
+      // In original code, if joystick is not used and not enabled, zero out
+      // velocity
       drive_msg.twist.linear.x = 0.0;
       drive_msg.twist.angular.z = 0.0;
     } else {
@@ -611,12 +640,13 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr viz_img_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr viz_bev_img_pub_;
 
-   // ---------------- Subscribers (ROS2) ----------------
+  // ---------------- Subscribers (ROS2) ----------------
   vector<rclcpp::Subscription<LaserScan>::SharedPtr> laser_subs_;
   rclcpp::Subscription<Odometry>::SharedPtr odometry_sub_;
   rclcpp::Subscription<Image>::SharedPtr image_sub_;
   rclcpp::Subscription<PoseStamped>::SharedPtr goto_sub_;
-  rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr goto_amrl_sub_;
+  rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr
+      goto_amrl_sub_;
   rclcpp::Subscription<Empty>::SharedPtr reset_nav_goals_sub_;
   rclcpp::Subscription<Bool>::SharedPtr enabler_sub_;
   rclcpp::Subscription<Bool>::SharedPtr halt_sub_;
@@ -638,39 +668,34 @@ private:
     mission_status_pub_ = node_->create_publisher<MissionStatusMsg>(
         "/navigation/mission_status", 10);
 
-    status_pub_ = node_->create_publisher<NavStatusMsg>(
-        "navigation_goal_status", 10);
+    status_pub_ =
+        node_->create_publisher<NavStatusMsg>("navigation_goal_status", 10);
 
-    viz_pub_ = node_->create_publisher<VisualizationMsg>(
-        "visualization", 10);
+    viz_pub_ = node_->create_publisher<VisualizationMsg>("visualization", 10);
 
-    map_lines_publisher_ = node_->create_publisher<Marker>(
-        "map_lines", 10);
+    map_lines_publisher_ = node_->create_publisher<Marker>("map_lines", 10);
 
-    pose_marker_publisher_ = node_->create_publisher<Marker>(
-        "robot_position", 10);
+    pose_marker_publisher_ =
+        node_->create_publisher<Marker>("robot_position", 10);
 
-    fp_pcl_pub_ = node_->create_publisher<PointCloud>(
-        "forward_predicted_pcl", 10);
+    fp_pcl_pub_ =
+        node_->create_publisher<PointCloud>("forward_predicted_pcl", 10);
 
-    path_pub_ = node_->create_publisher<Path>(
-        "trajectory", 10);
+    path_pub_ = node_->create_publisher<Path>("trajectory", 10);
 
-    carrot_pub_ = node_->create_publisher<PoseStamped>(
-        "carrot", 10);
+    carrot_pub_ = node_->create_publisher<PoseStamped>("carrot", 10);
 
-    next_gps_goal_pub_ = node_->create_publisher<GPSMsg>(
-        "next_gps_goal", 10);
+    next_gps_goal_pub_ = node_->create_publisher<GPSMsg>("next_gps_goal", 10);
 
-    localization_pub_ = node_->create_publisher<Localization2DMsg>(
-        "localization", 10);
+    localization_pub_ =
+        node_->create_publisher<Localization2DMsg>("localization", 10);
 
-    geojson_pub_ = node_->create_publisher<GeoJSON>(
-        "/navigation/geojson_waypoints", 10);
+    geojson_pub_ =
+        node_->create_publisher<GeoJSON>("/navigation/geojson_waypoints", 10);
 
     // Path rollouts
-    fox_path_pub_ = node_->create_publisher<MarkerArray>(
-        "/navigation/path_rollouts", 10);
+    fox_path_pub_ =
+        node_->create_publisher<MarkerArray>("/navigation/path_rollouts", 10);
 
     carrot_plan_pub_ = node_->create_publisher<MarkerArray>(
         "/navigation/carrot_path_rollout", 10);
@@ -681,31 +706,33 @@ private:
         "/navigation/bev_costmap_rollouts_image", 10);
 
     local_viz_msg_ =
-      visualization::NewVisualizationMessage("base_link", "navigation_local");
+        visualization::NewVisualizationMessage("base_link", "navigation_local");
     global_viz_msg_ =
-      visualization::NewVisualizationMessage("map", "navigation_global");  
+        visualization::NewVisualizationMessage("map", "navigation_global");
     InitSimulatorVizMarkers();
 
     LOG_INFO("ROS2 publishers set up.");
   }
 
-  // Example helper: set up subscriptions (implement similar callbacks as needed)
+  // Example helper: set up subscriptions (implement similar callbacks as
+  // needed)
   void setupSubscriptions() {
     // 0) Enabler
     enabler_sub_ = node_->create_subscription<Bool>(
         CONFIG_enable_topic, 1,
-        std::bind(&Ros2AdapterImpl::EnablerCallback, this, std::placeholders::_1));
+        std::bind(&Ros2AdapterImpl::EnablerCallback, this,
+                  std::placeholders::_1));
 
     // 1) Odom
     odometry_sub_ = node_->create_subscription<Odometry>(
-      CONFIG_odom_topic, 10,
-      std::bind(&Ros2AdapterImpl::OdometryCallback, this, std::placeholders::_1));
+        CONFIG_odom_topic, 10,
+        std::bind(&Ros2AdapterImpl::OdometryCallback, this,
+                  std::placeholders::_1));
 
     // 2) Laser topics
     for (const auto &topic : CONFIG_laser_topics) {
       auto sub = node_->create_subscription<LaserScan>(
-          topic, 10,
-          [this, topic](const LaserScan::SharedPtr msg){
+          topic, 10, [this, topic](const LaserScan::SharedPtr msg) {
             this->LaserCallback(msg, topic);
           });
       laser_subs_.push_back(sub);
@@ -714,7 +741,8 @@ private:
     // 3) Image
     image_sub_ = node_->create_subscription<Image>(
         CONFIG_image_topic, 10,
-        std::bind(&Ros2AdapterImpl::ImageCallback, this, std::placeholders::_1));
+        std::bind(&Ros2AdapterImpl::ImageCallback, this,
+                  std::placeholders::_1));
 
     // 4) GoTo subscriber: /move_base_simple/goal
     goto_sub_ = node_->create_subscription<PoseStamped>(
@@ -724,17 +752,19 @@ private:
     // 6) Reset nav goals: /reset_nav_goals
     reset_nav_goals_sub_ = node_->create_subscription<Empty>(
         "/reset_nav_goals", 1,
-        std::bind(&Ros2AdapterImpl::ResetNavGoalsCallback, this, std::placeholders::_1));
+        std::bind(&Ros2AdapterImpl::ResetNavGoalsCallback, this,
+                  std::placeholders::_1));
 
     // 8) Halt
     halt_sub_ = node_->create_subscription<Bool>(
         "halt_robot", 1,
         std::bind(&Ros2AdapterImpl::HaltCallback, this, std::placeholders::_1));
 
-    // 9) Override: "nav_override" 
+    // 9) Override: "nav_override"
     override_sub_ = node_->create_subscription<Pose2Df>(
         "nav_override", 1,
-        std::bind(&Ros2AdapterImpl::OverrideCallback, this, std::placeholders::_1));
+        std::bind(&Ros2AdapterImpl::OverrideCallback, this,
+                  std::placeholders::_1));
 
     // 10) GPS
     gps_sub_ = node_->create_subscription<GPSMsg>(
@@ -746,14 +776,14 @@ private:
 
   void setupServices() {
     gps_nav_srv_ = node_->create_service<GraphNavGPSSrv>(
-        "graphNavGPSSrv", std::bind(&Ros2AdapterImpl::GPSPlanServiceCb, this,
-                                   std::placeholders::_1, std::placeholders::_2));
+        "graphNavGPSSrv",
+        std::bind(&Ros2AdapterImpl::GPSPlanServiceCb, this,
+                  std::placeholders::_1, std::placeholders::_2));
   }
 
   /** BEGIN SERVICE FUNCTION IMPLEMENTATIONS **/
-  void GPSPlanServiceCb(
-    const GraphNavGPSSrv::Request::SharedPtr request,
-    const GraphNavGPSSrv::Response::SharedPtr response) {
+  void GPSPlanServiceCb(const GraphNavGPSSrv::Request::SharedPtr request,
+                        const GraphNavGPSSrv::Response::SharedPtr response) {
     LOG_INFO("Received GPS service request.");
 
     // Lock the weak pointer to get a shared pointer
@@ -766,11 +796,12 @@ private:
     // Build the start GPSPoint from the request.
     const GPSPoint start(request->start.latitude, request->start.longitude);
     LOG_INFO("Start: (%f, %f)", start.lat, start.lon);
-    LOG_INFO("Goals: %d", int(request->goals.data.size())); 
+    LOG_INFO("Goals: %d", int(request->goals.data.size()));
     // Build the goals vector from the request.
     std::vector<GPSPoint> goals;
-    for (const auto& goal : request->goals.data) {
-      goals.emplace_back(to_seconds(goal.header.stamp), goal.latitude, goal.longitude, goal.heading);
+    for (const auto &goal : request->goals.data) {
+      goals.emplace_back(to_seconds(goal.header.stamp), goal.latitude,
+                         goal.longitude, goal.heading);
     }
 
     // Compute the route using the Navigation object.
@@ -779,7 +810,7 @@ private:
 
     // Clear and update the global visualization message.
     global_viz_msg_.lines.clear();
-    for (const auto& p : map_route) {
+    for (const auto &p : map_route) {
       visualization::DrawPoint(p.cast<float>(), 0xFF0000, global_viz_msg_);
     }
     viz_pub_->publish(global_viz_msg_);
@@ -791,7 +822,7 @@ private:
     GPSArrayMsg gps_goals_msg;
     // Use the node's clock for ROS2 time.
     gps_goals_msg.header.stamp = node_->now();
-    for (const auto& route_node : route) {
+    for (const auto &route_node : route) {
       GPSMsg goal_msg;
       goal_msg.header.stamp = gps_goals_msg.header.stamp;
       goal_msg.latitude = route_node.lat;
@@ -810,7 +841,8 @@ private:
 
   void OdometryCallback(const Odometry::SharedPtr msg) {
     if (FLAGS_v > 2) {
-      printf("Odometry t=%f\n", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9);
+      printf("Odometry t=%f\n",
+             msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9);
     }
     odom_ = OdomHandler(msg);
 
@@ -824,8 +856,7 @@ private:
     float angle = msg->angle_min;
     for (size_t i = 0; i < msg->ranges.size(); ++i) {
       float r = msg->ranges[i];
-      if (r < msg->range_min || r > msg->range_max)
-        r = msg->range_max;
+      if (r < msg->range_min || r > msg->range_max) r = msg->range_max;
       point_cloud.push_back(Vector2f(r * cos(angle), r * sin(angle)));
       angle += msg->angle_increment;
     }
@@ -845,16 +876,17 @@ private:
       if (auto nav = navigation_.lock()) {
         nav->ObserveImage(last_image_, to_seconds(msg->header.stamp));
       }
-    } catch (cv_bridge::Exception& e) {
+    } catch (cv_bridge::Exception &e) {
       RCLCPP_ERROR(node_->get_logger(), "cv_bridge exception: %s", e.what());
     }
   }
 
   void GoToCallback(const PoseStamped::SharedPtr msg) {
     Vector2f loc(msg->pose.position.x, msg->pose.position.y);
-    float angle = 2.0f * atan2(msg->pose.orientation.z, msg->pose.orientation.w);
+    float angle =
+        2.0f * atan2(msg->pose.orientation.z, msg->pose.orientation.w);
     printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
-    
+
     if (auto nav = navigation_.lock()) {
       nav->SetNavGoal(loc, angle);
       nav->Resume();
@@ -881,8 +913,9 @@ private:
     // Convert to generic override goal.
     Vector2f loc(msg->x, msg->y);
     float angle = msg->theta;
-    
-    printf("Overriding navigation with new goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
+
+    printf("Overriding navigation with new goal: (%f,%f) %f\u00b0\n", loc.x(),
+           loc.y(), angle);
 
     if (auto nav = navigation_.lock()) {
       nav->SetOverride(loc, angle);
@@ -892,7 +925,7 @@ private:
   void GPSCallback(const GPSMsg::SharedPtr msg) {
     double stamp = to_seconds(msg->header.stamp);
     GPSPoint loc(stamp, msg->latitude, msg->longitude, msg->heading);
-    
+
     if (FLAGS_v > 2) {
       printf("GPS Pose: %lf %lf\n", msg->latitude, msg->longitude);
     }
@@ -903,15 +936,10 @@ private:
   }
   /** END CALLBACK FUNCTION IMPLEMENTATIONS **/
 
-  void InitVizMarker(Marker &vizMarker,
-      const std::string &ns,
-      int id,
-      const std::string &type,
-      const PoseStamped &p,
-      const Point32 &scale,
-      double duration,
-      const std::vector<float> &color)
-  {
+  void InitVizMarker(Marker &vizMarker, const std::string &ns, int id,
+                     const std::string &type, const PoseStamped &p,
+                     const Point32 &scale, double duration,
+                     const std::vector<float> &color) {
     vizMarker.header.frame_id = p.header.frame_id;
     vizMarker.header.stamp = node_->now();
 
@@ -920,21 +948,21 @@ private:
 
     // Set the marker type.
     if (type == "arrow") {
-    vizMarker.type = Marker::ARROW;
+      vizMarker.type = Marker::ARROW;
     } else if (type == "cube") {
-    vizMarker.type = Marker::CUBE;
+      vizMarker.type = Marker::CUBE;
     } else if (type == "sphere") {
-    vizMarker.type = Marker::SPHERE;
+      vizMarker.type = Marker::SPHERE;
     } else if (type == "cylinder") {
-    vizMarker.type = Marker::CYLINDER;
+      vizMarker.type = Marker::CYLINDER;
     } else if (type == "linelist") {
-    vizMarker.type = Marker::LINE_LIST;
+      vizMarker.type = Marker::LINE_LIST;
     } else if (type == "linestrip") {
-    vizMarker.type = Marker::LINE_STRIP;
+      vizMarker.type = Marker::LINE_STRIP;
     } else if (type == "points") {
-    vizMarker.type = Marker::POINTS;
+      vizMarker.type = Marker::POINTS;
     } else {
-    vizMarker.type = Marker::ARROW;
+      vizMarker.type = Marker::ARROW;
     }
 
     // Set the pose.
@@ -964,9 +992,9 @@ private:
     Point32 scale;
     vector<float> color;
     color.resize(4);
-  
+
     p.header.frame_id = "map";
-  
+
     p.pose.orientation.w = 1.0;
     scale.x = 0.02;
     scale.y = 0.0;
@@ -977,7 +1005,7 @@ private:
     color[3] = 1.0;
     InitVizMarker(line_list_marker_, "map_lines", 0, "linelist", p, scale, 0.0,
                   color);
-  
+
     p.pose.position.z = 0.0;
     p.pose.position.x = 0.0;
     p.pose.position.y = 0.0;
@@ -988,16 +1016,16 @@ private:
     color[1] = 156.0 / 255.0;
     color[2] = 255.0 / 255.0;
     color[3] = 0.8;
-  
+
     InitVizMarker(pose_marker_, "robot_position", 1, "cube", p, scale, 0.0,
                   color);
-  
+
     scale.x = 0.05;
     scale.y = 0.05;
     scale.z = 0.05;
-  
+
     InitVizMarker(target_marker_, "targets", 1, "points", p, scale, 0.0, color);
-  
+
     // p.pose.orientation.w = 1.0;
     // scale.x = 0.02;
     // scale.y = 0.0;
@@ -1012,11 +1040,11 @@ private:
 };
 
 // Factory function: implement RosAdapter::create outside the class definition.
-std::shared_ptr<RosAdapter> RosAdapter::create(rclcpp::Node::SharedPtr node, const navigation::NavigationParameters& params) {
+std::shared_ptr<RosAdapter> RosAdapter::create(
+    rclcpp::Node::SharedPtr node,
+    const navigation::NavigationParameters &params) {
   return std::make_shared<Ros2AdapterImpl>(node, params);
 }
-
 };  // namespace navigation
 
-
-#endif // ROS2
+#endif  // ROS2

@@ -1,4 +1,4 @@
-#!;bin/bash
+#!/bin/bash
 wget https://download.geofabrik.de/north-america/us/texas-latest.osm.pbf
 mkdir osrm_texas_cbf_mld
 mv texas-latest.osm.pbf osrm_texas_cbf_mld
