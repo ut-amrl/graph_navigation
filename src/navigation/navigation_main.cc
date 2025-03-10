@@ -496,7 +496,7 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
 void PublishMissionStatus() {
   MissionStatus status = navigation_.GetMissionStatus();
   MissionStatusMsg status_msg;
-  status_msg.stamp = ros::Time(status.time);
+  status_msg.header.stamp = ros::Time(status.time);
   status_msg.status = status.status;
   status_msg.mission_id = status.mission_id;
   status_msg.next_goal_id = status.next_goal_id;
@@ -521,7 +521,7 @@ void PublishMissionStatus() {
 
 void PublishNavStatus() {
   NavStatusMsg status;
-  status.stamp = ros::Time::now();
+  status.header.stamp = ros::Time::now();
   status.status = navigation_.GetNavStatusUint8();
 
   status_pub_.publish(status);
