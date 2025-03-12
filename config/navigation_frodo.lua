@@ -11,17 +11,16 @@ function deg2rad(deg)
   
   NavigationParameters = {
     laser_topics = {
-      -- "/scan",
-      "/velodyne_2dscan_lowbeam",
+      "/scan",
       -- "/kinect_laserscan",
     };
     laser_frame = "base_link";
     -- odom_topic = "/jackal_velocity_controller/odom";
     odom_topic = "/odometry/gps";
     localization_topic = "localization";
-    image_topic = "/camera/rgb/image_raw/compressed";
+    image_topic = "/front_camera/compressed";
     init_topic = "initialpose";
-    enable_topic = "autonomy_arbiter/enabled";
+    enable_topic = "/autonomy_arbiter/enabled";
     dt = 0.060;
     max_linear_accel = 0.5;
     max_linear_decel = 0.5;
@@ -30,14 +29,14 @@ function deg2rad(deg)
     max_angular_decel = 0.5;
     max_angular_speed = 1.0;
     carrot_dist = 10.0;
-    system_latency = 0.24;
+    system_latency = 0.0;
     obstacle_margin = 0.15;
     num_options = 63;
     robot_width = 0.44;
     robot_length = 0.5;
     robot_wheelbase = 0.26;
     base_link_offset = 0.1;
-    max_free_path_length = 8.0;
+    max_free_path_length = 12.0;
     max_clearance = 1.0; -- was 1.0
     can_traverse_stairs = false;
     use_map_speed = true;

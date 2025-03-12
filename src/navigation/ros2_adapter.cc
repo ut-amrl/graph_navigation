@@ -35,6 +35,7 @@
 #include "amrl_msgs/msg/visualization_msg.hpp"
 #include "amrl_msgs/srv/graph_nav_gps_srv.hpp"
 #include "foxglove_msgs/msg/geo_json.hpp"
+#include "rclcpp/qos.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -205,15 +206,13 @@ class Ros2AdapterImpl : public RosAdapter {
       // Process pending callbacks
       rclcpp::spin_some(node_);
 
-      auto now = node_->now();
+      auto now = GET_TIME();
 
       Vector2f cmd_vel(0, 0);
       float cmd_angle_vel = 0;
 
       bool nav_succeeded = false;
       if (auto nav = navigation_.lock()) {
-        // Run the navigation update: use current time (in seconds) to update
-        // and get command outputs.
         nav_succeeded = nav->Run(now.seconds(), cmd_vel, cmd_angle_vel);
       }
 
@@ -239,6 +238,7 @@ class Ros2AdapterImpl : public RosAdapter {
           PublishNextGPSGoal();
 
           // Update message headers with current time.
+          now = GET_TIME();
           local_viz_msg_.header.stamp = now;
           global_viz_msg_.header.stamp = now;
           viz_pub_->publish(local_viz_msg_);
@@ -279,7 +279,6 @@ class Ros2AdapterImpl : public RosAdapter {
   }
 
  private:
-  bool enabled_ = false;
   navigation::Odom odom_;
   vector<Vector2f> point_cloud_;
   cv::Mat last_image_;
@@ -575,7 +574,12 @@ class Ros2AdapterImpl : public RosAdapter {
     TwistStamped drive_msg;
     InitRosHeader("base_link", &drive_msg.header);
     drive_msg.header.stamp = node_->now();
-    if (!FLAGS_no_joystick && !enabled_) {
+    bool enabled = false;
+    if (auto nav = navigation_.lock()) {
+      enabled = nav->Enabled();
+    }
+
+    if (!FLAGS_no_joystick && !enabled) {
       // In original code, if joystick is not used and not enabled, zero out
       // velocity
       drive_msg.twist.linear.x = 0.0;
@@ -643,7 +647,7 @@ class Ros2AdapterImpl : public RosAdapter {
   // ---------------- Subscribers (ROS2) ----------------
   vector<rclcpp::Subscription<LaserScan>::SharedPtr> laser_subs_;
   rclcpp::Subscription<Odometry>::SharedPtr odometry_sub_;
-  rclcpp::Subscription<Image>::SharedPtr image_sub_;
+  rclcpp::Subscription<CompressedImage>::SharedPtr image_sub_;
   rclcpp::Subscription<PoseStamped>::SharedPtr goto_sub_;
   rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr
       goto_amrl_sub_;
@@ -731,17 +735,18 @@ class Ros2AdapterImpl : public RosAdapter {
 
     // 2) Laser topics
     for (const auto &topic : CONFIG_laser_topics) {
+      auto qos = rclcpp::QoS(10).best_effort();
       auto sub = node_->create_subscription<LaserScan>(
-          topic, 10, [this, topic](const LaserScan::SharedPtr msg) {
+          topic, qos, [this, topic](const LaserScan::SharedPtr msg) {
             this->LaserCallback(msg, topic);
           });
       laser_subs_.push_back(sub);
     }
 
     // 3) Image
-    image_sub_ = node_->create_subscription<Image>(
+    image_sub_ = node_->create_subscription<CompressedImage>(
         CONFIG_image_topic, 10,
-        std::bind(&Ros2AdapterImpl::ImageCallback, this,
+        std::bind(&Ros2AdapterImpl::CompressedImageCallback, this,
                   std::placeholders::_1));
 
     // 4) GoTo subscriber: /move_base_simple/goal
@@ -837,7 +842,11 @@ class Ros2AdapterImpl : public RosAdapter {
   /** END SERVICE FUNCTION IMPLEMENTATIONS **/
 
   /** BEGIN CALLBACK FUNCTION IMPLEMENTATIONS **/
-  void EnablerCallback(const Bool::SharedPtr msg) { enabled_ = msg->data; }
+  void EnablerCallback(const Bool::SharedPtr msg) {
+    if (auto nav = navigation_.lock()) {
+      nav->Enable(msg->data);
+    }
+  }
 
   void OdometryCallback(const Odometry::SharedPtr msg) {
     if (FLAGS_v > 2) {
@@ -867,7 +876,7 @@ class Ros2AdapterImpl : public RosAdapter {
     }
   }
 
-  void ImageCallback(const Image::SharedPtr msg) {
+  void CompressedImageCallback(const CompressedImage::SharedPtr msg) {
     try {
       cv_bridge::CvImagePtr cv_ptr =
           cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);

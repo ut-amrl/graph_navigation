@@ -476,11 +476,11 @@ void Navigation::ForwardPredict(double t) {
       odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
     }
     if (t_point_cloud_ >= cmd_time - params_.dt) {
-      const float dt = (t_point_cloud_ > cmd_time)
-                           ? min<double>(t_point_cloud_ - cmd_time, params_.dt)
-                           : min<double>(t - cmd_time, params_.dt);
-      lidar_tf = Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
-                 Rotation2Df(-c.angular.z() * dt) * lidar_tf;
+      // const float dt = (t_point_cloud_ > cmd_time)
+      //                      ? min<double>(t_point_cloud_ - cmd_time, params_.dt)
+      //                      : min<double>(t - cmd_time, params_.dt);
+      // lidar_tf = Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) *
+      //            Rotation2Df(-c.angular.z() * dt) * lidar_tf;
     }
   }
   fp_point_cloud_.resize(point_cloud_.size());
@@ -1360,10 +1360,11 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     if (kDebug) printf("GPS translator not initialized\n");
     return false;
   }
-  printf("Navigation::Run() before forward predict\n");
+  if (kDebug) printf("Navigation::Run() before forward predict\n");
 
   ForwardPredict(time + params_.system_latency);
-  printf("Navigation::Run() after forward predict\n");
+
+  if (kDebug) printf("Navigation::Run() after forward predict\n");
   if (FLAGS_test_toc) {
     TrapezoidTest(cmd_vel, cmd_angle_vel);
     return true;
