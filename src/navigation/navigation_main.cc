@@ -57,9 +57,12 @@ const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
 #include "rclcpp/rclcpp.hpp"
 const std::string kAmrlMapsDir =
     ament_index_cpp::get_package_share_directory("amrl_maps");
+const std::string kPackageDir =
+    ament_index_cpp::get_package_share_directory("graph_navigation");
 #endif
 
-DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
+DEFINE_string(robot_config, kPackageDir + "/config/navigation_frodo.lua",
+              "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 
@@ -160,7 +163,7 @@ void LoadOSMPlannerConfig(navigation::OSMPlannerParameters* params) {
   CONFIG_DOUBLE(osrm_path_resolution,
                 "OSMPlannerParameters.osrm_path_resolution");
   config_reader::ConfigReader reader({FLAGS_robot_config});
-  params->osrm_file = CONFIG_osrm_file;
+  params->osrm_file = kPackageDir + "/" + CONFIG_osrm_file;
   params->osrm_path_resolution = CONFIG_osrm_path_resolution;
 }
 

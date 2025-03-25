@@ -5,7 +5,7 @@ function deg2rad(deg)
   OSMPlannerParameters = {
     gps_topic = "/gpsheading";
     gps_goals_topic = "/gps_goals";
-    osrm_file = "osrm_north-america_cbf_mld/north-america-latest.osrm";
+    osrm_file = "osrm_maps/osrm_north-america_cbf_mld/north-america-latest.osrm";
     osrm_path_resolution = 8; -- meters between GPS points
   }
   

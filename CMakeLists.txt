@@ -102,8 +102,8 @@ if(USE_ROS1)
       pthread costmap_2d)
 else()
   # For ROS2, we rely on ament and rclcpp. (Some of the old libs may not be needed.)
-  set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
-  set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+  # set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+  # set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
   set(libs glog gflags amrl_shared_lib boost_system lua5.1 pthread)
 endif()
 
@@ -157,9 +157,9 @@ if(USE_ROS1)
     src/navigation/constant_curvature_arcs.cc
     src/navigation/linear_evaluator.cc
     src/navigation/image_tiler.cc
+    src/navigation/image_based_evaluator.cc
     src/navigation/deep_cost_map_evaluator.cc
     src/navigation/deep_cost_map_evaluator_service.cc
-    src/navigation/image_based_evaluator.cc
     src/navigation/carrot_service.cc
     src/navigation/terrain_evaluator.cc
     src/navigation/ros1_adapter.cc
@@ -219,6 +219,9 @@ else()
     tf2_ros
   )
 
+  # Set RPATH so that the executable can find shared libraries in ../ (i.e. lib/)
+  set_target_properties(navigation PROPERTIES INSTALL_RPATH "$ORIGIN/../")
+
   # add_executable(image_to_bev_node
   #   src/navigation/bev_image_node_main.cc
   # )
@@ -236,7 +239,17 @@ install(TARGETS navigation shared_library
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+  DESTINATION lib/${PROJECT_NAME}
 )
+
+install(
+  DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Symlink large osrm_map directory to share/${PROJECT_NAME}
+install(CODE "execute_process(COMMAND ln -sf \"${CMAKE_SOURCE_DIR}/osrm_maps\" \"${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/osrm_maps\")")
+
 install(DIRECTORY src/config_reader DESTINATION share/${PROJECT_NAME})
 
 if(NOT USE_ROS1)
