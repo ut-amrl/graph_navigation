@@ -42,6 +42,7 @@
 #include "osm_planner.h"
 #include "shared/math/gps_util.h"
 #include "ros_adapter.h"
+#include "state_machine.h"
 
 // #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 // #include "amrl_msgs/GPSMsg.h"
@@ -62,13 +63,6 @@ namespace navigation {
 // Forward declaration for the ros adapter
 class RosAdapter;
 
-enum class NavigationState {
-  kStopped = 0,
-  kPaused = 1,
-  kGoto = 2,
-  kTurnInPlace = 3,
-  kOverride = 4
-};
 
 class Navigation {
  public:
@@ -86,6 +80,8 @@ class Navigation {
   void GetFreePathLength(float curvature, float* free_path_length,
                          float* clearance, Eigen::Vector2f* obstruction);
   bool IsGoalInFOV(const Eigen::Vector2f& local_goal);
+  bool IsGoalAvailable();
+  bool IsGoalReached();
   void UpdateGPS(const GPSPoint& msg);
   void SetGPSNavGoals(const vector<GPSPoint>& goals);
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
@@ -223,6 +219,20 @@ class Navigation {
   // Publish a status message
   void PublishNavStatus(const Eigen::Vector2f& carrot);
 
+  // 03/13/2025: Updated along with state machine
+  void HandleRun(const double& time, Eigen::Vector2f& cmd_vel,
+    float& cmd_angle_vel);
+  
+  void HandleTurnInPlace(const double& time, Eigen::Vector2f& cmd_vel,
+    float& cmd_angle_vel);
+
+  void HandleRecovery(const double& time, Eigen::Vector2f& cmd_vel,
+    float& cmd_angle_vel);
+
+  void SetStateMachineConditions();
+
+  bool UpdateLocalTarget();
+
   // Current map frame robot location (OdometryCallback).
   Eigen::Vector2f robot_loc_;
   // Current map frame robot orientation (OdometryCallback).
@@ -258,7 +268,9 @@ class Navigation {
   std::unique_ptr<CarrotBase> carrot_planner_;
   CarrotPlan latest_carrot_plan_;
 
-  NavigationState nav_state_;
+  // state machine
+  NavigationState nav_state_; // deprecated to be removed later
+  StateMachine state_machine_;
 
   // Navigation goal location.
   Eigen::Vector2f nav_goal_loc_;
@@ -330,6 +342,7 @@ class Navigation {
   bool intermediate_path_found_;
 
   Eigen::Vector2f intermediate_goal_;
+
 };
 
 }  // namespace navigation

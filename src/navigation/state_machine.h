@@ -15,11 +15,11 @@ enum class NavigationState {
   kTurnInPlace = 3,
   kRecovery = 4,
   // deprecated
-  kStopped = 0,
-  kPaused = 5,
-  kGoto = 6,
+  kStopped = 5,
+  kPaused = 6,
+  kGoto = 7,
   // kTurnInPlace = 3,
-  kOverride = 7
+  kOverride = 8
 };
 
 enum class StateConditions {
@@ -42,6 +42,33 @@ class StateMachine {
 
     NavigationState GetState() { // Getter
       return state_;
+    }
+
+    std::string GetStateString() {
+      switch (state_) {
+        case NavigationState::kInitialize:
+          return "kInitialize";
+        case NavigationState::kHalt:
+          return "kHalt";
+        case NavigationState::kRun:
+          return "kRun";
+        case NavigationState::kTurnInPlace:
+          return "kTurnInPlace";
+        case NavigationState::kRecovery:
+          return "kRecovery";
+        case NavigationState::kStopped:
+          return "kStopped";
+        case NavigationState::kPaused:
+          return "kPaused";
+        case NavigationState::kGoto:
+          return "kGoto";
+        case NavigationState::kOverride:
+          return "kOverride";
+        default:
+          throw std::runtime_error("Invalid state");
+      }
+
+      return "Unknown state";
     }
 
     void SetState(StateConditions keys, bool value) { // Setter

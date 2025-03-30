@@ -25,9 +25,9 @@ function deg2rad(deg)
     max_linear_accel = 0.5;
     max_linear_decel = 0.5;
     max_linear_speed = 0.5;
-    max_angular_accel = 0.5;
-    max_angular_decel = 0.5;
-    max_angular_speed = 1.0;
+    max_angular_accel = 0.2;
+    max_angular_decel = 0.2;
+    max_angular_speed = 0.2;
     carrot_dist = 10.0;
     system_latency = 0.0;
     obstacle_margin = 0.15;
