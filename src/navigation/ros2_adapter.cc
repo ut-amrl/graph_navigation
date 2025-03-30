@@ -595,7 +595,7 @@ class Ros2AdapterImpl : public RosAdapter {
 
     auto ackermann_msg = TwistToAckermann(drive_msg);
     ackermann_drive_pub_->publish(ackermann_msg);
-    twist_drive_pub_->publish(drive_msg.twist);
+    twist_drive_pub_->publish(drive_msg);
 
     // This command is going to take effect system latency period after. Hence
     // modify the timestamp to reflect the time when it will take effect.
@@ -627,7 +627,7 @@ class Ros2AdapterImpl : public RosAdapter {
 
   // ---------------- Publishers (ROS2) ----------------
   rclcpp::Publisher<AckermannCurvatureDriveMsg>::SharedPtr ackermann_drive_pub_;
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_drive_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_drive_pub_;
   rclcpp::Publisher<MissionStatusMsg>::SharedPtr mission_status_pub_;
   rclcpp::Publisher<NavStatusMsg>::SharedPtr status_pub_;
   rclcpp::Publisher<VisualizationMsg>::SharedPtr viz_pub_;
@@ -666,7 +666,7 @@ class Ros2AdapterImpl : public RosAdapter {
     ackermann_drive_pub_ = node_->create_publisher<AckermannCurvatureDriveMsg>(
         "ackermann_curvature_drive", 10);
 
-    twist_drive_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(
+    twist_drive_pub_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(
         FLAGS_twist_drive_topic, 10);
 
     mission_status_pub_ = node_->create_publisher<MissionStatusMsg>(
@@ -735,9 +735,8 @@ class Ros2AdapterImpl : public RosAdapter {
 
     // 2) Laser topics
     for (const auto &topic : CONFIG_laser_topics) {
-      auto qos = rclcpp::QoS(10).best_effort();
       auto sub = node_->create_subscription<LaserScan>(
-          topic, qos, [this, topic](const LaserScan::SharedPtr msg) {
+          topic, 10, [this, topic](const LaserScan::SharedPtr msg) {
             this->LaserCallback(msg, topic);
           });
       laser_subs_.push_back(sub);

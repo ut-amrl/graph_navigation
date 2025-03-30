@@ -1388,6 +1388,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
     LatencyTest(cmd_vel, cmd_angle_vel);
     return true;
   }
+  printf("Navigation::Run() before RunObstacleAvoidance\n");
 
   bool validGoalExists =
       gps_goal_index_ >= 0 && gps_goal_index_ < int(gps_nav_goals_loc_.size());

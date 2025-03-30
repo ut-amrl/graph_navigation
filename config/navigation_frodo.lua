@@ -24,7 +24,7 @@ function deg2rad(deg)
     dt = 0.060;
     max_linear_accel = 0.5;
     max_linear_decel = 0.5;
-    max_linear_speed = 0.75;
+    max_linear_speed = 0.5;
     max_angular_accel = 0.5;
     max_angular_decel = 0.5;
     max_angular_speed = 1.0;
