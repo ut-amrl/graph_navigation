@@ -1,0 +1,44 @@
+%YAML:1.0
+image_width: 576
+image_height: 1024
+D: !!opencv-matrix # Updated 03/30
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -0.194710, 0.035513, 0.0, 0.0, -0.002653 ]
+K: !!opencv-matrix # Updated 03/30
+   rows: 3
+   cols: 3
+   dt: d
+   data: [  388.020342571331, 0.0, 512.4622542025163,
+            0.0, 387.60319154823264, 283.52796495103775,
+            0.0, 0.0, 1.0 ]
+H: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ -0.41851, -2.77286, 780.89438, 
+            0.04778, -2.70284, 768.69805, 
+            0.00006, -0.00435, 1.0 ] # TODO: Compute homography for frodobot
+R: !!opencv-matrix # Updated 03/30
+   rows: 3
+   cols: 3
+   dt: d
+   data: [  1.0, 0.0, 0.0, 
+            0.0, 1.0, 0.0, 
+            0.0, 0.0, 1.0 ]
+P: !!opencv-matrix # Updated 03/30
+   rows: 3
+   cols: 4
+   dt: d
+   data: [  388.02036, 0., 512.4623, 0,
+            0., 387.60318, 283.52795, 0,
+            0., 0., 1., 0.0 ]
+W: !!opencv-matrix # Updated 03/30
+   rows: 3
+   cols: 4
+   dt: d
+   data: [  533.3011, -407.86023, 0., -101.3272,
+            278.6994, 0., -407.86606, 146.90149,
+            1., 0., 0., -0.19 ]
+            

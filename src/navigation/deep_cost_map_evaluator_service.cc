@@ -52,22 +52,29 @@ using namespace geometry;
 using namespace math_util;
 
 namespace motion_primitives {
+
+#ifdef ROS1
+// DeepCostMapEvaluatorService::DeepCostMapEvaluatorService(
+//   const navigation::NavigationParameters& params) : 
+//     params_(params),
+//     service_request_ongoing_(false) {
+#else
 DeepCostMapEvaluatorService::DeepCostMapEvaluatorService(
-  const navigation::NavigationParameters& params) : 
+  const navigation::NavigationParameters& params, rclcpp::Node::SharedPtr node) : 
+    node_(node),
     params_(params),
-    service_request_ongoing_(false),
-    node_name_("DeepCostMapEvaluatorService"),
-    service_name_("costmap_service") {
-  
+    service_request_ongoing_(false) {
+#endif
+
+  service_name_ = CONFIG_service_name;
   #ifdef ROS1
   service_client_ = nh_.serviceClient<amrl_msgs::CostmapSrv>(service_name_);
   #else
-  // Create node_ with default name
-  node_ = rclcpp::Node::make_shared(node_name_);
-
   // Create the service client:
   service_client_ = node_->create_client<amrl_msgs::srv::CostmapSrv>(service_name_);
   #endif
+  printf("Using node '%s' to create service client", node_->get_name());
+  printf("DeepCostMapEvaluatorService using service name: %s", service_name_.c_str());
 
   // The rest of your original checks:
   if (params_.K.empty() || params_.D.empty()) {
@@ -83,30 +90,30 @@ bool DeepCostMapEvaluatorService::callCostmapService(
       amrl_msgs::srv::CostmapSrv::Response &res
   #endif
   )
-  {
-  #ifdef ROS1
-    // ------------- ROS1 service call -------------
-    return service_client_.call(srv);
-  
-  #else
-    // ------------- ROS2 service call -------------
-    if (!service_client_->wait_for_service(std::chrono::seconds(1))) {
-      LOG_ERROR("Service not available after waiting, CostmapSrv call failed!");
-      return false;
-    }
-    auto future_result = service_client_->async_send_request(std::make_shared<decltype(req)>(req));
-    // Wait (blocking) for the result; in real usage, you might do it asynchronously
-    auto status = rclcpp::spin_until_future_complete(node_, future_result);
-    if (status == rclcpp::FutureReturnCode::SUCCESS) {
-      // Fill `res` with the returned data
-      res = *(future_result.get());
-      return true;
-    } else {
-      LOG_ERROR("Service call failed or timed out (ROS2)!");
-      return false;
-    }
-  #endif
+{
+#ifdef ROS1
+  // ------------- ROS1 service call -------------
+  return service_client_.call(srv);
+
+#else
+  // ------------- ROS2 service call -------------
+  if (!service_client_->wait_for_service(std::chrono::seconds(1))) {
+    LOG_ERROR("Service not available after waiting, CostmapSrv call failed!");
+    return false;
   }
+  auto future_result = service_client_->async_send_request(std::make_shared<decltype(req)>(req));
+  // Wait (blocking) for the result; in real usage, you might do it asynchronously
+  auto status = rclcpp::spin_until_future_complete(node_, future_result);
+  if (status == rclcpp::FutureReturnCode::SUCCESS) {
+    // Fill `res` with the returned data
+    res = *(future_result.get());
+    return true;
+  } else {
+    LOG_ERROR("Service call failed or timed out (ROS2)!");
+    return false;
+  }
+#endif
+}
 
 void DeepCostMapEvaluatorService::UpdateImage(const cv::Mat& image) {
   std::lock_guard<std::mutex> lock(mutex_);

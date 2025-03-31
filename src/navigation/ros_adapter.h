@@ -32,6 +32,10 @@ class RosAdapter {
   // Spin or run the event loop. For ROS1, this may call ros::spin().
   // For ROS2, rclcpp::spin().
   virtual void spinLoop() = 0;
+  
+  #ifdef ROS2
+  virtual rclcpp::Node::SharedPtr GetNodeHandle() = 0;
+  #endif
 
   // Provide a factory method to create either a ROS1 or ROS2 adapter 
   // based on a compile-time flag (e.g. -DROS2).

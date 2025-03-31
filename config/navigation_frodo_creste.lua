@@ -1,0 +1,116 @@
+function deg2rad(deg)
+    return deg * (math.pi / 180)
+  end
+  
+  OSMPlannerParameters = {
+    gps_topic = "/gpsheading";
+    gps_goals_topic = "/gps_goals";
+    osrm_file = "osrm_maps/osrm_north-america_cbf_mld/north-america-latest.osrm";
+    osrm_path_resolution = 8; -- meters between GPS points
+  }
+  
+  NavigationParameters = {
+    laser_topics = {
+      "/scan",
+      -- "/kinect_laserscan",
+    };
+    laser_frame = "base_link";
+    -- odom_topic = "/jackal_velocity_controller/odom";
+    odom_topic = "/odometry/gps";
+    localization_topic = "localization";
+    image_topic = "/front_camera/compressed";
+    init_topic = "initialpose";
+    enable_topic = "/autonomy_arbiter/enabled";
+    dt = 0.060;
+    max_linear_accel = 0.5;
+    max_linear_decel = 0.5;
+    max_linear_speed = 0.5;
+    max_angular_accel = 0.2;
+    max_angular_decel = 0.2;
+    max_angular_speed = 0.2;
+    carrot_dist = 10.0;
+    system_latency = 0.0;
+    obstacle_margin = 0.15;
+    num_options = 63;
+    robot_width = 0.24;
+    robot_length = 0.36;
+    robot_wheelbase = 0.26;
+    base_link_offset = 0.1;
+    max_free_path_length = 12.0;
+    max_clearance = 1.0; -- was 1.0
+    can_traverse_stairs = false;
+    use_map_speed = true;
+    target_dist_tolerance = 0.1;
+    target_vel_tolerance = 0.1;
+    target_angle_tolerance = 0.05;
+    local_fov = deg2rad(150);
+    use_kinect = true;
+    camera_calibration_path = "config/camera_calibration_front_camera.yaml";
+    model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
+    evaluator_type = "cost_map_service";
+    carrot_planner_type = "geometric"; -- geometric, service
+    intermediate_goal_tolerance = 15; -- final goal distance will be half this (meters)
+    max_inflation_radius = 1;
+    min_inflation_radius = 0.3;
+    local_costmap_resolution = 0.05;
+    local_costmap_size = 20;
+    global_costmap_resolution = 0.1;
+    global_costmap_size_x = 128;
+    global_costmap_size_y = 256;
+    global_costmap_origin_x = -12.8;
+    global_costmap_origin_y = 12.8;
+    lidar_range_min = 0.1;
+    lidar_range_max = 25.6;
+    replan_dist = 2;
+    object_lifespan = 15;
+    inflation_coeff = 8;
+    distance_weight = 3;
+    recovery_carrot_dist = 0.7;
+  };
+  
+  AckermannSampler = {
+    max_curvature = 2.5;
+    max_fov = deg2rad(120);
+    clearance_path_clip_fraction = 0.05;
+  };
+  
+DeepCostMapEvaluatorService = {
+  service_name = "/navigation/deep_cost_map_service";
+
+  -- costmap params
+  crop_params = {
+    center_x = 96.0; -- pixels right
+    center_y = 48.0; -- pixels down
+    width = 128.0; -- pixels
+    height = 64.0; -- pixels
+    output_width = 384; -- pixels
+    output_height = 288; -- pixels
+  };
+
+  bev_pixels_per_meter = 40; -- 10 * 4x upscaling 96 -> 384
+  min_cost = 0.0;
+  max_cost = 1.0;
+  discount_factor = 0.95;
+  rollout_density = 3;
+
+  robot_inflation_radius = 0.9; -- percentage of robot width
+  costmap_inflation_rate = 0; -- discount factor for merging maps
+
+  angle_weight = 0.0;
+  dist_to_goal_weight = 0.1;
+  clearance_weight = 0.0;
+  clearance_weight_beta = 0.0;
+  fpl_weight = -0.3;
+  learned_weight = 1.0;
+  learned_weight_beta = 1.5;
+
+  -- physical params
+  base_link_offset_x = -0.1; -- m
+  base_link_offset_y = 0.0; -- m
+
+  -- visualization
+  viz_radius = 3;
+  viz_thickness = 2;
+};
+
+  

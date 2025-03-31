@@ -49,9 +49,12 @@ namespace motion_primitives {
 
 class DeepCostMapEvaluatorService : public PathEvaluatorBase {
  public:
+#ifdef ROS1
+  explicit DeepCostMapEvaluatorService(const navigation::NavigationParameters& params);
+#else
   explicit DeepCostMapEvaluatorService(
-    const navigation::NavigationParameters& params);
-
+    const navigation::NavigationParameters& params, rclcpp::Node::SharedPtr node);
+#endif
   std::shared_ptr<PathRolloutBase> FindBest(
       const std::vector<std::shared_ptr<PathRolloutBase>>& paths) override;
 

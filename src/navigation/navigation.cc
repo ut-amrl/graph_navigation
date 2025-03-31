@@ -183,7 +183,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   gps_translator_.SetReferenceFrame(FLAGS_nav_frame);
 
   sampler_->SetNavParams(params);
-
+  printf("Evaluator type: %s\n", params_.evaluator_type.c_str());
   PathEvaluatorBase* evaluator = nullptr;
   if (params_.evaluator_type == "cost_map") {
     auto cost_map_evaluator = new DeepCostMapEvaluator(params_);
@@ -192,7 +192,10 @@ void Navigation::Initialize(const NavigationParameters& params,
   } else if (params_.evaluator_type == "linear") {
     evaluator = (PathEvaluatorBase*)new LinearEvaluator();
   } else if (params_.evaluator_type == "cost_map_service") {
-    evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(params_);
+    printf("Using DeepCostMapEvaluatorService\n");
+    auto adapter = ros_adapter_.lock();
+    evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(
+      params_, adapter->GetNodeHandle());
   } else if (params_.evaluator_type == "terrain2") {
     printf("Using Terrain2 Evaluator\n");
     auto cost_map_evaluator = new CustomTerrainEvaluator();
@@ -1367,7 +1370,6 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
       gps_goal_index_ > int(gps_nav_goals_loc_.size()))
     return;
 
-  printf("GPS goal index: %d\n", gps_goal_index_);
   if (replan) {  // Replans, sets next nav goal, and sets it as next goal
     vector<GPSPoint> goals = {gps_nav_goals_loc_.back()};
     const auto& route = this->GlobalPlan(robot_gps_loc_, goals);
@@ -1454,7 +1456,6 @@ bool Navigation::UpdateLocalTarget(){
     static bool kDebug = FLAGS_v > 1;
 
     CHECK(gps_nav_goals_loc_.size() > 0);
-    printf("Replanning to set next goal\n");
     /**
      * Conditions:
      *  1. If goal is invalid, replan global path.

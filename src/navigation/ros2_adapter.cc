@@ -195,6 +195,10 @@ class Ros2AdapterImpl : public RosAdapter {
     setupServices();
   }
 
+  rclcpp::Node::SharedPtr GetNodeHandle() {
+    return node_;
+  }
+
   // Spin loop: run the ROS event loop and periodically update navigation.
   void spinLoop() override {
     rclcpp::WallRate rate(1.0 / params_.dt);
@@ -364,6 +368,7 @@ class Ros2AdapterImpl : public RosAdapter {
   }
 
   void PublishGlobalPlan() {
+    static bool kDebug = FLAGS_v > 2;
     if (auto nav = navigation_.lock()) {
       vector<GPSPoint> plan;
       if (nav->GetGlobalPlan(plan)) {
@@ -378,7 +383,7 @@ class Ros2AdapterImpl : public RosAdapter {
         // Publish global plan on foxglove
         ros_visualization::GPSRouteToGeoJSON(geojson_pub_, plan);
       } else {
-        RCLCPP_WARN(node_->get_logger(), "Global plan is not valid.");
+        if (kDebug) RCLCPP_WARN(node_->get_logger(), "Global plan is not valid.");
       }
     }
   }
