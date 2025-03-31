@@ -193,9 +193,7 @@ void Navigation::Initialize(const NavigationParameters& params,
     evaluator = (PathEvaluatorBase*)new LinearEvaluator();
   } else if (params_.evaluator_type == "cost_map_service") {
     printf("Using DeepCostMapEvaluatorService\n");
-    auto adapter = ros_adapter_.lock();
-    evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(
-      params_, adapter->GetNodeHandle());
+    evaluator = (PathEvaluatorBase*)new DeepCostMapEvaluatorService(params_);
   } else if (params_.evaluator_type == "terrain2") {
     printf("Using Terrain2 Evaluator\n");
     auto cost_map_evaluator = new CustomTerrainEvaluator();

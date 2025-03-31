@@ -60,19 +60,20 @@ namespace motion_primitives {
 //     service_request_ongoing_(false) {
 #else
 DeepCostMapEvaluatorService::DeepCostMapEvaluatorService(
-  const navigation::NavigationParameters& params, rclcpp::Node::SharedPtr node) : 
-    node_(node),
+  const navigation::NavigationParameters& params) : 
     params_(params),
     service_request_ongoing_(false) {
 #endif
 
   service_name_ = CONFIG_service_name;
-  #ifdef ROS1
+#ifdef ROS1
   service_client_ = nh_.serviceClient<amrl_msgs::CostmapSrv>(service_name_);
-  #else
+#else
+  // Create node
+  node_ = rclcpp::Node::make_shared("DeepCostMapEvaluatorService");
   // Create the service client:
   service_client_ = node_->create_client<amrl_msgs::srv::CostmapSrv>(service_name_);
-  #endif
+#endif
   printf("Using node '%s' to create service client", node_->get_name());
   printf("DeepCostMapEvaluatorService using service name: %s", service_name_.c_str());
 

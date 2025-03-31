@@ -31,12 +31,12 @@ function deg2rad(deg)
     carrot_dist = 10.0;
     system_latency = 0.0;
     obstacle_margin = 0.15;
-    num_options = 63;
+    num_options = 71;
     robot_width = 0.24;
     robot_length = 0.36;
     robot_wheelbase = 0.26;
     base_link_offset = 0.1;
-    max_free_path_length = 12.0;
+    max_free_path_length = 5.0;
     max_clearance = 1.0; -- was 1.0
     can_traverse_stairs = false;
     use_map_speed = true;
