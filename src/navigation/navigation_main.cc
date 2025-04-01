@@ -267,10 +267,15 @@ void LaserCallback(const sensor_msgs::LaserScan& msg,
                    const string& topic) {
   if (!received_laser_) {
     point_cloud_.clear();
-    received_laser_ = true;
+    // received_laser_ = true;
   }
   LaserHandler(msg, topic);
-  navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
+  if (point_cloud_.empty()) {
+    ROS_WARN("Failed to receive point cloud data!!");
+  } else {
+    received_laser_ = true;
+    navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
+  }
 }
 
 void GoToCallback(const geometry_msgs::PoseStamped& msg) {
@@ -376,7 +381,7 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
 
 void PublishNavStatus() {
   NavStatusMsg status;
-  status.stamp = ros::Time::now();
+  status.header.stamp = ros::Time::now();
   status.status = navigation_.GetNavStatusUint8();
 
   status_pub_.publish(status);
