@@ -12,7 +12,7 @@ DEFAULT_IMAGE_NAME="amrl-infra-ros1"
 # Default directory mounts
 default_mounts=(
     "/robodata/frodo_logs:/home/frodo_logs"
-    "/scratch/frodo_robot/frodo_autonomy:/frodo_autonomy"
+    "$(pwd):/frodo_autonomy"
 )
 
 # Parse command-line arguments
