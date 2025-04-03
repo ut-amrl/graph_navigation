@@ -21,7 +21,7 @@ function deg2rad(deg)
     image_topic = "/front_camera/compressed";
     init_topic = "initialpose";
     enable_topic = "/autonomy_arbiter/enabled";
-    dt = 0.060;
+    dt = 0.25; -- 4 hz
     max_linear_accel = 0.5;
     max_linear_decel = 0.5;
     max_linear_speed = 0.5;
@@ -31,7 +31,7 @@ function deg2rad(deg)
     carrot_dist = 10.0;
     system_latency = 0.0;
     obstacle_margin = 0.15;
-    num_options = 63;
+    num_options = 15;
     robot_width = 0.44;
     robot_length = 0.5;
     robot_wheelbase = 0.26;
@@ -45,7 +45,7 @@ function deg2rad(deg)
     target_angle_tolerance = 0.05;
     local_fov = deg2rad(120);
     use_kinect = true;
-    camera_calibration_path = "config/camera_calibration_kinect.yaml";
+    camera_calibration_path = "config/camera_calibration_front_camera.yaml";
     model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
     evaluator_type = "linear";
     carrot_planner_type = "geometric"; -- geometric, service

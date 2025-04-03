@@ -21,21 +21,21 @@ function deg2rad(deg)
     image_topic = "/front_camera/compressed";
     init_topic = "initialpose";
     enable_topic = "/autonomy_arbiter/enabled";
-    dt = 0.060;
+    dt = 0.10; -- 10 hz
     max_linear_accel = 0.5;
     max_linear_decel = 0.5;
-    max_linear_speed = 0.5;
-    max_angular_accel = 0.2;
-    max_angular_decel = 0.2;
-    max_angular_speed = 0.2;
+    max_linear_speed = 1.0;
+    max_angular_accel = 0.5;
+    max_angular_decel = 0.5;
+    max_angular_speed = 1.0;
     carrot_dist = 10.0;
     system_latency = 0.0;
     obstacle_margin = 0.15;
-    num_options = 71;
-    robot_width = 0.24;
-    robot_length = 0.36;
+    num_options = 15;
+    robot_width = 0.3;
+    robot_length = 0.40;
     robot_wheelbase = 0.26;
-    base_link_offset = 0.1;
+    base_link_offset = 0.2;
     max_free_path_length = 5.0;
     max_clearance = 1.0; -- was 1.0
     can_traverse_stairs = false;
@@ -43,7 +43,7 @@ function deg2rad(deg)
     target_dist_tolerance = 0.1;
     target_vel_tolerance = 0.1;
     target_angle_tolerance = 0.05;
-    local_fov = deg2rad(150);
+    local_fov = deg2rad(210);
     use_kinect = true;
     camera_calibration_path = "config/camera_calibration_front_camera.yaml";
     model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
@@ -70,7 +70,7 @@ function deg2rad(deg)
   
   AckermannSampler = {
     max_curvature = 2.5;
-    max_fov = deg2rad(120);
+    max_fov = deg2rad(100);
     clearance_path_clip_fraction = 0.05;
   };
   
@@ -93,7 +93,7 @@ DeepCostMapEvaluatorService = {
   discount_factor = 0.95;
   rollout_density = 3;
 
-  robot_inflation_radius = 0.9; -- percentage of robot width
+  robot_inflation_radius = 1.0; -- percentage of robot width
   costmap_inflation_rate = 0; -- discount factor for merging maps
 
   angle_weight = 0.0;
@@ -105,7 +105,7 @@ DeepCostMapEvaluatorService = {
   learned_weight_beta = 1.5;
 
   -- physical params
-  base_link_offset_x = -0.1; -- m
+  base_link_offset_x = 0.0; -- m
   base_link_offset_y = 0.0; -- m
 
   -- visualization
