@@ -12,7 +12,7 @@ NavigationParameters = {
   image_topic = "/camera/rgb/image_raw/compressed";
   init_topic = "/initialpose";
   enable_topic = "autonomy_arbiter/enabled";
-  dt = 0.025;
+  dt = 0.06;
   max_linear_accel = 0.5;
   max_linear_decel = 0.5;
   max_linear_speed = 0.5;
@@ -21,7 +21,7 @@ NavigationParameters = {
   max_angular_speed = 1.0;
   carrot_dist = 3.5;
   system_latency = 1.0;
-  obstacle_margin = 0.14;
+  obstacle_margin = 0.1;
   num_options = 41;
   robot_width = 0.65;
   robot_length = 0.65;
@@ -30,9 +30,9 @@ NavigationParameters = {
   max_clearance = 0.5;
   can_traverse_stairs = false;
   use_map_speed = true;
-  target_dist_tolerance = 0.05;
-  target_vel_tolerance = 0.05;
-  target_angle_tolerance = 0.008;
+  target_dist_tolerance = 0.18;
+  target_vel_tolerance = 0.1;
+  target_angle_tolerance = 0.01;
   local_fov = deg2rad(120);
   use_kinect = false;
   camera_calibration_path = "config/camera_calibration_kinect.yaml";
@@ -58,7 +58,7 @@ NavigationParameters = {
 };
 
 AckermannSampler = {
-  max_curvature = 20; --2.5;
+  max_curvature = 15; --2.5;
   clearance_path_clip_fraction = 0.8;
 };
 

@@ -73,6 +73,7 @@
 #include "visualization/visualization.h"
 
 #include "motion_primitives.h"
+#include "omni_path.h"
 #include "navigation.h"
 
 using amrl_msgs::NavStatusMsg;
@@ -82,6 +83,7 @@ using math_util::DegToRad;
 using math_util::RadToDeg;
 using motion_primitives::PathRolloutBase;
 using motion_primitives::ConstantCurvatureArc;
+using motion_primitives::OmniPath;
 using navigation::Navigation;
 using navigation::PathOption;
 using ros::Time;
@@ -555,27 +557,50 @@ vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
 void DrawPathOptions() {
   vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
       navigation_.GetLastPathOptions();
-  auto path_options = ToOptions(path_rollouts);
-  std::shared_ptr<PathRolloutBase> best_option =
-      navigation_.GetOption();
-  for (const auto& o : path_options) {
-    visualization::DrawPathOption(o.curvature,
-        o.free_path_length,
-        o.clearance,
-        0x0000FF,
-        false,
-        local_viz_msg_);
+
+  bool isAckermanSteering = true;
+  if (!path_rollouts.empty() && std::dynamic_pointer_cast<OmniPath>(path_rollouts[0])) {
+    isAckermanSteering = false;
   }
-  if (best_option != nullptr) {
-    const ConstantCurvatureArc best_arc =
-      *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
-    visualization::DrawPathOption(best_arc.curvature,
-        best_arc.length,
-        best_arc.clearance,
-        0xFF0000,
-        true,
-        local_viz_msg_);
+
+  if (isAckermanSteering) {
+    auto path_options = ToOptions(path_rollouts);
+    std::shared_ptr<PathRolloutBase> best_option =
+        navigation_.GetOption();
+    for (const auto& o : path_options) {
+      visualization::DrawPathOption(o.curvature,
+          o.free_path_length,
+          o.clearance,
+          0x0000FF,
+          false,
+          local_viz_msg_);
+    }
+    if (best_option != nullptr) {
+      const ConstantCurvatureArc best_arc =
+        *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
+      visualization::DrawPathOption(best_arc.curvature,
+          best_arc.length,
+          best_arc.clearance,
+          0xFF0000,
+          true,
+          local_viz_msg_);
+    }
+  } else {
+    cout << "DrawPathOptions: Omni Path Steering; #path_rollouts = " << path_rollouts.size() << endl;
+
+    for (const auto& path_ptr : path_rollouts) {
+      auto omni_path = std::dynamic_pointer_cast<OmniPath>(path_ptr);
+      if (!omni_path) continue;  // Skip if cast fails
+      cout << "DrawPathOptions: before visualization; omni_path->motion_ = " << omni_path->motion_.transpose() << endl;
+      visualization::DrawLine(Vector2f(0,0), omni_path->motion_, 0x0000FF, local_viz_msg_);
+    }
+    auto best_option = navigation_.GetOption();
+    auto best_omni_path = std::dynamic_pointer_cast<OmniPath>(best_option);
+    if (best_omni_path) {
+      visualization::DrawLine(Vector2f(0,0), best_omni_path->motion_, 0x0000FF, local_viz_msg_);
+    }
   }
+  
 }
 
 /**
@@ -1011,7 +1036,7 @@ int main(int argc, char** argv) {
       local_viz_msg_.header.stamp = ros::Time::now();
       global_viz_msg_.header.stamp = ros::Time::now();
       viz_pub_.publish(local_viz_msg_);
-      viz_pub_.publish(global_viz_msg_);
+      // viz_pub_.publish(global_viz_msg_);
       if (params.evaluator_type == "cost_map") {
         viz_img.image = navigation_.GetVisualizationImage();
         viz_img_pub_.publish(viz_img.toImageMsg());

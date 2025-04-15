@@ -46,6 +46,8 @@
 #include "simple_queue.h"
 
 #include "motion_primitives.h"
+#include "omni_path.h"
+#include "omni_sampler.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
 #include "deep_cost_map_evaluator.h"
@@ -182,7 +184,8 @@ Navigation::Navigation() :
     global_costmap_(200, 200, 0.5, -50, -50),
     intermediate_path_found_(false),
     intermediate_goal_(0, 0){ //parameters are (x/y size in cells, resolution, bottom left x/y origin coordinates)
-  sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+  // sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+  sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new OmniSampler());
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
@@ -794,10 +797,14 @@ bool Navigation::GetCarrot(Vector2f& carrot, bool global, float carrot_dist) {
   const float kSqCarrotDist = Sq(carrot_dist);
 
   // CHECK_GE(plan_path.size(), 2u);
-
-  if ((plan_path[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
+  if (!plan_path.empty() && (plan_path[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
     // Goal is within the carrot dist.
     carrot = plan_path[0].loc;
+    return true;
+  }
+
+  if (plan_path.empty() && !global && (intermediate_goal_ - robot_loc_).squaredNorm() < kSqCarrotDist) { // TODO: should check againt params.do_intermed
+    carrot = intermediate_goal_;
     return true;
   }
 
@@ -909,16 +916,16 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
   evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
   auto paths = sampler_->GetSamples(params_.num_options);
-  if (debug) {
-    printf("%lu options\n", paths.size());
-    int i = 0;
-    for (auto p : paths) {
-      ConstantCurvatureArc arc =
-          *reinterpret_cast<ConstantCurvatureArc*>(p.get());
-      printf("%3d: %7.5f %7.3f %7.3f\n",
-          i++, arc.curvature, arc.length, arc.curvature);
-    }
-  }
+  // if (debug) {
+  //   printf("%lu options\n", paths.size());
+  //   int i = 0;
+  //   for (auto p : paths) {
+  //     ConstantCurvatureArc arc =
+  //         *reinterpret_cast<ConstantCurvatureArc*>(p.get());
+  //     printf("%3d: %7.5f %7.3f %7.3f\n",
+  //         i++, arc.curvature, arc.length, arc.curvature);
+  //   }
+  // }
   if (paths.size() == 0) {
     // No options, just stop.
     Halt(vel_cmd, ang_vel_cmd);
@@ -926,6 +933,15 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     return;
   }
   auto best_path = evaluator_->FindBest(paths);
+  if (best_path != nullptr && std::dynamic_pointer_cast<OmniPath>(best_path)) {
+    const Eigen::Vector2f best_path_normalized = best_path->EndPoint().translation.normalized();
+    const float best_path_angle = atan2(-best_path_normalized.y(), best_path_normalized.x());
+    if (fabs(best_path_angle) > M_PI / 6) {
+      TurnInPlace(vel_cmd, ang_vel_cmd);
+      return;
+    }
+  }
+
   if (best_path == nullptr) {
     if (debug) printf("No best path found\n");
     // No valid path found!
@@ -1403,6 +1419,11 @@ bool Navigation::Run(const double& time,
           AngleDist(robot_angle_, nav_goal_angle_) < 
           params_.target_angle_tolerance) {
       nav_state_ = NavigationState::kStopped;
+      // cout << "hellooooooo??? case2" << endl;
+    } else if (nav_state_ == NavigationState::kGoto) {
+      // cout << "Goto: " << local_target_.squaredNorm() << ", " << robot_vel_.squaredNorm() << endl;
+    } else if (nav_state_ == NavigationState::kTurnInPlace) {
+      // cout << "TurnInPlace: " << AngleDist(robot_angle_, nav_goal_angle_) << ", " << robot_angle_ << ", " << nav_goal_angle_ << endl;
     }
   } while (prev_state != nav_state_);
   

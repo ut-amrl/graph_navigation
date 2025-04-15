@@ -65,7 +65,9 @@ ROSBUILD_ADD_EXECUTABLE(navigation
                         src/navigation/navigation.cc
                         src/navigation/motion_primitives.cc
                         src/navigation/ackermann_motion_primitives.cc
+                        src/navigation/omni_sampler.cc
                         src/navigation/constant_curvature_arcs.cc
+                        src/navigation/omni_path.cc
                         src/navigation/linear_evaluator.cc
                         src/navigation/image_tiler.cc
                         src/navigation/deep_cost_map_evaluator.cc
@@ -89,7 +91,9 @@ ROSBUILD_ADD_EXECUTABLE(social_nav
                         src/navigation/social_main.cc
                         src/navigation/motion_primitives.cc
                         src/navigation/ackermann_motion_primitives.cc
+                        src/navigation/omni_sampler.cc
                         src/navigation/constant_curvature_arcs.cc
+                        src/navigation/omni_path.cc
                         src/navigation/image_tiler.cc
                         src/navigation/linear_evaluator.cc
                         src/navigation/deep_cost_map_evaluator.cc
