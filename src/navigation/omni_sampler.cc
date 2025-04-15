@@ -14,6 +14,16 @@ namespace motion_primitives {
     // You can leave this empty or initialize things later if needed.
   }
 
+  void OmniSampler::SetMaxPathLength(OmniPath* path_ptr) {
+    path_ptr->length = std::min(nav_params.max_free_path_length, path_ptr->motion.norm());
+    path_ptr->length = std::min(path_ptr->length, local_target.norm());
+    const float stopping_dist = 
+        (Sq(vel.x()) + Sq(vel.y())) / (2.0 * nav_params.linear_limits.max_deceleration);
+    path_ptr->length = std::max(path_ptr->length, stopping_dist);
+
+    path_ptr->motion = path_ptr->motion.normalized() * path_ptr->length;
+  }
+
   std::vector<std::shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
     std::vector<std::shared_ptr<PathRolloutBase>> samples;
   

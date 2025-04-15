@@ -10,7 +10,9 @@ namespace motion_primitives {
 
 class OmniPath : public PathRolloutBase {
  public:
- Eigen::Vector2f motion_;
+ Eigen::Vector2f motion;
+ float length;
+
 
   OmniPath(const Eigen::Vector2f& motion, float clearance);
   ~OmniPath() override = default;
@@ -33,7 +35,6 @@ class OmniPath : public PathRolloutBase {
 
  private:
   float clearance_;
-  float length_;
 };
 
 }  // namespace motion_primitives

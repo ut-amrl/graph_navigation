@@ -586,18 +586,15 @@ void DrawPathOptions() {
           local_viz_msg_);
     }
   } else {
-    cout << "DrawPathOptions: Omni Path Steering; #path_rollouts = " << path_rollouts.size() << endl;
-
     for (const auto& path_ptr : path_rollouts) {
       auto omni_path = std::dynamic_pointer_cast<OmniPath>(path_ptr);
       if (!omni_path) continue;  // Skip if cast fails
-      cout << "DrawPathOptions: before visualization; omni_path->motion_ = " << omni_path->motion_.transpose() << endl;
-      visualization::DrawLine(Vector2f(0,0), omni_path->motion_, 0x0000FF, local_viz_msg_);
+      visualization::DrawLine(Vector2f(0,0), omni_path->motion, 0x0000FF, local_viz_msg_);
     }
     auto best_option = navigation_.GetOption();
     auto best_omni_path = std::dynamic_pointer_cast<OmniPath>(best_option);
     if (best_omni_path) {
-      visualization::DrawLine(Vector2f(0,0), best_omni_path->motion_, 0x0000FF, local_viz_msg_);
+      visualization::DrawLine(Vector2f(0,0), best_omni_path->motion, 0x0000FF, local_viz_msg_);
     }
   }
   

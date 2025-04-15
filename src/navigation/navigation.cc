@@ -1410,6 +1410,16 @@ bool Navigation::Run(const double& time,
   // Switch between navigation states.
   NavigationState prev_state = nav_state_;
   do {
+    if (nav_state_ == NavigationState::kGoto) {
+      cout << "Nav Goto" << endl;
+    } else if (nav_state_ == NavigationState::kTurnInPlace) {
+      cout << "Nav TurnInPlace" << endl;
+    } else if (nav_state_ == NavigationState::kStopped) {
+      cout << "Nav Stopped" << endl;
+    } else {
+      cout << "Nav Unknown (Others)" << endl;
+    }
+
     prev_state = nav_state_;
     if (nav_state_ == NavigationState::kGoto &&
         local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
