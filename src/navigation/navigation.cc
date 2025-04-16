@@ -936,7 +936,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   if (best_path != nullptr && std::dynamic_pointer_cast<OmniPath>(best_path)) {
     const Eigen::Vector2f best_path_normalized = best_path->EndPoint().translation.normalized();
     const float best_path_angle = atan2(-best_path_normalized.y(), best_path_normalized.x());
-    if (fabs(best_path_angle) > M_PI / 6) {
+    if (fabs(best_path_angle) > M_PI / 12) {
       TurnInPlace(vel_cmd, ang_vel_cmd);
       return;
     }
@@ -1411,13 +1411,13 @@ bool Navigation::Run(const double& time,
   NavigationState prev_state = nav_state_;
   do {
     if (nav_state_ == NavigationState::kGoto) {
-      cout << "Nav Goto" << endl;
+      // cout << "Nav Goto" << endl;
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
-      cout << "Nav TurnInPlace" << endl;
+      // cout << "Nav TurnInPlace" << endl;
     } else if (nav_state_ == NavigationState::kStopped) {
-      cout << "Nav Stopped" << endl;
+      // cout << "Nav Stopped" << endl;
     } else {
-      cout << "Nav Unknown (Others)" << endl;
+      // cout << "Nav Unknown (Others)" << endl;
     }
 
     prev_state = nav_state_;

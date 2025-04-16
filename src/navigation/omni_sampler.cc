@@ -31,28 +31,38 @@ namespace motion_primitives {
     const float angularResolution = M_PI / 180.0f;  // 1 degree
     // const float robotRadius = 0.24f;
     const float minClearPathLength = 0.75f; // 0.75f;
-    const float maxDeviationAngle = M_PI / 6.0f;    // 30 degrees
+    const float maxDeviationAngle = M_PI / 3.0f;    // 60 degrees
     const float maxObstacleDistance = 2.0f; // 4.0f
+    const float robotRadius = 0.5f;
   
     // --- Sample directions ---
-    const int numAngles = static_cast<int>(M_PI / angularResolution);
+    const int numAngles = static_cast<int>(2 * M_PI / angularResolution);
     std::vector<float> ranges(numAngles, maxObstacleDistance);
     std::vector<float> angles(numAngles);
   
     for (int i = 0; i < numAngles; ++i) {
-      angles[i] = i * angularResolution - 0.5f * M_PI;
+      // angles[i] = i * angularResolution - 0.5f * M_PI;
+      angles[i] = i * angularResolution - M_PI;
     }
   
     // --- Process point cloud ---
     for (const Eigen::Vector2f& p : point_cloud) {
       if (!std::isfinite(p.x()) || !std::isfinite(p.y())) continue;
+  
       float r = p.norm();
       if (r > maxObstacleDistance) continue;
   
       float a = atan2(p.y(), p.x());
-      int bin = static_cast<int>((a + 0.5f * M_PI) / angularResolution);
-      if (bin >= 0 && bin < numAngles) {
-        ranges[bin] = std::min(ranges[bin], r);
+  
+      float dA = 2.0f * atan2(robotRadius, r);
+      float aMin = a - dA;
+      float aMax = a + dA;
+  
+      int iMin = static_cast<int>(std::floor((aMin + M_PI) / angularResolution));
+      int iMax = static_cast<int>(std::floor((aMax + M_PI) / angularResolution));
+  
+      for (int i = iMin; i < iMax; ++i) {
+        ranges[i] = std::min(ranges[i], r);
       }
     }
   

@@ -1013,21 +1013,14 @@ int main(int argc, char** argv) {
         auto obstacles = navigation_.GetCostmapObstacles();
         auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
 
-        // for (const auto& vector : global_obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
-        // }
-
-        // for (const auto& vector : obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
-        // }
       }
 
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
       DrawRobot();
-      if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+      // if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
         DrawTarget();
         DrawPathOptions();
-      }
+      // }
       PublishVisualizationMarkers();
       PublishPath();
       local_viz_msg_.header.stamp = ros::Time::now();
