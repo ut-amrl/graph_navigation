@@ -192,6 +192,7 @@ void Navigation::Initialize(const NavigationParameters& params,
                             const string& map_file) {
   // Initialize status message
   params_ = params;
+  params_.do_intermed = false;
   int local_costmap_size = 2*static_cast<int>(std::round(params_.local_costmap_size/params_.local_costmap_resolution));
   costmap_ = costmap_2d::Costmap2D(local_costmap_size, local_costmap_size, params_.local_costmap_resolution, -params.local_costmap_size/2, -params.local_costmap_size/2);
   int global_costmap_size_x = static_cast<int>(std::round(params_.global_costmap_size_x/params_.global_costmap_resolution));
@@ -927,6 +928,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   //   }
   // }
   if (paths.size() == 0) {
+    cout << "[RunObstacleAvoidance] no paths found" << endl;
     // No options, just stop.
     Halt(vel_cmd, ang_vel_cmd);
     if (debug) printf("No paths found\n");
@@ -934,15 +936,17 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
   }
   auto best_path = evaluator_->FindBest(paths);
   if (best_path != nullptr && std::dynamic_pointer_cast<OmniPath>(best_path)) {
+    cout << "[RunObstacleAvoidance] Turn in place for best_path" << endl;
     const Eigen::Vector2f best_path_normalized = best_path->EndPoint().translation.normalized();
     const float best_path_angle = atan2(-best_path_normalized.y(), best_path_normalized.x());
-    if (fabs(best_path_angle) > M_PI / 12) {
+    if (fabs(best_path_angle) > M_PI / 9) {
       TurnInPlace(vel_cmd, ang_vel_cmd);
       return;
     }
   }
 
   if (best_path == nullptr) {
+    cout << "[RunObstacleAvoidance] No best path found" << endl;
     if (debug) printf("No best path found\n");
     // No valid path found!
     Eigen::Vector2f prev_local_target = local_target_;

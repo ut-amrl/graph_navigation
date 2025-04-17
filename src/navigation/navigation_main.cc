@@ -594,7 +594,7 @@ void DrawPathOptions() {
     auto best_option = navigation_.GetOption();
     auto best_omni_path = std::dynamic_pointer_cast<OmniPath>(best_option);
     if (best_omni_path) {
-      visualization::DrawLine(Vector2f(0,0), best_omni_path->motion, 0x0000FF, local_viz_msg_);
+      visualization::DrawLine(Vector2f(0,0), best_omni_path->motion, 0xFFA500, local_viz_msg_);
     }
   }
   

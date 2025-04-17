@@ -32,8 +32,8 @@ namespace motion_primitives {
     // const float robotRadius = 0.24f;
     const float minClearPathLength = 0.75f; // 0.75f;
     const float maxDeviationAngle = M_PI / 3.0f;    // 60 degrees
-    const float maxObstacleDistance = 2.0f; // 4.0f
-    const float robotRadius = 0.5f;
+    const float maxObstacleDistance = 3.0f; // 4.0f
+    const float robotRadius = 0.35f;
   
     // --- Sample directions ---
     const int numAngles = static_cast<int>(2 * M_PI / angularResolution);
