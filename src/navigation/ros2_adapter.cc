@@ -274,8 +274,15 @@ class Ros2AdapterImpl : public RosAdapter {
               }
             }
           }
+          
           // Finally, send the computed command.
-          SendCommand(cmd_vel, cmd_angle_vel);
+          if (auto nav = navigation_.lock()) {
+            auto nav_status = nav->GetNavStatusUint8();
+            if (nav_status != static_cast<uint8_t>(NavigationState::kRecovery)) {
+              // Not in recovery mode, send the command
+              SendCommand(cmd_vel, cmd_angle_vel);
+            }
+          }
         }
       }
       rate.sleep();
@@ -915,6 +922,7 @@ class Ros2AdapterImpl : public RosAdapter {
   }
 
   void HaltCallback(const Bool::SharedPtr msg) {
+    // deprecated
     printf("Halting navigation.\n");
 
     if (auto nav = navigation_.lock()) {
@@ -923,6 +931,7 @@ class Ros2AdapterImpl : public RosAdapter {
   }
 
   void OverrideCallback(const Pose2Df::SharedPtr msg) {
+    // deprecated
     // Convert to generic override goal.
     Vector2f loc(msg->x, msg->y);
     float angle = msg->theta;

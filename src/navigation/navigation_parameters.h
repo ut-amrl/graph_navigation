@@ -107,6 +107,7 @@ struct NavigationParameters {
 
   std::string evaluator_type;
   std::string carrot_planner_type;
+  std::string recovery_type;
 
   std::string model_path;
 

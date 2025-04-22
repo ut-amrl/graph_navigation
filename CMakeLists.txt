@@ -197,6 +197,7 @@ else()
     src/navigation/carrot_service.cc
     src/navigation/terrain_evaluator.cc
     src/navigation/ros2_adapter.cc
+    src/navigation/recovery_service.cc
   )
   target_link_libraries(navigation
     shared_library

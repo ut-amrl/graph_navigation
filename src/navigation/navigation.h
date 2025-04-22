@@ -34,6 +34,7 @@
 
 // AMRL Specific Libraries
 #include "carrot_service.h"
+#include "recovery_service.h"
 #include "config_reader/config_reader.h"
 #include "graph_domain.h"
 #include "motion_primitives.h"
@@ -47,7 +48,6 @@
 // #include "amrl_msgs/AckermannCurvatureDriveMsg.h"
 // #include "amrl_msgs/GPSMsg.h"
 // #include "amrl_msgs/Localization2DMsg.h"
-// #include "amrl_msgs/MissionStatusMsg.h"
 // #include "amrl_msgs/VisualizationMsg.h"
 
 // #include "eight_connected_domain.h"
@@ -267,6 +267,9 @@ class Navigation {
   // Local carrot planner
   std::unique_ptr<CarrotBase> carrot_planner_;
   CarrotPlan latest_carrot_plan_;
+
+  // recovery behavior
+  std::unique_ptr<RecoveryServiceBase> recovery_service_;
 
   // state machine
   NavigationState nav_state_; // deprecated to be removed later

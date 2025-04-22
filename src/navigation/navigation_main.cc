@@ -199,6 +199,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   STRING_PARAM(model_path);
   STRING_PARAM(evaluator_type);
   STRING_PARAM(carrot_planner_type);
+  STRING_PARAM(recovery_type);
   STRING_PARAM(camera_calibration_path);
   REAL_PARAM(local_costmap_resolution);
   REAL_PARAM(max_inflation_radius);
@@ -247,6 +248,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   params->model_path = CONFIG_model_path;
   params->evaluator_type = CONFIG_evaluator_type;
   params->carrot_planner_type = CONFIG_carrot_planner_type;
+  params->recovery_type = CONFIG_recovery_type;
   params->local_costmap_resolution = CONFIG_local_costmap_resolution;
   params->max_inflation_radius = CONFIG_max_inflation_radius;
   params->local_costmap_size = CONFIG_local_costmap_size;

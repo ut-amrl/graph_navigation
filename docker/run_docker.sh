@@ -12,6 +12,7 @@ DEFAULT_IMAGE_NAME="amrl-infra-ros1"
 # Default directory mounts
 default_mounts=(
     "/robodata/frodo_logs:/home/frodo_logs"
+    "/robodata/public_datasets/osrm-routes:/home/osrm-routes"
     "$(pwd):/frodo_autonomy"
 )
 
@@ -38,7 +39,7 @@ if [ -z "$CONTAINER_NAME" ]; then
 fi
 
 # Construct the Docker run command
-DOCKER_CMD="docker run --rm --net=host --ipc=host --pid=host --gpus=all -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp -it --name $CONTAINER_NAME"
+DOCKER_CMD="docker run --rm --net=host --ipc=host --pid=host --gpus=all -e ROS_DOMAIN_ID=42 -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp -v /dev/shm:/dev/shm -it --name $CONTAINER_NAME"
 
 # Add default mounts
 for DEFAULT_MOUNT in "${default_mounts[@]}"; do

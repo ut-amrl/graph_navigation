@@ -28,7 +28,8 @@ enum class StateConditions {
   kIsGoalAvailable = 2,
   kIsGoalReached = 3,
   kIsGoalInFOV = 4,
-  kIsRecoveryNeeded = 5
+  kIsRecoveryNeeded = 5,
+  kIsFailureDetectionUncertain = 6, // this is an augmentation state for kIsRecoveryNeeded
 };
 
 class StateMachine {
@@ -56,14 +57,6 @@ class StateMachine {
           return "kTurnInPlace";
         case NavigationState::kRecovery:
           return "kRecovery";
-        case NavigationState::kStopped:
-          return "kStopped";
-        case NavigationState::kPaused:
-          return "kPaused";
-        case NavigationState::kGoto:
-          return "kGoto";
-        case NavigationState::kOverride:
-          return "kOverride";
         default:
           throw std::runtime_error("Invalid state");
       }
@@ -91,6 +84,9 @@ class StateMachine {
         case StateConditions::kIsRecoveryNeeded:
           isRecoveryNeeded_ = value;
           break;
+        case StateConditions::kIsFailureDetectionUncertain:
+          isFailureDetectionUncertain_ = value;
+          break;
         default:
           break;
       }
@@ -117,7 +113,7 @@ class StateMachine {
           case NavigationState::kHalt:
             if (!isInitialized_) {
               state_ = NavigationState::kInitialize;
-            } else if (!isGlobalPathValid_ || !isGoalAvailable_ || isGoalReached_) {
+            } else if (!isGlobalPathValid_ || !isGoalAvailable_ || isGoalReached_ || isFailureDetectionUncertain_) {
               state_ = NavigationState::kHalt;
             } else if (!isGoalInFOV_ && !isRecoveryNeeded_) {
               state_ = NavigationState::kTurnInPlace;
@@ -165,6 +161,7 @@ class StateMachine {
     bool isGoalReached_     = false;
     bool isGoalInFOV_       = false;
     bool isRecoveryNeeded_  = false;
+    bool isFailureDetectionUncertain_ = false;
 };
 
 }

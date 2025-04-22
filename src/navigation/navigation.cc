@@ -150,7 +150,7 @@ Navigation::Navigation()
       robot_omega_(0),
       gps_initialized_(false),
       gps_goal_index_(-1),
-      nav_state_(NavigationState::kStopped),  // deprecated
+      nav_state_(NavigationState::kInitialize),
       state_machine_(),
       nav_goal_loc_(0, 0),
       nav_goal_angle_(0),
@@ -211,13 +211,21 @@ void Navigation::Initialize(const NavigationParameters& params,
   } else if (params_.carrot_planner_type == "geometric") {
     printf("Geometric carrot planner is built in\n");
   } else {
-    printf("Umknown carrot planner type %s\n",
+    printf("Unknown carrot planner type %s\n",
            params_.carrot_planner_type.c_str());
     exit(1);
   }
   carrot_planner_ = std::unique_ptr<CarrotBase>(carrot_planner);
   best_option_ = nullptr;
   last_options_.clear();
+
+  RecoveryServiceBase* recovery_service = nullptr;
+  if(params_.recovery_type == "service"){
+    recovery_service = new RecoveryService(params_);
+  } else {
+    printf("Only service calls are implemented for recovery behavior");
+  }
+  recovery_service_ = std::unique_ptr<RecoveryServiceBase>(recovery_service);
 
   // initialize state machine
   initialized_ = true;
@@ -234,7 +242,6 @@ bool Navigation::Enabled() const { return enabled_; }
 void Navigation::Enable(bool enable) { enabled_ = enable; }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
-  nav_state_ = NavigationState::kGoto;  // deprecated
   state_machine_.SetState(StateConditions::kIsGoalAvailable, true);
   nav_goal_loc_ = loc;
   nav_goal_angle_ = angle;
@@ -266,7 +273,6 @@ MissionStatus Navigation::GetMissionStatus() {
 }
 
 void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
-  nav_state_ = NavigationState::kGoto;  // deprecated
   state_machine_.SetState(StateConditions::kIsGoalAvailable, true);
   // Skip gps subgoal update if the goal is the same as the current goal
   if (gps_nav_goals_loc_ == goals) {
@@ -276,6 +282,7 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   gps_goal_index_ = GetNextGPSGlobalGoal(0);
   plan_path_.clear();
   mission_status_.mission_id++;
+
 
   if (FLAGS_v > 0)
     printf("SetGPSNavGoals(): %d\n", int(gps_nav_goals_loc_.size()));
@@ -290,7 +297,6 @@ bool Navigation::GetNextGPSGoal(gps_util::GPSPoint& goal) {
 }
 
 void Navigation::ResetNavGoals() {
-  nav_state_ = NavigationState::kStopped;  // deprecated
   state_machine_.SetState(StateConditions::kIsGoalAvailable, false);
   nav_goal_loc_ = robot_loc_;
   nav_goal_angle_ = robot_angle_;
@@ -647,10 +653,14 @@ vector<int> Navigation::GlobalPlan(const Vector2f& initial,
 std::vector<Vector2d> Navigation::GPSRouteToMap(
     const std::vector<GPSPoint>& route) {
   CHECK(gps_initialized_);
+  printf("GPSRouteToMap(): %d\n", int(route.size()));
   std::vector<Vector2d> map_route;
   for (const auto& point : route) {
     map_route.emplace_back(gps_translator_.GpsToGlobalCoord(point));
   }
+  printf("GPSRouteToMap() end");
+  std::cout << std::endl;
+  // flush stdout to see the printout
   return map_route;
 }
 
@@ -658,17 +668,25 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
                                         const vector<GPSPoint>& goals) {
   vector<GPSPoint> path;
   GPSPoint start = inital;
+  /** BEGIN OSRM MAP ROUTING */
   for (const auto& subgoal : goals) {
     const auto& route = osm_planner_.plan(start, subgoal);
     if (!route.empty()) {  // Only append if subpath is not empty
+      printf("Route size: %d\n", int(route.size()));
+      std::cout << std::endl;
       path.insert(path.end(), route.begin(), route.end());
     }
     start = subgoal;
   }
+  /** END OSRM MAP ROUTING */
+  // path.push_back(start);  // Append the last goal point
+  path.push_back(goals.back());  // Append the last goal point to be prevent index error
+  // path.push_back(goals.back());
   CHECK(!path.empty());
 
   // Override planning domain with GPS points in map frame
   printf("Path size: %d\n", int(path.size()));
+  std::cout << std::endl;
   const auto& nodesd = this->GPSRouteToMap(path);
 
   vector<Vector2f> nodes(nodesd.size());
@@ -679,7 +697,7 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
   }
   planning_domain_.ResetDynamicStates();
   planning_domain_.Load(nodes, edges);  // ids correspond to indices
-
+  
   return path;
 }
 
@@ -1129,10 +1147,8 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     return;
   }
   float dTheta = 0;
-  if (nav_state_ == NavigationState::kGoto) {
+  if (nav_state_ == NavigationState::kRun) {
     dTheta = atan2(local_target_.y(), local_target_.x());
-  } else if (nav_state_ == NavigationState::kOverride) {
-    dTheta = atan2(override_target_.y(), override_target_.x());
   } else if (nav_state_ == NavigationState::kTurnInPlace) {
     dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
   }
@@ -1159,8 +1175,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
 }
 
 void Navigation::Pause() {
-  // deprecated
-  nav_state_ = NavigationState::kPaused;
+  nav_state_ = NavigationState::kHalt;
 }
 
 void Navigation::SetMaxVel(const float vel) {
@@ -1222,20 +1237,20 @@ float Navigation::GetAngularVelocity() { return robot_omega_; }
 string Navigation::GetNavStatus() {
   // deprecated: move this to state machine
   switch (nav_state_) {
-    case NavigationState::kStopped: {
-      return "Stopped";
+    case NavigationState::kInitialize: {
+      return "Initialize";
     } break;
-    case NavigationState::kPaused: {
-      return "Paused";
+    case NavigationState::kHalt: {
+      return "Halt";
     } break;
-    case NavigationState::kGoto: {
-      return "Goto";
-    } break;
-    case NavigationState::kOverride: {
-      return "Override";
+    case NavigationState::kRun: {
+      return "Run";
     } break;
     case NavigationState::kTurnInPlace: {
       return "TurnInPlace";
+    } break;
+    case NavigationState::kRecovery: {
+      return "Recovery";
     } break;
     default: {
       return "Unknown";
@@ -1397,6 +1412,9 @@ void Navigation::ReplanAndSetNextNavGoal(bool replan) {
     gps_goal_index_ = GetNextGPSGlobalGoal(gps_goal_index_);
   }
 
+  if (gps_goal_index_ < 0 || gps_goal_index_ >= int(gps_nav_goals_loc_.size()))
+    return;
+
   nav_goal_loc_ =
       gps_translator_.GpsToGlobalCoord(gps_nav_goals_loc_[gps_goal_index_])
           .cast<float>();
@@ -1417,27 +1435,13 @@ void Navigation::HandleTurnInPlace(const double& time, Vector2f& cmd_vel,
 
 void Navigation::HandleRecovery(const double& time, Vector2f& cmd_vel,
                                 float& cmd_angle_vel) {
-  // need to handle global recovery
-  cmd_vel = {0, 0};
-  cmd_angle_vel = 0;
-  Halt(cmd_vel, cmd_angle_vel);
-
-  // implement local recovery
+  RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+  recovery_service_->Recover();
 }
 
 void Navigation::SetStateMachineConditions() {
   // set the state machine conditions
   const bool kDebug = FLAGS_v > 1;
-
-  // bool validGoalExists =
-  //     gps_goal_index_ >= 0 && gps_goal_index_ <
-  //     int(gps_nav_goals_loc_.size());
-  // bool isLastGoalReached =
-  //     validGoalExists &&
-  //     osm_planner_.IsGoalReached(gps_nav_goals_loc_.back(),
-  //                                params_.intermediate_goal_tolerance);
-  // bool isNavComplete = gps_nav_goals_loc_.empty() || isLastGoalReached;
-  // bool isGoalInFOV = IsGoalInFOV(nav_goal_loc_); // deprecated
 
   // check if goal is available
   bool isGoalAvailable = IsGoalAvailable();
@@ -1451,10 +1455,31 @@ void Navigation::SetStateMachineConditions() {
                             isGlobalPathValid);
 
     bool isCarrotValid = UpdateLocalTarget();
-    // bool isRecoveryNeeded = recovery_module.detect(); // placeholder function
-    bool isRecoveryNeeded = !isCarrotValid;
-    state_machine_.SetState(StateConditions::kIsRecoveryNeeded,
-                            isRecoveryNeeded);
+    bool isFailureDetected;
+    bool isRecoveryNeeded;
+    if(recovery_service_->IsRecoveryInProgress()){
+      // recovery in progress, do not update carrot
+      isFailureDetected = true;
+      isRecoveryNeeded = true;
+      state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, false);
+      state_machine_.SetState(StateConditions::kIsRecoveryNeeded, true);
+    } else if (recovery_service_->IsRecoveryTerminated()) {
+      // we are in inside the recovery state and should move to halt state
+      assert(state_machine_.GetState() == NavigationState::kRecovery);
+      state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, true);
+      state_machine_.SetState(StateConditions::kIsRecoveryNeeded, false);
+    } else {
+      recovery_service_->Update(GetOption()); // sync recovery service with previous best path
+      FailureStatus failure_status = recovery_service_->DetectFailure(isCarrotValid);
+      if (failure_status == FailureStatus::Uncertain) {
+        state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, true);
+      } else {
+        state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, false);
+      }
+      isFailureDetected = failure_status == FailureStatus::True;
+      isRecoveryNeeded = !isCarrotValid || isFailureDetected;
+      state_machine_.SetState(StateConditions::kIsRecoveryNeeded, isRecoveryNeeded);
+    }
 
     bool isGoalReached = IsGoalReached();
     state_machine_.SetState(StateConditions::kIsGoalReached, isGoalReached);
@@ -1465,8 +1490,8 @@ void Navigation::SetStateMachineConditions() {
     if (kDebug)
       printf(
           "SetStateMachineConditions() isGoalReached %d isGlobalPathValid %d "
-          "isGoalInFOV %d isCarrotValid %d isRecoveryNeeded %d\n",
-          isGoalReached, isGlobalPathValid, isGoalInFOV, isCarrotValid,
+          "isGoalInFOV %d isCarrotValid %d isFailureDetected %d isRecoveryNeeded %d\n",
+          isGoalReached, isGlobalPathValid, isGoalInFOV, isCarrotValid, isFailureDetected, 
           isRecoveryNeeded);
   }
 }
@@ -1564,13 +1589,18 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
   SetStateMachineConditions();
   state_machine_.TransitionState();
-  NavigationState curr_nav_state = state_machine_.GetState();
+  if (nav_state_ != NavigationState::kHalt && state_machine_.GetState() == NavigationState::kHalt) {
+      // Transition to Halt state, clear detection buffer
+      recovery_service_->ResetRecovery();
+  }
+  nav_state_ = state_machine_.GetState();
   if (kDebug) {
     const auto& curr_nav_state_str = state_machine_.GetStateString();
     printf("Navigation::Run() Transitioned to new state %s\n",
            curr_nav_state_str.c_str());
   }
-  switch (curr_nav_state) {
+
+  switch (nav_state_) {
     case NavigationState::kInitialize: {
       cmd_vel = {0, 0};
       cmd_angle_vel = 0;

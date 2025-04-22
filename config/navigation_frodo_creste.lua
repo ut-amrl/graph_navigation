@@ -6,6 +6,7 @@ function deg2rad(deg)
     gps_topic = "/gpsheading";
     gps_goals_topic = "/gps_goals";
     osrm_file = "osrm_maps/osrm_north-america_cbf_mld/north-america-latest.osrm";
+    -- osrm_file = "/home/osrm-routes/asia_cbf_mld/asia-latest.osrm";
     osrm_path_resolution = 8; -- meters between GPS points
   }
   
@@ -24,31 +25,32 @@ function deg2rad(deg)
     dt = 0.10; -- 10 hz
     max_linear_accel = 0.5;
     max_linear_decel = 0.5;
-    max_linear_speed = 1.0;
+    max_linear_speed = 0.5;
     max_angular_accel = 0.5;
     max_angular_decel = 0.5;
-    max_angular_speed = 1.0;
+    max_angular_speed = 0.5;
     carrot_dist = 10.0;
     system_latency = 0.0;
     obstacle_margin = 0.15;
-    num_options = 15;
+    num_options = 31;
     robot_width = 0.3;
     robot_length = 0.40;
     robot_wheelbase = 0.26;
-    base_link_offset = 0.2;
-    max_free_path_length = 5.0;
+    base_link_offset = -0.2;
+    max_free_path_length = 6.0;
     max_clearance = 1.0; -- was 1.0
     can_traverse_stairs = false;
     use_map_speed = true;
     target_dist_tolerance = 0.1;
     target_vel_tolerance = 0.1;
     target_angle_tolerance = 0.05;
-    local_fov = deg2rad(210);
+    local_fov = deg2rad(290);
     use_kinect = true;
     camera_calibration_path = "config/camera_calibration_front_camera.yaml";
     model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
     evaluator_type = "cost_map_service";
     carrot_planner_type = "geometric"; -- geometric, service
+    recovery_type = "service"; -- service
     intermediate_goal_tolerance = 15; -- final goal distance will be half this (meters)
     max_inflation_radius = 1;
     min_inflation_radius = 0.3;
@@ -113,4 +115,11 @@ DeepCostMapEvaluatorService = {
   viz_thickness = 2;
 };
 
-  
+-- for recovery policy
+RecoveryParameters = {
+  detect_service_name = "/navigation/recovery_service";
+  recovery_action_name = "/navigation/recovery_action";
+  wait_for_service_timeout = 1;
+  detection_buffer_size = 10;
+  hysteresis_thres = 0.7;
+}

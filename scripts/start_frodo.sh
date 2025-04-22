@@ -71,3 +71,6 @@ fi
 #   # The user already has --robot_config ... so just pass everything as-is
 #   ros2 run graph_navigation navigation "$@"
 # fi
+
+#### Manual Start GraphNav ####
+# cd src/graph_navigation/ && ros2 run graph_navigation navigation --robot_config config/navigation_frodo_creste.lua

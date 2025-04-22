@@ -6,6 +6,7 @@ function deg2rad(deg)
     gps_topic = "/gpsheading";
     gps_goals_topic = "/gps_goals";
     osrm_file = "osrm_maps/osrm_north-america_cbf_mld/north-america-latest.osrm";
+    -- osrm_file = "/home/osrm-routes/asia_cbf_mld/asia-latest.osrm";
     osrm_path_resolution = 8; -- meters between GPS points
   }
   
