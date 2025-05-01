@@ -5,8 +5,13 @@ function deg2rad(deg)
   OSMPlannerParameters = {
     gps_topic = "/gpsheading";
     gps_goals_topic = "/gps_goals";
-    osrm_file = "osrm_maps/osrm_north-america_cbf_mld/north-america-latest.osrm";
+    -- osrm_file = "osrm_maps/osrm_north-america_cbf_mld/north-america-latest.osrm";
+    -- osrm_file = "osrm_maps/osrm_south-america_cbf_mld/south-america-latest.osrm";
     -- osrm_file = "/home/osrm-routes/asia_cbf_mld/asia-latest.osrm";
+    -- osrm_file = "osrm_maps/osrm_asia_cbf_mld/asia-latest.osrm";
+    osrm_file = "osrm-routes/south-america_cbf_mld/south-america-latest.osrm";
+    -- osrm_file = "osrm-routes/central-america_cbf_mld/central-america-latest.osrm";
+    -- osrm_file = "osrm-routes/africa_cbf_mld/africa-latest.osrm";
     osrm_path_resolution = 8; -- meters between GPS points
   }
   
@@ -32,11 +37,11 @@ function deg2rad(deg)
     carrot_dist = 10.0;
     system_latency = 0.0;
     obstacle_margin = 0.15;
-    num_options = 31;
+    num_options = 21;
     robot_width = 0.3;
     robot_length = 0.40;
     robot_wheelbase = 0.26;
-    base_link_offset = -0.2;
+    base_link_offset = 0.2;
     max_free_path_length = 6.0;
     max_clearance = 1.0; -- was 1.0
     can_traverse_stairs = false;
@@ -44,7 +49,7 @@ function deg2rad(deg)
     target_dist_tolerance = 0.1;
     target_vel_tolerance = 0.1;
     target_angle_tolerance = 0.05;
-    local_fov = deg2rad(290);
+    local_fov = deg2rad(110);
     use_kinect = true;
     camera_calibration_path = "config/camera_calibration_front_camera.yaml";
     model_path = "../preference_learning_models/jit_cost_model_outdoor_6dim.pt";
@@ -71,7 +76,7 @@ function deg2rad(deg)
   };
   
   AckermannSampler = {
-    max_curvature = 2.5;
+    max_curvature = 1.5;
     max_fov = deg2rad(100);
     clearance_path_clip_fraction = 0.05;
   };
@@ -89,7 +94,7 @@ DeepCostMapEvaluatorService = {
     output_height = 288; -- pixels
   };
 
-  bev_pixels_per_meter = 40; -- 10 * 4x upscaling 96 -> 384
+  bev_pixels_per_meter = 30; -- 10 * 4x upscaling 96 -> 384
   min_cost = 0.0;
   max_cost = 1.0;
   discount_factor = 0.95;

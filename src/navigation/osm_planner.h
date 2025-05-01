@@ -124,11 +124,15 @@ class OSMPlanner {
         }
       }
 
+      if (path_coordinates.empty() || dense_path.empty()) {
+        std::cerr << "Error: No path coordinates found.\n";
+        return dense_path;
+      }
+
       // Ensure the last point is exactly the end location
       if (dense_path.back() != path_coordinates.back()) {
         dense_path.push_back(path_coordinates.back());
       }
-
       return dense_path;
     } else {
       std::cerr << "Error: Failed to retrieve route.\n";

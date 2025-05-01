@@ -165,6 +165,8 @@ void LoadOSMPlannerConfig(navigation::OSMPlannerParameters* params) {
   config_reader::ConfigReader reader({FLAGS_robot_config});
   params->osrm_file = kPackageDir + "/" + CONFIG_osrm_file;
   params->osrm_path_resolution = CONFIG_osrm_path_resolution;
+
+  printf("Loading OSM planner config file %s\n", params->osrm_file.c_str());
 }
 
 void LoadConfig(navigation::NavigationParameters* params) {

@@ -12,8 +12,8 @@ DEFAULT_IMAGE_NAME="amrl-infra-ros1"
 # Default directory mounts
 default_mounts=(
     "/robodata/frodo_logs:/home/frodo_logs"
-    "/robodata/public_datasets/osrm-routes:/home/osrm-routes"
     "$(pwd):/frodo_autonomy"
+    "/robodata/public_datasets/osrm-routes:/frodo_autonomy/src/graph_navigation/osrm-routes"
 )
 
 # Parse command-line arguments

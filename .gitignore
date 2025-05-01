@@ -447,3 +447,5 @@ osrm*/**
 
 **/terrain_models/**
 **/rosbagtests/**
+**/install/**
+**/log/**

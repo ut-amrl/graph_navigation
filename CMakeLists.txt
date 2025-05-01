@@ -250,6 +250,7 @@ install(
 
 # Symlink large osrm_map directory to share/${PROJECT_NAME}
 install(CODE "execute_process(COMMAND ln -sf \"${CMAKE_SOURCE_DIR}/osrm_maps\" \"${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/osrm_maps\")")
+install(CODE "execute_process(COMMAND ln -sf \"${CMAKE_SOURCE_DIR}/osrm-routes\" \"${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/osrm-routes\")")
 
 install(DIRECTORY src/config_reader DESTINATION share/${PROJECT_NAME})
 

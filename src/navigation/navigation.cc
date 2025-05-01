@@ -220,7 +220,7 @@ void Navigation::Initialize(const NavigationParameters& params,
   last_options_.clear();
 
   RecoveryServiceBase* recovery_service = nullptr;
-  if(params_.recovery_type == "service"){
+  if (params_.recovery_type == "service") {
     recovery_service = new RecoveryService(params_);
   } else {
     printf("Only service calls are implemented for recovery behavior");
@@ -282,7 +282,6 @@ void Navigation::SetGPSNavGoals(const vector<GPSPoint>& goals) {
   gps_goal_index_ = GetNextGPSGlobalGoal(0);
   plan_path_.clear();
   mission_status_.mission_id++;
-
 
   if (FLAGS_v > 0)
     printf("SetGPSNavGoals(): %d\n", int(gps_nav_goals_loc_.size()));
@@ -653,12 +652,12 @@ vector<int> Navigation::GlobalPlan(const Vector2f& initial,
 std::vector<Vector2d> Navigation::GPSRouteToMap(
     const std::vector<GPSPoint>& route) {
   CHECK(gps_initialized_);
-  printf("GPSRouteToMap(): %d\n", int(route.size()));
+
   std::vector<Vector2d> map_route;
   for (const auto& point : route) {
     map_route.emplace_back(gps_translator_.GpsToGlobalCoord(point));
   }
-  printf("GPSRouteToMap() end");
+
   std::cout << std::endl;
   // flush stdout to see the printout
   return map_route;
@@ -668,6 +667,7 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
                                         const vector<GPSPoint>& goals) {
   vector<GPSPoint> path;
   GPSPoint start = inital;
+  path.push_back(start);  // Append the last goal point
   /** BEGIN OSRM MAP ROUTING */
   for (const auto& subgoal : goals) {
     const auto& route = osm_planner_.plan(start, subgoal);
@@ -679,8 +679,8 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
     start = subgoal;
   }
   /** END OSRM MAP ROUTING */
-  // path.push_back(start);  // Append the last goal point
-  path.push_back(goals.back());  // Append the last goal point to be prevent index error
+  path.push_back(
+      goals.back());  // Append the last goal point to be prevent index error
   // path.push_back(goals.back());
   CHECK(!path.empty());
 
@@ -697,7 +697,7 @@ vector<GPSPoint> Navigation::GlobalPlan(const GPSPoint& inital,
   }
   planning_domain_.ResetDynamicStates();
   planning_domain_.Load(nodes, edges);  // ids correspond to indices
-  
+
   return path;
 }
 
@@ -1174,9 +1174,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
   cmd_vel = {0, 0};
 }
 
-void Navigation::Pause() {
-  nav_state_ = NavigationState::kHalt;
-}
+void Navigation::Pause() { nav_state_ = NavigationState::kHalt; }
 
 void Navigation::SetMaxVel(const float vel) {
   // deprecated: move to motion planner implementation
@@ -1457,28 +1455,35 @@ void Navigation::SetStateMachineConditions() {
     bool isCarrotValid = UpdateLocalTarget();
     bool isFailureDetected;
     bool isRecoveryNeeded;
-    if(recovery_service_->IsRecoveryInProgress()){
+    if (recovery_service_->IsRecoveryInProgress()) {
       // recovery in progress, do not update carrot
       isFailureDetected = true;
       isRecoveryNeeded = true;
-      state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, false);
+      state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain,
+                              false);
       state_machine_.SetState(StateConditions::kIsRecoveryNeeded, true);
     } else if (recovery_service_->IsRecoveryTerminated()) {
       // we are in inside the recovery state and should move to halt state
       assert(state_machine_.GetState() == NavigationState::kRecovery);
-      state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, true);
+      state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain,
+                              true);
       state_machine_.SetState(StateConditions::kIsRecoveryNeeded, false);
     } else {
-      recovery_service_->Update(GetOption()); // sync recovery service with previous best path
-      FailureStatus failure_status = recovery_service_->DetectFailure(isCarrotValid);
+      recovery_service_->Update(GetOption());  // sync recovery service with
+                                               // previous best path
+      FailureStatus failure_status =
+          recovery_service_->DetectFailure(isCarrotValid);
       if (failure_status == FailureStatus::Uncertain) {
-        state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, true);
+        state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain,
+                                true);
       } else {
-        state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain, false);
+        state_machine_.SetState(StateConditions::kIsFailureDetectionUncertain,
+                                false);
       }
       isFailureDetected = failure_status == FailureStatus::True;
       isRecoveryNeeded = !isCarrotValid || isFailureDetected;
-      state_machine_.SetState(StateConditions::kIsRecoveryNeeded, isRecoveryNeeded);
+      state_machine_.SetState(StateConditions::kIsRecoveryNeeded,
+                              isRecoveryNeeded);
     }
 
     bool isGoalReached = IsGoalReached();
@@ -1490,9 +1495,10 @@ void Navigation::SetStateMachineConditions() {
     if (kDebug)
       printf(
           "SetStateMachineConditions() isGoalReached %d isGlobalPathValid %d "
-          "isGoalInFOV %d isCarrotValid %d isFailureDetected %d isRecoveryNeeded %d\n",
-          isGoalReached, isGlobalPathValid, isGoalInFOV, isCarrotValid, isFailureDetected, 
-          isRecoveryNeeded);
+          "isGoalInFOV %d isCarrotValid %d isFailureDetected %d "
+          "isRecoveryNeeded %d\n",
+          isGoalReached, isGlobalPathValid, isGoalInFOV, isCarrotValid,
+          isFailureDetected, isRecoveryNeeded);
   }
 }
 
@@ -1589,9 +1595,10 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel,
 
   SetStateMachineConditions();
   state_machine_.TransitionState();
-  if (nav_state_ != NavigationState::kHalt && state_machine_.GetState() == NavigationState::kHalt) {
-      // Transition to Halt state, clear detection buffer
-      recovery_service_->ResetRecovery();
+  if (nav_state_ != NavigationState::kHalt &&
+      state_machine_.GetState() == NavigationState::kHalt) {
+    // Transition to Halt state, clear detection buffer
+    recovery_service_->ResetRecovery();
   }
   nav_state_ = state_machine_.GetState();
   if (kDebug) {
