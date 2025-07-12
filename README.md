@@ -2,6 +2,8 @@
 
 [![Build Status](https://github.com/ut-amrl/graph_navigation/actions/workflows/buildTest.yml/badge.svg)](https://github.com/ut-amrl/graph_navigation/actions)
 
+(This is a legacy branch for ROS1 Noetic -- no longer actively maintained)
+
 ## System Dependencies
 
 1. [glog](https://github.com/google/glog)

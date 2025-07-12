@@ -376,7 +376,7 @@ navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
 
 void PublishNavStatus() {
   NavStatusMsg status;
-  status.stamp = ros::Time::now();
+  status.header.stamp = ros::Time::now();
   status.status = navigation_.GetNavStatusUint8();
 
   status_pub_.publish(status);
