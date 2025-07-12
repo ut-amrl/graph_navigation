@@ -14,102 +14,90 @@
 //========================================================================
 /*!
 \file    navigation_main.cc
-\brief   Main entry point for reference Navigation implementation
+\brief   Main entry point for ROS2 Navigation implementation
 \author  Joydeep Biswas, Jarrett Holtz, Kavan Sikand (C) 2021
 */
 //========================================================================
 
 #include <signal.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
-#include <inttypes.h>
+#include <memory>
+#include <string>
 #include <vector>
 #include <unordered_map>
-#include <image_transport/image_transport.h>
+#include <functional>
+#include <chrono>
+
+// ROS2 includes
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/header.hpp>
+#include <geometry_msgs/msg/pose2_d.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/point_cloud.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <image_transport/image_transport.hpp>
 #include <cv_bridge/cv_bridge.h>
-#include <sensor_msgs/image_encodings.h>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+
+// OpenCV includes
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#include "amrl_msgs/Localization2DMsg.h"
-#include "amrl_msgs/VisualizationMsg.h"
-#include "amrl_msgs/AckermannCurvatureDriveMsg.h"
+// AMRL includes
+#include "amrl_msgs/msg/localization2_d_msg.hpp"
+#include "amrl_msgs/msg/visualization_msg.hpp"
+#include "amrl_msgs/msg/ackermann_curvature_drive_msg.hpp"
+#include "amrl_msgs/msg/nav_status_msg.hpp"
+#include "amrl_msgs/msg/pose2_df.hpp"
+
+// Generated service includes
+#include "graph_navigation/srv/graph_nav.hpp"
+
+// Internal includes
 #include "config_reader/config_reader.h"
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
-#include "amrl_msgs/NavStatusMsg.h"
-#include "amrl_msgs/Pose2Df.h"
-#include "glog/logging.h"
-#include "gflags/gflags.h"
-#include "eigen3/Eigen/Dense"
-#include "eigen3/Eigen/Geometry"
-#include "gflags/gflags.h"
-#include "geometry_msgs/Pose2D.h"
-#include "geometry_msgs/PoseArray.h"
-#include "geometry_msgs/PoseStamped.h"
-#include "geometry_msgs/PoseWithCovarianceStamped.h"
-#include "geometry_msgs/TwistStamped.h"
-#include "graph_navigation/graphNavSrv.h"
-#include "sensor_msgs/LaserScan.h"
-#include "sensor_msgs/PointCloud.h"
-#include "sensor_msgs/CompressedImage.h"
-#include "visualization_msgs/Marker.h"
-#include "visualization_msgs/MarkerArray.h"
-#include "nav_msgs/Odometry.h"
-#include "nav_msgs/Path.h"
-#include "ros/ros.h"
-#include "ros/package.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
 #include "shared/util/helpers.h"
 #include "shared/ros/ros_helpers.h"
-#include "std_msgs/Bool.h"
-#include "std_msgs/Empty.h"
-#include "tf/transform_broadcaster.h"
-#include "tf/transform_datatypes.h"
-#include "tf/transform_listener.h"
 #include "visualization/visualization.h"
-
-#include "motion_primitives.h"
 #include "navigation.h"
 
-using amrl_msgs::NavStatusMsg;
-using amrl_msgs::VisualizationMsg;
-using amrl_msgs::AckermannCurvatureDriveMsg;
-using math_util::DegToRad;
-using math_util::RadToDeg;
-using motion_primitives::PathRolloutBase;
-using motion_primitives::ConstantCurvatureArc;
-using navigation::Navigation;
-using navigation::PathOption;
-using ros::Time;
-using ros_helpers::Eigen3DToRosPoint;
-using ros_helpers::Eigen2DToRosPoint;
-using ros_helpers::RosPoint;
-using ros_helpers::SetRosVector;
-using std::string;
-using std::vector;
-using std::unordered_map;
-using sensor_msgs::PointCloud;
-using Eigen::Vector2f;
-using Eigen::Vector3f;
-using Eigen::Affine3f;
-using graph_navigation::graphNavSrv;
-using geometry_msgs::TwistStamped;
-using geometry::kEpsilon;
-using navigation::MotionLimits;
-using ros_helpers::InitRosHeader;
+// System includes
+#include "glog/logging.h"
+#include "gflags/gflags.h"
+#include "eigen3/Eigen/Dense"
+#include "eigen3/Eigen/Geometry"
 
-const string kAmrlMapsDir = ros::package::getPath("amrl_maps");
-const string kOpenCVWindow = "Image window";
+using namespace std::chrono_literals;
 
+// Command line flags
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
-DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
+DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
+DEFINE_string(map, "UT_Campus", "Name of navigation map file");
+DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
+DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning");
+DEFINE_bool(debug_images, false, "Show debug images");
 
+// Configuration parameters
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
 CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
@@ -117,905 +105,722 @@ CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
 CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
+CONFIG_FLOAT(dt, "NavigationParameters.dt");
+CONFIG_FLOAT(max_linear_accel, "NavigationParameters.max_linear_accel");
+CONFIG_FLOAT(max_linear_decel, "NavigationParameters.max_linear_decel");
+CONFIG_FLOAT(max_linear_speed, "NavigationParameters.max_linear_speed");
+CONFIG_FLOAT(max_angular_accel, "NavigationParameters.max_angular_accel");
+CONFIG_FLOAT(max_angular_decel, "NavigationParameters.max_angular_decel");
+CONFIG_FLOAT(max_angular_speed, "NavigationParameters.max_angular_speed");
+CONFIG_FLOAT(intermediate_goal_dist, "NavigationParameters.intermediate_goal_dist");
+CONFIG_FLOAT(system_latency, "NavigationParameters.system_latency");
+CONFIG_FLOAT(obstacle_margin, "NavigationParameters.obstacle_margin");
+CONFIG_INT(num_options, "NavigationParameters.num_options");
+CONFIG_FLOAT(robot_width, "NavigationParameters.robot_width");
+CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
+CONFIG_FLOAT(base_link_offset, "NavigationParameters.base_link_offset");
+CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
+CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
+CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
+CONFIG_BOOL(use_map_speed, "NavigationParameters.use_map_speed");
+CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
+CONFIG_FLOAT(target_vel_tolerance, "NavigationParameters.target_vel_tolerance");
+CONFIG_FLOAT(target_angle_tolerance, "NavigationParameters.target_angle_tolerance");
+CONFIG_FLOAT(local_fov, "NavigationParameters.local_fov");
+CONFIG_BOOL(use_kinect, "NavigationParameters.use_kinect");
+CONFIG_STRING(model_path, "NavigationParameters.model_path");
+CONFIG_STRING(evaluator_type, "NavigationParameters.evaluator_type");
+CONFIG_FLOAT(local_costmap_resolution, "NavigationParameters.local_costmap_resolution");
+CONFIG_FLOAT(max_inflation_radius, "NavigationParameters.max_inflation_radius");
+CONFIG_FLOAT(local_costmap_size, "NavigationParameters.local_costmap_size");
+CONFIG_FLOAT(min_inflation_radius, "NavigationParameters.min_inflation_radius");
+CONFIG_FLOAT(global_costmap_resolution, "NavigationParameters.global_costmap_resolution");
+CONFIG_FLOAT(global_costmap_size_x, "NavigationParameters.global_costmap_size_x");
+CONFIG_FLOAT(global_costmap_size_y, "NavigationParameters.global_costmap_size_y");
+CONFIG_FLOAT(global_costmap_origin_x, "NavigationParameters.global_costmap_origin_x");
+CONFIG_FLOAT(global_costmap_origin_y, "NavigationParameters.global_costmap_origin_y");
+CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
+CONFIG_FLOAT(lidar_range_min, "NavigationParameters.lidar_range_min");
+CONFIG_FLOAT(lidar_range_max, "NavigationParameters.lidar_range_max");
+CONFIG_FLOAT(replan_dist, "NavigationParameters.replan_dist");
+CONFIG_FLOAT(object_lifespan, "NavigationParameters.object_lifespan");
+CONFIG_FLOAT(inflation_coeff, "NavigationParameters.inflation_coeff");
+CONFIG_FLOAT(distance_weight, "NavigationParameters.distance_weight");
+CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
+CONFIG_STRING(camera_calibration_path, "NavigationParameters.camera_calibration_path");
 
-DEFINE_string(map, "UT_Campus", "Name of navigation map file");
-DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
-DEFINE_bool(debug_images, false, "Show debug images");
+class NavigationNode : public rclcpp::Node {
+   public:
+    NavigationNode() : Node("navigation"),
+                       tf_buffer_(this->get_clock()),
+                       tf_listener_(tf_buffer_),
+                       run_(true),
+                       enabled_(false),
+                       received_odom_(false),
+                       received_laser_(false),
+                       current_angle_(0.0),
+                       goal_angle_(0.0) {
+        // Initialize maps directory
+        if (FLAGS_maps_dir.empty()) {
+            try {
+                FLAGS_maps_dir = ament_index_cpp::get_package_share_directory("amrl_maps");
+            } catch (const std::exception& e) {
+                RCLCPP_ERROR(this->get_logger(), "Could not find amrl_maps package: %s", e.what());
+                FLAGS_maps_dir = "./maps";
+            }
+        }
 
-// DECLARE_int32(v);
+        // Initialize configuration
+        config_reader::ConfigReader reader({FLAGS_robot_config});
+        LoadConfig(&params_);
 
-bool run_ = true;
-bool simulate_ = false;
-bool enabled_ = false;
-bool received_odom_ = false;
-bool received_laser_ = false;
-Vector2f goal_ = {0, 0};
-Vector2f current_loc_ = {0, 0};
-Vector2f current_vel_ = {0, 0};
-float current_angle_ = 0;
-float goal_angle_ = 0;
-navigation::Odom odom_;
-vector<Vector2f> point_cloud_;
-sensor_msgs::LaserScan last_laser_msg_;
-cv::Mat last_image_;
-Navigation navigation_;
+        // Load map
+        std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+        if (!FileExists(map_path)) {
+            RCLCPP_ERROR(this->get_logger(), "Could not find navigation map file at %s", map_path.c_str());
+            throw std::runtime_error("Map file not found");
+        }
 
-struct LaserCache {
-  double time = 0.0;
-  float dtheta = 0.0f;
-  float angle_min = 0.0f;
-  vector<Vector3f> rays;
-  Affine3f frame_tf = Affine3f::Identity();
+        // Initialize navigation
+        navigation_.Initialize(params_, map_path);
+
+        // Initialize visualization messages
+        local_viz_msg_ = visualization::NewVisualizationMessage("base_link", "navigation_local");
+        global_viz_msg_ = visualization::NewVisualizationMessage("map", "navigation_global");
+
+        // Create publishers
+        ackermann_drive_pub_ = this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(
+            "ackermann_curvature_drive", 1);
+        twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+            FLAGS_twist_drive_topic, 1);
+        status_pub_ = this->create_publisher<amrl_msgs::msg::NavStatusMsg>(
+            "navigation_goal_status", 1);
+        viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(
+            "visualization", 1);
+        fp_pcl_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud>(
+            "forward_predicted_pcl", 1);
+        path_pub_ = this->create_publisher<nav_msgs::msg::Path>("trajectory", 1);
+        carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>("carrot", 1);
+
+        // Create image transport publisher
+        image_transport::ImageTransport it(shared_from_this());
+        viz_img_pub_ = it.advertise("vis_image", 1);
+
+        // Create service
+        nav_service_ = this->create_service<graph_navigation::srv::GraphNav>(
+            "GraphNav", std::bind(&NavigationNode::PlanServiceCallback, this,
+                                  std::placeholders::_1, std::placeholders::_2));
+
+        // Create subscribers
+        odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+            CONFIG_odom_topic, 1, std::bind(&NavigationNode::OdometryCallback, this, std::placeholders::_1));
+
+        localization_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
+            CONFIG_localization_topic, 1, std::bind(&NavigationNode::LocalizationCallback, this, std::placeholders::_1));
+
+        // Create laser subscribers
+        for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
+            auto laser_sub = this->create_subscription<sensor_msgs::msg::LaserScan>(
+                CONFIG_laser_topics[i], 1,
+                [this, i](const sensor_msgs::msg::LaserScan::SharedPtr msg) {
+                    LaserCallback(msg, CONFIG_laser_topics[i]);
+                });
+            laser_subs_.push_back(laser_sub);
+        }
+
+        image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
+            CONFIG_image_topic, 1, std::bind(&NavigationNode::ImageCallback, this, std::placeholders::_1));
+
+        goto_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            "/move_base_simple/goal", 1, std::bind(&NavigationNode::GoToCallback, this, std::placeholders::_1));
+
+        goto_amrl_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
+            "/move_base_simple/goal_amrl", 1, std::bind(&NavigationNode::GoToCallbackAMRL, this, std::placeholders::_1));
+
+        reset_nav_goals_sub_ = this->create_subscription<std_msgs::msg::Empty>(
+            "/reset_nav_goals", 1, std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
+
+        enabler_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+            CONFIG_enable_topic, 1, std::bind(&NavigationNode::EnablerCallback, this, std::placeholders::_1));
+
+        halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+            "halt_robot", 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
+
+        override_sub_ = this->create_subscription<amrl_msgs::msg::Pose2Df>(
+            "nav_override", 1, std::bind(&NavigationNode::OverrideCallback, this, std::placeholders::_1));
+
+        // Initialize visualization markers
+        InitSimulatorVizMarkers();
+
+        // Create timer for main loop
+        timer_ = this->create_wall_timer(
+            std::chrono::duration<double>(params_.dt),
+            std::bind(&NavigationNode::TimerCallback, this));
+
+        RCLCPP_INFO(this->get_logger(), "Navigation node initialized");
+    }
+
+    ~NavigationNode() {
+        run_ = false;
+    }
+
+   private:
+    // ROS2 components
+    tf2_ros::Buffer tf_buffer_;
+    tf2_ros::TransformListener tf_listener_;
+
+    // Publishers
+    rclcpp::Publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>::SharedPtr ackermann_drive_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_drive_pub_;
+    rclcpp::Publisher<amrl_msgs::msg::NavStatusMsg>::SharedPtr status_pub_;
+    rclcpp::Publisher<amrl_msgs::msg::VisualizationMsg>::SharedPtr viz_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud>::SharedPtr fp_pcl_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr carrot_pub_;
+    image_transport::Publisher viz_img_pub_;
+
+    // Subscribers
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+    rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr localization_sub_;
+    std::vector<rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr> laser_subs_;
+    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr image_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goto_sub_;
+    rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr goto_amrl_sub_;
+    rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_nav_goals_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr enabler_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr halt_sub_;
+    rclcpp::Subscription<amrl_msgs::msg::Pose2Df>::SharedPtr override_sub_;
+
+    // Service
+    rclcpp::Service<graph_navigation::srv::GraphNav>::SharedPtr nav_service_;
+
+    // Timer
+    rclcpp::TimerBase::SharedPtr timer_;
+
+    // Navigation components
+    navigation::Navigation navigation_;
+    navigation::NavigationParameters params_;
+
+    // State variables
+    bool run_;
+    bool enabled_;
+    bool received_odom_;
+    bool received_laser_;
+    Eigen::Vector2f goal_{0, 0};
+    Eigen::Vector2f current_loc_{0, 0};
+    Eigen::Vector2f current_vel_{0, 0};
+    float current_angle_;
+    float goal_angle_;
+    navigation::Odom odom_;
+    std::vector<Eigen::Vector2f> point_cloud_;
+    cv::Mat last_image_;
+
+    // Visualization
+    amrl_msgs::msg::VisualizationMsg local_viz_msg_;
+    amrl_msgs::msg::VisualizationMsg global_viz_msg_;
+    visualization_msgs::msg::Marker line_list_marker_;
+    visualization_msgs::msg::Marker pose_marker_;
+    visualization_msgs::msg::Marker target_marker_;
+
+    // Laser processing
+    struct LaserCache {
+        double time = 0.0;
+        float dtheta = 0.0f;
+        float angle_min = 0.0f;
+        std::vector<Eigen::Vector3f> rays;
+        Eigen::Affine3f frame_tf = Eigen::Affine3f::Identity();
+    };
+    std::unordered_map<std::string, LaserCache> laser_caches_;
+
+    // Callback functions
+    void EnablerCallback(const std_msgs::msg::Bool::SharedPtr msg) {
+        enabled_ = msg->data;
+    }
+
+    void OdometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+        received_odom_ = true;
+        odom_ = OdomHandler(*msg);
+        navigation_.UpdateOdometry(odom_);
+    }
+
+    void LocalizationCallback(const amrl_msgs::msg::Localization2DMsg::SharedPtr msg) {
+        static std::string map = "";
+        navigation_.UpdateLocation(Eigen::Vector2f(msg->pose.x, msg->pose.y), msg->pose.theta);
+        if (map != msg->map) {
+            map = msg->map;
+            navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg->map));
+        }
+        current_loc_ = Eigen::Vector2f(msg->pose.x, msg->pose.y);
+        current_angle_ = msg->pose.theta;
+    }
+
+    void LaserCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg, const std::string& topic) {
+        if (!received_laser_) {
+            point_cloud_.clear();
+            received_laser_ = true;
+        }
+        LaserHandler(*msg, topic);
+        navigation_.ObservePointCloud(point_cloud_, rclcpp::Time(msg->header.stamp).seconds());
+    }
+
+    void ImageCallback(const sensor_msgs::msg::CompressedImage::SharedPtr msg) {
+        try {
+            cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(msg, "bgr8");
+            last_image_ = image->image;
+            navigation_.ObserveImage(last_image_, rclcpp::Time(msg->header.stamp).seconds());
+
+            if (FLAGS_debug_images) {
+                cv::imshow("Navigation Image", last_image_);
+                cv::waitKey(3);
+            }
+        } catch (cv_bridge::Exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
+        }
+    }
+
+    void GoToCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+        const Eigen::Vector2f loc(msg->pose.position.x, msg->pose.position.y);
+        const float angle = 2.0 * atan2(msg->pose.orientation.z, msg->pose.orientation.w);
+        RCLCPP_INFO(this->get_logger(), "Goal: (%f,%f) %f°", loc.x(), loc.y(), angle);
+        navigation_.SetNavGoal(loc, angle);
+        navigation_.Resume();
+    }
+
+    void GoToCallbackAMRL(const amrl_msgs::msg::Localization2DMsg::SharedPtr msg) {
+        const Eigen::Vector2f loc(msg->pose.x, msg->pose.y);
+        RCLCPP_INFO(this->get_logger(), "Goal: (%f,%f) %f°", loc.x(), loc.y(), msg->pose.theta);
+        navigation_.SetNavGoal(loc, msg->pose.theta);
+        navigation_.Resume();
+    }
+
+    void ResetNavGoalsCallback(const std_msgs::msg::Empty::SharedPtr msg) {
+        RCLCPP_INFO(this->get_logger(), "Resetting all nav goals");
+        navigation_.ResetNavGoals();
+    }
+
+    void HaltCallback(const std_msgs::msg::Bool::SharedPtr msg) {
+        navigation_.Pause();
+    }
+
+    void OverrideCallback(const amrl_msgs::msg::Pose2Df::SharedPtr msg) {
+        const Eigen::Vector2f loc(msg->x, msg->y);
+        navigation_.SetOverride(loc, msg->theta);
+    }
+
+    void PlanServiceCallback(const std::shared_ptr<graph_navigation::srv::GraphNav::Request> request,
+                             std::shared_ptr<graph_navigation::srv::GraphNav::Response> response) {
+        const Eigen::Vector2f start(request->start.x, request->start.y);
+        const Eigen::Vector2f end(request->end.x, request->end.y);
+        const std::vector<int> plan = navigation_.GlobalPlan(start, end);
+        response->plan = plan;
+    }
+
+    void TimerCallback() {
+        if (!run_) return;
+
+        // Clear visualization messages
+        visualization::ClearVisualizationMsg(local_viz_msg_);
+        visualization::ClearVisualizationMsg(global_viz_msg_);
+        received_laser_ = false;
+
+        // Run navigation
+        Eigen::Vector2f cmd_vel(0, 0);
+        float cmd_angle_vel(0);
+
+        bool nav_succeeded = navigation_.Run(this->get_clock()->now().seconds(), cmd_vel, cmd_angle_vel);
+
+        // Publish status
+        PublishNavStatus();
+
+        if (nav_succeeded) {
+            // Publish visualizations and commands
+            PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
+            DrawRobot();
+
+            if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+                DrawTarget();
+                DrawPathOptions();
+            }
+
+            PublishVisualizationMarkers();
+            PublishPath();
+
+            // Update timestamps
+            local_viz_msg_.header.stamp = this->get_clock()->now();
+            global_viz_msg_.header.stamp = this->get_clock()->now();
+
+            // Publish visualization messages
+            viz_pub_->publish(local_viz_msg_);
+            viz_pub_->publish(global_viz_msg_);
+
+            // Publish cost map visualization if enabled
+            if (params_.evaluator_type == "cost_map") {
+                PublishVisualizationImage();
+            }
+
+            // Send commands
+            SendCommand(cmd_vel, cmd_angle_vel);
+        }
+    }
+
+    // Helper functions
+    navigation::Odom OdomHandler(const nav_msgs::msg::Odometry& msg) {
+        navigation::Odom odom;
+        odom.time = rclcpp::Time(msg.header.stamp).seconds();
+        odom.orientation = {static_cast<float>(msg.pose.pose.orientation.w),
+                            static_cast<float>(msg.pose.pose.orientation.x),
+                            static_cast<float>(msg.pose.pose.orientation.y),
+                            static_cast<float>(msg.pose.pose.orientation.z)};
+        odom.position = {static_cast<float>(msg.pose.pose.position.x),
+                         static_cast<float>(msg.pose.pose.position.y),
+                         static_cast<float>(msg.pose.pose.position.z)};
+        return odom;
+    }
+
+    void LaserHandler(const sensor_msgs::msg::LaserScan& msg, const std::string& topic) {
+        auto& cache = laser_caches_[topic];
+
+        if (cache.dtheta != msg.angle_increment ||
+            cache.angle_min != msg.angle_min ||
+            cache.rays.size() != msg.ranges.size()) {
+            cache.dtheta = msg.angle_increment;
+            cache.angle_min = msg.angle_min;
+            cache.rays.resize(msg.ranges.size());
+            for (size_t i = 0; i < cache.rays.size(); ++i) {
+                const float a = cache.angle_min + static_cast<float>(i) * cache.dtheta;
+                cache.rays[i] = Eigen::Vector3f(cos(a), sin(a), 0.0f);
+            }
+        }
+
+        // Lookup TF transform
+        RetrieveTransform(msg.header, cache.frame_tf);
+
+        size_t start_idx = point_cloud_.size();
+        point_cloud_.resize(start_idx + cache.rays.size());
+
+        for (size_t i = 0; i < cache.rays.size(); ++i) {
+            const float r = ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ? msg.ranges[i] : msg.range_max);
+            point_cloud_[start_idx + i] = (cache.frame_tf * (r * cache.rays[i])).head<2>();
+        }
+    }
+
+    void RetrieveTransform(const std_msgs::msg::Header& msg, Eigen::Affine3f& frame_tf) {
+        try {
+            geometry_msgs::msg::TransformStamped transform_stamped = tf_buffer_.lookupTransform(
+                CONFIG_laser_frame, msg.frame_id, tf2::TimePointZero);
+
+            tf2::Transform tf_transform;
+            tf2::fromMsg(transform_stamped.transform, tf_transform);
+
+            // Convert to Eigen
+            auto translation = tf_transform.getOrigin();
+            auto rotation = tf_transform.getRotation();
+
+            frame_tf = Eigen::Translation3f(translation.x(), translation.y(), translation.z()) *
+                       Eigen::Quaternionf(rotation.w(), rotation.x(), rotation.y(), rotation.z());
+        } catch (tf2::TransformException& ex) {
+            RCLCPP_WARN(this->get_logger(), "Failed to retrieve transform: %s", ex.what());
+            // Use identity transform as fallback
+            frame_tf = Eigen::Affine3f::Identity();
+        }
+    }
+
+    void PublishNavStatus() {
+        auto status = std::make_unique<amrl_msgs::msg::NavStatusMsg>();
+        status->header.stamp = this->get_clock()->now();
+        status->status = navigation_.GetNavStatusUint8();
+        status_pub_->publish(std::move(status));
+    }
+
+    void SendCommand(const Eigen::Vector2f& vel, float ang_vel) {
+        auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+
+        if (!FLAGS_no_joystick && !enabled_) {
+            twist_msg->linear.x = 0.0;
+            twist_msg->linear.y = 0.0;
+            twist_msg->angular.z = 0.0;
+        } else {
+            twist_msg->linear.x = vel.x();
+            twist_msg->linear.y = vel.y();
+            twist_msg->angular.z = ang_vel;
+        }
+
+        twist_drive_pub_->publish(std::move(twist_msg));
+
+        // Convert to Ackermann if needed
+        auto ackermann_msg = std::make_unique<amrl_msgs::msg::AckermannCurvatureDriveMsg>();
+        ackermann_msg->header.stamp = this->get_clock()->now();
+        ackermann_msg->velocity = twist_msg->linear.x;
+        if (fabs(ackermann_msg->velocity) < 1e-6) {
+            ackermann_msg->curvature = 0;
+        } else {
+            ackermann_msg->curvature = twist_msg->angular.z / ackermann_msg->velocity;
+        }
+        ackermann_drive_pub_->publish(std::move(ackermann_msg));
+
+        // Update command history
+        navigation::Twist twist;
+        twist.time = this->get_clock()->now().seconds();
+        twist.linear = {static_cast<float>(twist_msg->linear.x),
+                        static_cast<float>(twist_msg->linear.y),
+                        static_cast<float>(twist_msg->linear.z)};
+        twist.angular = {static_cast<float>(twist_msg->angular.x),
+                         static_cast<float>(twist_msg->angular.y),
+                         static_cast<float>(twist_msg->angular.z)};
+        navigation_.UpdateCommandHistory(twist);
+    }
+
+    void PublishForwardPredictedPCL(const std::vector<Eigen::Vector2f>& pcl) {
+        auto fp_pcl_msg = std::make_unique<sensor_msgs::msg::PointCloud>();
+        fp_pcl_msg->points.resize(pcl.size());
+        for (size_t i = 0; i < pcl.size(); ++i) {
+            fp_pcl_msg->points[i].x = pcl[i].x();
+            fp_pcl_msg->points[i].y = pcl[i].y();
+            fp_pcl_msg->points[i].z = 0.324;
+        }
+        fp_pcl_msg->header.stamp = this->get_clock()->now();
+        fp_pcl_pub_->publish(std::move(fp_pcl_msg));
+    }
+
+    void PublishPath() {
+        const auto path = navigation_.GetPlanPath();
+        if (path.size() >= 2) {
+            auto path_msg = std::make_unique<nav_msgs::msg::Path>();
+            path_msg->header.stamp = this->get_clock()->now();
+            path_msg->header.frame_id = "map";
+
+            for (size_t i = 0; i < path.size(); i++) {
+                geometry_msgs::msg::PoseStamped pose_plan;
+                pose_plan.pose.position.x = path[i].loc.x();
+                pose_plan.pose.position.y = path[i].loc.y();
+                pose_plan.pose.orientation.w = 1.0;
+                pose_plan.header.stamp = this->get_clock()->now();
+                pose_plan.header.frame_id = "map";
+                path_msg->poses.push_back(pose_plan);
+            }
+            path_pub_->publish(std::move(path_msg));
+
+            // Draw path visualization
+            for (size_t i = 1; i < path.size(); i++) {
+                visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, global_viz_msg_);
+            }
+
+            // Draw global path
+            const auto global_path = navigation_.GetGlobalPath();
+            for (size_t i = 1; i < global_path.size(); i++) {
+                visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, global_viz_msg_);
+            }
+
+            // Draw carrot
+            Eigen::Vector2f carrot;
+            if (navigation_.GetLocalCarrot(carrot)) {
+                auto carrot_msg = std::make_unique<nav_msgs::msg::Path>();
+                carrot_msg->header.stamp = this->get_clock()->now();
+                carrot_msg->header.frame_id = "map";
+
+                geometry_msgs::msg::PoseStamped carrot_pose;
+                carrot_pose.pose.position.x = carrot.x();
+                carrot_pose.pose.position.y = carrot.y();
+                carrot_pose.pose.orientation.w = 1.0;
+                carrot_pose.header.stamp = this->get_clock()->now();
+                carrot_pose.header.frame_id = "map";
+                carrot_msg->poses.push_back(carrot_pose);
+
+                carrot_pub_->publish(std::move(carrot_msg));
+            }
+
+            if (navigation_.GetGlobalCarrot(carrot)) {
+                visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
+            }
+        }
+    }
+
+    void DrawTarget() {
+        const float carrot_dist = navigation_.GetCarrotDist();
+        const Eigen::Vector2f target = navigation_.GetTarget();
+
+        visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
+        visualization::DrawArc(Eigen::Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+        visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
+    }
+
+    void DrawRobot() {
+        const float kRobotLength = navigation_.GetRobotLength();
+        const float kRobotWidth = navigation_.GetRobotWidth();
+        const float kRearAxleOffset = 0.0;
+        const float kObstacleMargin = navigation_.GetObstacleMargin();
+
+        // Draw robot with margin
+        {
+            const float l1 = -0.5 * kRobotLength - kRearAxleOffset - kObstacleMargin;
+            const float l2 = 0.5 * kRobotLength - kRearAxleOffset + kObstacleMargin;
+            const float w = 0.5 * kRobotWidth + kObstacleMargin;
+            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(l2, w), Eigen::Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l2, w), 0xC0C0C0, local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
+        }
+
+        // Draw actual robot
+        {
+            const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
+            const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
+            const float w = 0.5 * kRobotWidth;
+            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l1, -w), 0x000000, local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(l2, w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l2, w), 0x000000, local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
+        }
+    }
+
+    void DrawPathOptions() {
+        std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts =
+            navigation_.GetLastPathOptions();
+        std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.GetOption();
+
+        for (const auto& rollout : path_rollouts) {
+            const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(rollout.get());
+            if (arc) {
+                visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(),
+                                              0x0000FF, false, local_viz_msg_);
+            }
+        }
+
+        if (best_option != nullptr) {
+            const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
+            if (best_arc) {
+                visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
+                                              0xFF0000, true, local_viz_msg_);
+            }
+        }
+    }
+
+    void PublishVisualizationMarkers() {
+        // This would publish the visualization markers - implementation depends on visualization system
+        // For now, we'll skip this as it requires the full visualization marker setup
+    }
+
+    void PublishVisualizationImage() {
+        try {
+            cv::Mat viz_img = navigation_.GetVisualizationImage();
+            if (!viz_img.empty()) {
+                cv_bridge::CvImage cv_image;
+                cv_image.header.stamp = this->get_clock()->now();
+                cv_image.encoding = "rgb8";
+                cv_image.image = viz_img;
+                viz_img_pub_.publish(cv_image.toImageMsg());
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to publish visualization image: %s", e.what());
+        }
+    }
+
+    void InitSimulatorVizMarkers() {
+        // Initialize visualization markers - simplified for now
+        RCLCPP_INFO(this->get_logger(), "Visualization markers initialized");
+    }
+
+    void LoadConfig(navigation::NavigationParameters* params) {
+        config_reader::ConfigReader reader({FLAGS_robot_config});
+        params->do_intermed = !FLAGS_no_intermed;
+        params->dt = CONFIG_dt;
+        params->linear_limits = navigation::MotionLimits(
+            CONFIG_max_linear_accel, CONFIG_max_linear_decel, CONFIG_max_linear_speed);
+        params->angular_limits = navigation::MotionLimits(
+            CONFIG_max_angular_accel, CONFIG_max_angular_decel, CONFIG_max_angular_speed);
+        params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
+        params->system_latency = CONFIG_system_latency;
+        params->obstacle_margin = CONFIG_obstacle_margin;
+        params->num_options = CONFIG_num_options;
+        params->robot_width = CONFIG_robot_width;
+        params->robot_length = CONFIG_robot_length;
+        params->base_link_offset = CONFIG_base_link_offset;
+        params->max_free_path_length = CONFIG_max_free_path_length;
+        params->max_clearance = CONFIG_max_clearance;
+        params->can_traverse_stairs = CONFIG_can_traverse_stairs;
+        params->use_map_speed = CONFIG_use_map_speed;
+        params->target_dist_tolerance = CONFIG_target_dist_tolerance;
+        params->target_vel_tolerance = CONFIG_target_vel_tolerance;
+        params->target_angle_tolerance = CONFIG_target_angle_tolerance;
+        params->local_fov = CONFIG_local_fov;
+        params->use_kinect = CONFIG_use_kinect;
+        params->model_path = CONFIG_model_path;
+        params->evaluator_type = CONFIG_evaluator_type;
+        params->local_costmap_resolution = CONFIG_local_costmap_resolution;
+        params->max_inflation_radius = CONFIG_max_inflation_radius;
+        params->local_costmap_size = CONFIG_local_costmap_size;
+        params->min_inflation_radius = CONFIG_min_inflation_radius;
+        params->global_costmap_resolution = CONFIG_global_costmap_resolution;
+        params->global_costmap_size_x = CONFIG_global_costmap_size_x;
+        params->global_costmap_size_y = CONFIG_global_costmap_size_y;
+        params->global_costmap_origin_x = CONFIG_global_costmap_origin_x;
+        params->global_costmap_origin_y = CONFIG_global_costmap_origin_y;
+        params->carrot_dist = CONFIG_carrot_dist;
+        params->lidar_range_min = CONFIG_lidar_range_min;
+        params->lidar_range_max = CONFIG_lidar_range_max;
+        params->replan_dist = CONFIG_replan_dist;
+        params->object_lifespan = CONFIG_object_lifespan;
+        params->inflation_coeff = CONFIG_inflation_coeff;
+        params->distance_weight = CONFIG_distance_weight;
+        params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
+
+        LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
+    }
+
+    int LoadCameraCalibrationCV(const std::string& calibration_file,
+                                cv::Mat* camera_mat_ptr,
+                                cv::Mat* dist_coeffs_cv_ptr,
+                                cv::Mat* homography_mat_ptr) {
+        cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
+
+        if (!camera_settings.isOpened()) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to open camera settings file at: %s", calibration_file.c_str());
+            return -1;
+        }
+
+        cv::FileNode node = camera_settings["K"];
+        if (!node.empty() && camera_mat_ptr != nullptr) {
+            *camera_mat_ptr = node.mat();
+        }
+
+        node = camera_settings["D"];
+        if (!node.empty() && dist_coeffs_cv_ptr != nullptr) {
+            *dist_coeffs_cv_ptr = node.mat();
+        }
+
+        node = camera_settings["H"];
+        if (!node.empty() && homography_mat_ptr != nullptr) {
+            *homography_mat_ptr = node.mat();
+        }
+
+        return 0;
+    }
 };
 
-// Publishers
-ros::Publisher ackermann_drive_pub_;
-ros::Publisher vis_pub_;
-ros::Publisher twist_drive_pub_;
-ros::Publisher viz_pub_;
-ros::Publisher map_lines_publisher_;
-ros::Publisher pose_marker_publisher_;
-ros::Publisher status_pub_;
-ros::Publisher fp_pcl_pub_;
-ros::Publisher path_pub_;
-ros::Publisher carrot_pub_;
-image_transport::Publisher viz_img_pub_;
-
-// Messages
-visualization_msgs::Marker line_list_marker_;
-visualization_msgs::Marker pose_marker_;
-visualization_msgs::Marker target_marker_;
-VisualizationMsg local_viz_msg_;
-VisualizationMsg global_viz_msg_;
-
-void EnablerCallback(const std_msgs::Bool& msg) {
-  enabled_ = msg.data;
-}
-
-navigation::Odom OdomHandler(const nav_msgs::Odometry& msg) {
-  if (FLAGS_v > 2) {
-    printf("Odometry t=%f\n", msg.header.stamp.toSec());
-  }
-  navigation::Odom odom;
-  odom.time = msg.header.stamp.toSec();
-  odom.orientation = {static_cast<float>(msg.pose.pose.orientation.w),
-                      static_cast<float>(msg.pose.pose.orientation.x),
-                      static_cast<float>(msg.pose.pose.orientation.y),
-                      static_cast<float>(msg.pose.pose.orientation.z)};
-  odom.position = {static_cast<float>(msg.pose.pose.position.x),
-                   static_cast<float>(msg.pose.pose.position.y),
-                   static_cast<float>(msg.pose.pose.position.z)};
-  return odom;
-}
-
-void OdometryCallback(const nav_msgs::Odometry& msg) {
-  received_odom_ = true;
-  odom_ = OdomHandler(msg);
-  navigation_.UpdateOdometry(odom_);
-}
-
-void RetrieveTransform(const std_msgs::Header& msg,
-                       Eigen::Affine3f& frame_tf) {
-  static tf::TransformListener tf_listener;
-  tf::StampedTransform transform;
-  try {
-    tf_listener.waitForTransform(CONFIG_laser_frame,
-                                 msg.frame_id,
-                                 msg.stamp,
-                                 ros::Duration(0.01));
-    tf_listener.lookupTransform(CONFIG_laser_frame,
-                                msg.frame_id,
-                                msg.stamp,
-                                transform);
-    frame_tf = Eigen::Translation3f(transform.getOrigin().getX(),
-                                    transform.getOrigin().getY(),
-                                    transform.getOrigin().getZ()) *
-               Eigen::Quaternionf(transform.getRotation().getW(),
-                                  transform.getRotation().getX(),
-                                  transform.getRotation().getY(),
-                                  transform.getRotation().getZ());
-  } catch (tf::TransformException& ex) {
-    ROS_WARN("Failed to retrieve transform from '%s' to '%s': %s",
-             msg.frame_id.c_str(), CONFIG_laser_frame.c_str(), ex.what());
-    // Use previous transform (Identity if this is the first message)
-    ROS_INFO("Use previous transform");
-  }
-}
-
-void LaserHandler(const sensor_msgs::LaserScan& msg,
-                  const string& topic) {
-  if (FLAGS_v > 2) {
-    printf("Laser topic=%s, t=%f, dt=%f\n",
-           topic.c_str(),
-           msg.header.stamp.toSec(),
-           GetWallTime() - msg.header.stamp.toSec());
-  }
-
-  static unordered_map<string, LaserCache> laser_caches_;
-  laser_caches_.emplace(topic, LaserCache());
-  LaserCache& cache = laser_caches_[topic];
-
-  if (cache.dtheta != msg.angle_increment ||
-      cache.angle_min != msg.angle_min ||
-      cache.rays.size() != msg.ranges.size()) {
-    cache.dtheta = msg.angle_increment;
-    cache.angle_min = msg.angle_min;
-    cache.rays.resize(msg.ranges.size());
-    for (size_t i = 0; i < cache.rays.size(); ++i) {
-      const float a = cache.angle_min + static_cast<float>(i) * cache.dtheta;
-      cache.rays[i] = Vector3f(cos(a), sin(a), 0.0f);
-    }
-  }
-  CHECK_EQ(cache.rays.size(), msg.ranges.size());
-
-  // Lookup tf transform from laser frame to base frame.
-  Affine3f& frame_tf = cache.frame_tf;
-  RetrieveTransform(msg.header, frame_tf);
-
-  size_t start_idx = point_cloud_.size();
-  point_cloud_.resize(start_idx + cache.rays.size());
-
-  for (size_t i = 0; i < cache.rays.size(); ++i) {
-    const float r =
-      ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ?
-      msg.ranges[i] : msg.range_max);
-    point_cloud_[start_idx + i] = (frame_tf * (r * cache.rays[i])).head<2>();
-  } 
-}
-
-void LaserCallback(const sensor_msgs::LaserScan& msg,
-                   const string& topic) {
-  if (!received_laser_) {
-    point_cloud_.clear();
-    received_laser_ = true;
-  }
-  LaserHandler(msg, topic);
-  navigation_.ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
-}
-
-void GoToCallback(const geometry_msgs::PoseStamped& msg) {
-  const Vector2f loc(msg.pose.position.x, msg.pose.position.y);
-  const float angle =
-      2.0 * atan2(msg.pose.orientation.z, msg.pose.orientation.w);
-  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), angle);
-  navigation_.SetNavGoal(loc, angle);
-  navigation_.Resume();
-}
-
-void GoToCallbackAMRL(const amrl_msgs::Localization2DMsg& msg) {
-  const Vector2f loc(msg.pose.x, msg.pose.y);
-  printf("Goal: (%f,%f) %f\u00b0\n", loc.x(), loc.y(), msg.pose.theta);
-  navigation_.SetNavGoal(loc, msg.pose.theta);
-  navigation_.Resume();
-}
-
-void ResetNavGoalsCallback(const std_msgs::Empty& msg) {
-  printf("Resetting all nav goals.\n");
-  navigation_.ResetNavGoals();
-}
-
-bool PlanServiceCb(graphNavSrv::Request &req,
-                   graphNavSrv::Response &res) {
-  const Vector2f start(req.start.x, req.start.y);
-  const Vector2f end(req.end.x, req.end.y);
-  const vector<int> plan = navigation_.GlobalPlan(start, end);
-  res.plan = plan;
-  return true;
-}
-
-// Probably a hack, overrides the carrot with a target from elsewhere.
-// Primarily used to implement temporary navigation behaviors without
-// overriding the global plan.
-void OverrideCallback(const amrl_msgs::Pose2Df& msg) {
-  const Vector2f loc(msg.x, msg.y);
-  navigation_.SetOverride(loc, msg.theta);
-}
-
 void SignalHandler(int) {
-  if (!run_) {
-    printf("Force Exit.\n");
-    exit(0);
-  }
-  printf("Exiting.\n");
-  run_ = false;
-}
-
-void LocalizationCallback(const amrl_msgs::Localization2DMsg& msg) {
-  static string map  = "";
-  if (FLAGS_v > 2) {
-    printf("Localization t=%f\n", GetWallTime());
-  }
-  navigation_.UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
-  if (map != msg.map) {
-    map = msg.map;
-    navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg.map));
-  }
-}
-
-void HaltCallback(const std_msgs::Bool& msg) {
-  navigation_.Pause();
-}
-
-AckermannCurvatureDriveMsg TwistToAckermann(
-    const geometry_msgs::TwistStamped& twist) {
-  AckermannCurvatureDriveMsg ackermann_msg;
-  ackermann_msg.header = twist.header;
-  ackermann_msg.velocity = twist.twist.linear.x;
-  if (fabs(ackermann_msg.velocity) < kEpsilon) {
-    ackermann_msg.curvature = 0;
-  } else {
-    ackermann_msg.curvature = twist.twist.angular.z / ackermann_msg.velocity;
-  }
-  return ackermann_msg;
-}
-
-geometry_msgs::TwistStamped AckermannToTwist(
-    const AckermannCurvatureDriveMsg& msg) {
-  geometry_msgs::TwistStamped  twist_msg;
-  twist_msg.header = msg.header;
-  twist_msg.twist.linear.x = msg.velocity;
-  twist_msg.twist.linear.y = 0;
-  twist_msg.twist.linear.z = 0;
-  twist_msg.twist.angular.x = 0;
-  twist_msg.twist.angular.y = 0;
-  twist_msg.twist.angular.z = msg.velocity * msg.curvature;
-  return twist_msg;
-}
-
-navigation::Twist ToTwist(geometry_msgs::TwistStamped twist_msg) {
-  navigation::Twist twist;
-  twist.time = twist_msg.header.stamp.toSec();
-  twist.linear = {static_cast<float>(twist_msg.twist.linear.x),
-                  static_cast<float>(twist_msg.twist.linear.y),
-                  static_cast<float>(twist_msg.twist.linear.z)};
-  twist.angular = {static_cast<float>(twist_msg.twist.angular.x),
-                  static_cast<float>(twist_msg.twist.angular.y),
-                  static_cast<float>(twist_msg.twist.angular.z)};
-  return twist;
-}
-
-void PublishNavStatus() {
-  NavStatusMsg status;
-  status.header.stamp = ros::Time::now();
-  status.status = navigation_.GetNavStatusUint8();
-
-  status_pub_.publish(status);
-}
-
-void SendCommand(Eigen::Vector2f vel, float ang_vel) {
-  geometry_msgs::TwistStamped drive_msg;
-  InitRosHeader("base_link", &drive_msg.header);
-  drive_msg.header.stamp = ros::Time::now();
-  if (!FLAGS_no_joystick && !enabled_) {
-    vel.setZero();
-    ang_vel = 0;
-  }
-
-  drive_msg.twist.angular.x = 0;
-  drive_msg.twist.angular.y = 0;
-  drive_msg.twist.angular.z = ang_vel;
-  drive_msg.twist.linear.x = vel.x();
-  drive_msg.twist.linear.y = vel.y();
-  drive_msg.twist.linear.z = 0;
-
-  auto ackermann_msg = TwistToAckermann(drive_msg);
-
-  ackermann_drive_pub_.publish(ackermann_msg);
-  twist_drive_pub_.publish(drive_msg.twist);
-  // This command is going to take effect system latency period after. Hence
-  // modify the timestamp to reflect the time when it will take effect.
-  navigation_.UpdateCommandHistory(ToTwist(drive_msg));
-}
-
-void PublishForwardPredictedPCL(const vector<Vector2f>& pcl) {
-  PointCloud fp_pcl_msg;
-  fp_pcl_msg.points.resize(pcl.size());
-  for (size_t i = 0; i < pcl.size(); ++i) {
-    fp_pcl_msg.points[i].x = pcl[i].x();
-    fp_pcl_msg.points[i].y = pcl[i].y();
-    fp_pcl_msg.points[i].z = 0.324;
-  }
-  fp_pcl_msg.header.stamp = ros::Time::now();
-  fp_pcl_pub_.publish(fp_pcl_msg);
-}
-
-nav_msgs::Path CarrotToNavMsgsPath(const Vector2f& carrot) {
-  nav_msgs::Path carrotNav;
-  carrotNav.header.stamp=ros::Time::now();
-  carrotNav.header.frame_id="map";
-  geometry_msgs::PoseStamped carrotPose;
-  carrotPose.pose.position.x = carrot.x();
-  carrotPose.pose.position.y = carrot.y();
-
-  carrotPose.pose.orientation.x = 0;
-  carrotPose.pose.orientation.y = 0;
-  carrotPose.pose.orientation.z = 0;
-  carrotPose.pose.orientation.w = 1;
-
-  carrotPose.header.stamp = ros::Time::now();
-  carrotPose.header.frame_id = "map";
-  carrotNav.poses.push_back(carrotPose);
-  return carrotNav;
-}
-
-void PublishPath() {
-  const auto path = navigation_.GetPlanPath();
-  if (path.size() >= 2) {
-    nav_msgs::Path path_msg;
-    path_msg.header.stamp=ros::Time::now();
-    path_msg.header.frame_id="map";
-    for (size_t i = 0; i < path.size(); i++) {
-      geometry_msgs::PoseStamped pose_plan;
-      pose_plan.pose.position.x = path[i].loc.x();
-      pose_plan.pose.position.y = path[i].loc.y();
-
-      pose_plan.pose.orientation.x = 0;
-      pose_plan.pose.orientation.y = 0;
-      pose_plan.pose.orientation.z = 0;
-      pose_plan.pose.orientation.w = 1;
-
-      pose_plan.header.stamp = ros::Time::now();
-      pose_plan.header.frame_id = "map";
-      path_msg.poses.push_back(pose_plan);
-
-      path_pub_.publish(path_msg);
-    }
-    for (size_t i = 1; i < path.size(); i++) {
-      visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, 
-          global_viz_msg_);
-    }
-    const auto global_path = navigation_.GetGlobalPath();
-    for (size_t i = 1; i < global_path.size(); i++) {
-      visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, 
-          global_viz_msg_);
-    }
-    Vector2f carrot;
-    bool foundCarrot = navigation_.GetLocalCarrot(carrot);
-    if (foundCarrot) {
-      carrot_pub_.publish(CarrotToNavMsgsPath(carrot));
-    }
-
-    bool foundGlobalCarrot = navigation_.GetGlobalCarrot(carrot);
-    if (foundGlobalCarrot) {
-      visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
-    }
-
-  }
-}
-
-void DrawTarget() {
-  const float carrot_dist = navigation_.GetCarrotDist();
-  const Eigen::Vector2f target = navigation_.GetTarget();
-  auto msg_copy = global_viz_msg_;
-  visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
-  // visualization::DrawCross(target, 0.2, 0x10E000, msg_copy);
-  visualization::DrawArc(
-      Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
-  viz_pub_.publish(msg_copy);
-  visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
-}
-
-void DrawRobot() {
-  const float kRobotLength = navigation_.GetRobotLength();
-  const float kRobotWidth = navigation_.GetRobotWidth();
-  const float kRearAxleOffset = 0.0;
-  const float kObstacleMargin = navigation_.GetObstacleMargin();
-  {
-    // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * kRobotLength - kRearAxleOffset - kObstacleMargin;
-    // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * kRobotLength - kRearAxleOffset + kObstacleMargin;
-    const float w = 0.5 * kRobotWidth + kObstacleMargin;
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l2, w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l2, w), 0xC0C0C0, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, -w), Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-  }
-
-  {
-    // How much the robot's body extends behind of its base link frame.
-    const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
-    // How much the robot's body extends in front of its base link frame.
-    const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
-    const float w = 0.5 * kRobotWidth;
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l1, -w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l2, w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, w), Vector2f(l2, w), 0x000000, local_viz_msg_);
-    visualization::DrawLine(
-        Vector2f(l1, -w), Vector2f(l2, -w), 0x000000, local_viz_msg_);
-  }
-}
-
-vector<PathOption> ToOptions(vector<std::shared_ptr<PathRolloutBase>> paths) {
-  vector<PathOption> options;
-  for (size_t i = 0; i < paths.size(); ++i) {
-    const ConstantCurvatureArc arc =
-      *reinterpret_cast<ConstantCurvatureArc*>(paths[i].get());
-    PathOption option;
-    option.curvature = arc.curvature;
-    option.free_path_length = arc.Length();
-    option.clearance = arc.Clearance();
-    options.push_back(option);
-  }
-  return options;
-}
-
-void DrawPathOptions() {
-  vector<std::shared_ptr<PathRolloutBase>> path_rollouts =
-      navigation_.GetLastPathOptions();
-  auto path_options = ToOptions(path_rollouts);
-  std::shared_ptr<PathRolloutBase> best_option =
-      navigation_.GetOption();
-  for (const auto& o : path_options) {
-    visualization::DrawPathOption(o.curvature,
-        o.free_path_length,
-        o.clearance,
-        0x0000FF,
-        false,
-        local_viz_msg_);
-  }
-  if (best_option != nullptr) {
-    const ConstantCurvatureArc best_arc =
-      *reinterpret_cast<ConstantCurvatureArc*>(best_option.get());
-    visualization::DrawPathOption(best_arc.curvature,
-        best_arc.length,
-        best_arc.clearance,
-        0xFF0000,
-        true,
-        local_viz_msg_);
-  }
-}
-
-/**
- * Helper method that initializes visualization_msgs::Marker parameters
- * @param vizMarker   pointer to the visualization_msgs::Marker object
- * @param ns          namespace for marker (string)
- * @param id          id of marker (int) - must be unique for each marker;
- *                      0, 1, and 2 are already used
- * @param type        specifies type of marker (string); available options:
- *                      arrow (default), cube, sphere, cylinder, linelist,
- *                      linestrip, points
- * @param p           stamped pose to define location and frame of marker
- * @param scale       scale of the marker; see visualization_msgs::Marker
- *                      documentation for details on the parameters
- * @param duration    lifetime of marker in RViz (double); use duration of 0.0
- *                      for infinite lifetime
- * @param color       vector of 4 float values representing color of marker;
- *                    0: red, 1: green, 2: blue, 3: alpha
- */
-void InitVizMarker(visualization_msgs::Marker& vizMarker, string ns,
-    int id, string type, geometry_msgs::PoseStamped p,
-    geometry_msgs::Point32 scale, double duration, vector<float> color) {
-
-  vizMarker.header.frame_id = p.header.frame_id;
-  vizMarker.header.stamp = ros::Time::now();
-
-  vizMarker.ns = ns;
-  vizMarker.id = id;
-
-  if (type == "arrow") {
-    vizMarker.type = visualization_msgs::Marker::ARROW;
-  } else if (type == "cube") {
-    vizMarker.type = visualization_msgs::Marker::CUBE;
-  } else if (type == "sphere") {
-    vizMarker.type = visualization_msgs::Marker::SPHERE;
-  } else if (type == "cylinder") {
-    vizMarker.type = visualization_msgs::Marker::CYLINDER;
-  } else if (type == "linelist") {
-    vizMarker.type = visualization_msgs::Marker::LINE_LIST;
-  } else if (type == "linestrip") {
-    vizMarker.type = visualization_msgs::Marker::LINE_STRIP;
-  } else if (type == "points") {
-    vizMarker.type = visualization_msgs::Marker::POINTS;
-  } else {
-    vizMarker.type = visualization_msgs::Marker::ARROW;
-  }
-
-  vizMarker.pose = p.pose;
-  vizMarker.points.clear();
-  vizMarker.scale.x = scale.x;
-  vizMarker.scale.y = scale.y;
-  vizMarker.scale.z = scale.z;
-
-  vizMarker.lifetime = ros::Duration(duration);
-
-  vizMarker.color.r = color.at(0);
-  vizMarker.color.g = color.at(1);
-  vizMarker.color.b = color.at(2);
-  vizMarker.color.a = color.at(3);
-
-  vizMarker.action = visualization_msgs::Marker::ADD;
-}
-
-void InitSimulatorVizMarkers() {
-  geometry_msgs::PoseStamped p;
-  geometry_msgs::Point32 scale;
-  vector<float> color;
-  color.resize(4);
-
-  p.header.frame_id = "map";
-
-  p.pose.orientation.w = 1.0;
-  scale.x = 0.02;
-  scale.y = 0.0;
-  scale.z = 0.0;
-  color[0] = 66.0 / 255.0;
-  color[1] = 134.0 / 255.0;
-  color[2] = 244.0 / 255.0;
-  color[3] = 1.0;
-  InitVizMarker(line_list_marker_, "map_lines", 0, "linelist", p, scale, 0.0,
-      color);
-
-  p.pose.position.z = 0.0;
-  p.pose.position.x = 0.0;
-  p.pose.position.y = 0.0;
-  scale.x = 0.5;
-  scale.y = 0.44;
-  scale.z = 0.5;
-  color[0] = 94.0 / 255.0;
-  color[1] = 156.0 / 255.0;
-  color[2] = 255.0 / 255.0;
-  color[3] = 0.8;
-
-  InitVizMarker(pose_marker_,
-      "robot_position",
-      1,
-      "cube",
-      p,
-      scale,
-      0.0,
-      color);
-
-  scale.x = 0.05;
-  scale.y = 0.05;
-  scale.z = 0.05;
-
-  InitVizMarker(target_marker_,
-      "targets",
-      1,
-      "points",
-      p,
-      scale,
-      0.0,
-      color);
-
-  // p.pose.orientation.w = 1.0;
-  // scale.x = 0.02;
-  // scale.y = 0.0;
-  // scale.z = 0.0;
-  // color[0] = 244.0 / 255.0;
-  // color[1] = 0.0 / 255.0;
-  // color[2] = 156.0 / 255.0;
-  // color[3] = 1.0;
-  // InitVizMarker(objectLinesMarker, "object_lines", 0, "linelist", p, scale,
-      // 0.0, color);
-}
-
-void PublishVisualizationMarkers() {
-  map_lines_publisher_.publish(line_list_marker_);
-  tf::Quaternion robotQ = tf::createQuaternionFromYaw(current_angle_);
-  const float rear_axle_offset = 0.0;
-  pose_marker_.pose.position.x =
-    current_loc_.x() -
-    cos(current_angle_) * rear_axle_offset;
-  pose_marker_.pose.position.y =
-    current_loc_.y() -
-    sin(current_angle_) * rear_axle_offset;
-  pose_marker_.pose.position.z = 0.5 * 0.5;
-  pose_marker_.pose.orientation.w = 1.0;
-  pose_marker_.pose.orientation.x = robotQ.x();
-  pose_marker_.pose.orientation.y = robotQ.y();
-  pose_marker_.pose.orientation.z = robotQ.z();
-  pose_marker_.pose.orientation.w = robotQ.w();
-  pose_marker_publisher_.publish(pose_marker_);
-}
-
-int LoadCameraCalibrationCV(
-    const std::string& calibration_file,
-    cv::Mat* camera_mat_ptr,
-    cv::Mat* dist_coeffs_cv_ptr,
-    cv::Mat* homography_mat_ptr) {
-  cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
-
-  if (!camera_settings.isOpened()) {
-    std::cerr << "Failed to open camera settings file at: " << calibration_file
-               << endl;
-    return -1;
-  }
-
-  cv::FileNode node = camera_settings["K"];
-  if (!node.empty() && camera_mat_ptr != nullptr) {
-    *camera_mat_ptr = node.mat();
-  } else {
-    std::cerr << "Camera calibration matrix not read! Check configuration "
-                  "file is in default yaml format.";
-  }
-
-  node = camera_settings["D"];
-  if (!node.empty() && dist_coeffs_cv_ptr != nullptr) {
-    *dist_coeffs_cv_ptr = node.mat();
-  } else {
-    std::cerr << "Camera distortion coefficients not read! Check "
-                  "configuration file is in default yaml format.";
-  }
-
-  node = camera_settings["H"];
-  if (!node.empty() && homography_mat_ptr != nullptr) {
-    *homography_mat_ptr = node.mat();
-  } else {
-    std::cerr << "Camera homography matrix not read! Check configuration file "
-                  "is in default yaml format.";
-  }
-
-  return 0;
-}
-
-void LoadConfig(navigation::NavigationParameters* params) {
-  #define REAL_PARAM(x) CONFIG_DOUBLE(x, "NavigationParameters."#x);
-  #define NATURALNUM_PARAM(x) CONFIG_UINT(x, "NavigationParameters."#x);
-  #define STRING_PARAM(x) CONFIG_STRING(x, "NavigationParameters."#x);
-  #define BOOL_PARAM(x) CONFIG_BOOL(x, "NavigationParameters."#x);
-  REAL_PARAM(dt);
-  REAL_PARAM(max_linear_accel);
-  REAL_PARAM(max_linear_decel);
-  REAL_PARAM(max_linear_speed);
-  REAL_PARAM(max_angular_accel);
-  REAL_PARAM(max_angular_decel);
-  REAL_PARAM(max_angular_speed);
-  REAL_PARAM(intermediate_goal_dist);
-  REAL_PARAM(system_latency);
-  REAL_PARAM(obstacle_margin);
-  NATURALNUM_PARAM(num_options);
-  REAL_PARAM(robot_width);
-  REAL_PARAM(robot_length);
-  REAL_PARAM(base_link_offset);
-  REAL_PARAM(max_free_path_length);
-  REAL_PARAM(max_clearance);
-  BOOL_PARAM(can_traverse_stairs);
-  BOOL_PARAM(use_map_speed);
-  REAL_PARAM(target_dist_tolerance);
-  REAL_PARAM(target_vel_tolerance);
-  REAL_PARAM(target_angle_tolerance);
-  REAL_PARAM(local_fov);
-  BOOL_PARAM(use_kinect);
-  STRING_PARAM(model_path);
-  STRING_PARAM(evaluator_type);
-  STRING_PARAM(camera_calibration_path);
-  REAL_PARAM(local_costmap_resolution);
-  REAL_PARAM(max_inflation_radius);
-  REAL_PARAM(local_costmap_size);
-  REAL_PARAM(min_inflation_radius);
-  REAL_PARAM(global_costmap_resolution);
-  REAL_PARAM(global_costmap_size_x);
-  REAL_PARAM(global_costmap_size_y);
-  REAL_PARAM(global_costmap_origin_x);
-  REAL_PARAM(global_costmap_origin_y);
-  REAL_PARAM(carrot_dist);
-  REAL_PARAM(lidar_range_min);
-  REAL_PARAM(lidar_range_max);
-  REAL_PARAM(replan_dist);
-  REAL_PARAM(object_lifespan);
-  REAL_PARAM(inflation_coeff);
-  REAL_PARAM(distance_weight);
-  REAL_PARAM(recovery_carrot_dist);
-
-  config_reader::ConfigReader reader({FLAGS_robot_config});
-  params->do_intermed = !FLAGS_no_intermed;
-  params->dt = CONFIG_dt;
-  params->linear_limits = MotionLimits(
-      CONFIG_max_linear_accel,
-      CONFIG_max_linear_decel,
-      CONFIG_max_linear_speed);
-  params->angular_limits = MotionLimits(
-      CONFIG_max_angular_accel,
-      CONFIG_max_angular_decel,
-      CONFIG_max_angular_speed);
-  params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
-  params->system_latency = CONFIG_system_latency;
-  params->obstacle_margin = CONFIG_obstacle_margin;
-  params->num_options = CONFIG_num_options;
-  params->robot_width = CONFIG_robot_width;
-  params->robot_length = CONFIG_robot_length;
-  params->base_link_offset = CONFIG_base_link_offset;
-  params->max_free_path_length = CONFIG_max_free_path_length;
-  params->max_clearance = CONFIG_max_clearance;
-  params->can_traverse_stairs = CONFIG_can_traverse_stairs;
-  params->use_map_speed = CONFIG_use_map_speed;
-  params->target_dist_tolerance = CONFIG_target_dist_tolerance;
-  params->target_vel_tolerance = CONFIG_target_vel_tolerance;
-  params->target_angle_tolerance = CONFIG_target_angle_tolerance;
-  params->local_fov = CONFIG_local_fov;
-  params->use_kinect = CONFIG_use_kinect;
-  params->model_path = CONFIG_model_path;
-  params->evaluator_type = CONFIG_evaluator_type;
-  params->local_costmap_resolution = CONFIG_local_costmap_resolution;
-  params->max_inflation_radius = CONFIG_max_inflation_radius;
-  params->local_costmap_size = CONFIG_local_costmap_size;
-  params->min_inflation_radius = CONFIG_min_inflation_radius;
-  params->global_costmap_resolution = CONFIG_global_costmap_resolution;
-  params->global_costmap_size_x = CONFIG_global_costmap_size_x;
-  params->global_costmap_size_y = CONFIG_global_costmap_size_y;
-  params->global_costmap_origin_x = CONFIG_global_costmap_origin_x;
-  params->global_costmap_origin_y = CONFIG_global_costmap_origin_y;
-  params->carrot_dist = CONFIG_carrot_dist;
-  params->lidar_range_min = CONFIG_lidar_range_min;
-  params->lidar_range_max = CONFIG_lidar_range_max;
-  params->replan_dist = CONFIG_replan_dist;
-  params->object_lifespan = CONFIG_object_lifespan;
-  params->inflation_coeff = CONFIG_inflation_coeff;
-  params->distance_weight = CONFIG_distance_weight;
-  params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
-
-  // TODO Rather than loading camera homography from a file, compute it from camera transformation info
-  LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
-}
-
-void ImageCallback(const sensor_msgs::CompressedImageConstPtr& msg) {
-  try {
-    cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(
-        msg, sensor_msgs::image_encodings::BGR8);
-    last_image_ = image->image;
-  } catch (cv_bridge::Exception& e) {
-    fprintf(stderr, "cv_bridge exception: %s\n", e.what());
-    return;
-  }
-  navigation_.ObserveImage(last_image_, msg->header.stamp.toSec());
-  // Update GUI Window
-  if (FLAGS_debug_images) {
-    cv::imshow(kOpenCVWindow, last_image_);
-    cv::waitKey(3);
-  }
+    RCLCPP_INFO(rclcpp::get_logger("navigation"), "Shutting down navigation node");
+    rclcpp::shutdown();
 }
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, false);
-  google::InitGoogleLogging(argv[0]);
-  signal(SIGINT, SignalHandler);
-  // Initialize ROS.
-  ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
-  ros::NodeHandle n;
-  image_transport::ImageTransport it_(n);
+    // Initialize gflags and glog
+    google::ParseCommandLineFlags(&argc, &argv, false);
+    google::InitGoogleLogging(argv[0]);
 
-  // Map Loading
-  std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
-  std::string deprecated_path =
-      navigation::GetDeprecatedMapPath(FLAGS_maps_dir, FLAGS_map);
-  if (!FileExists(map_path) && FileExists(deprecated_path)) {
-    printf("Could not find navigation map file at %s. An V1 nav-map was found\
-            at %s. Please run map_upgrade from vector_display to upgrade this\
-            map.\n", map_path.c_str(), deprecated_path.c_str());
-    return 1;
-  } else if (!FileExists(map_path)) {
-    printf("Could not find navigation map file at %s.\n", map_path.c_str());
-    return 1;
-  }
+    // Set up signal handler
+    signal(SIGINT, SignalHandler);
 
-  // Load Parameters and Initialize
-  navigation::NavigationParameters params;
-  LoadConfig(&params);
-  navigation_.Initialize(params, map_path);
+    // Initialize ROS2
+    rclcpp::init(argc, argv);
 
-  // Publishers
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
-  ackermann_drive_pub_ = n.advertise<AckermannCurvatureDriveMsg>(
-      "ackermann_curvature_drive", 1);
-  twist_drive_pub_ = n.advertise<geometry_msgs::Twist>(
-      FLAGS_twist_drive_topic, 1);
-  status_pub_ = n.advertise<NavStatusMsg>("navigation_goal_status", 1);
-  viz_pub_ = n.advertise<VisualizationMsg>("visualization", 1);
-  viz_img_pub_ = it_.advertise("vis_image", 1);
-  fp_pcl_pub_ = n.advertise<PointCloud>("forward_predicted_pcl", 1);
-  path_pub_ = n.advertise<nav_msgs::Path>("trajectory", 1);
-  carrot_pub_ = n.advertise<nav_msgs::Path>("carrot", 1, true);
-
-  // Messages
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
-  InitSimulatorVizMarkers();
-
-  // Services
-  ros::ServiceServer nav_srv =
-    n.advertiseService("graphNavSrv", &PlanServiceCb);
-
-  // Subscribers
-  ros::Subscriber velocity_sub =
-      n.subscribe(CONFIG_odom_topic, 1, &OdometryCallback);
-  ros::Subscriber localization_sub =
-      n.subscribe(CONFIG_localization_topic, 1, &LocalizationCallback);
-  vector<ros::Subscriber> laser_subs(CONFIG_laser_topics.size());
-  for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
-    laser_subs[i] = n.subscribe<sensor_msgs::LaserScan>(
-        CONFIG_laser_topics[i], 1,
-        [i](const sensor_msgs::LaserScan::ConstPtr& msg_ptr) {
-          LaserCallback(*msg_ptr, CONFIG_laser_topics[i]);
-        });
-  }
-  ros::Subscriber img_sub = 
-      n.subscribe(CONFIG_image_topic, 1, &ImageCallback);
-  ros::Subscriber goto_sub =
-      n.subscribe("/move_base_simple/goal", 1, &GoToCallback);
-  ros::Subscriber goto_amrl_sub =
-      n.subscribe("/move_base_simple/goal_amrl", 1, &GoToCallbackAMRL);
-  ros::Subscriber reset_nav_goals_sub =
-      n.subscribe("/reset_nav_goals", 1, &ResetNavGoalsCallback);
-  ros::Subscriber enabler_sub =
-      n.subscribe(CONFIG_enable_topic, 1, &EnablerCallback);
-  ros::Subscriber halt_sub =
-      n.subscribe("halt_robot", 1, &HaltCallback);
-  ros::Subscriber override_sub =
-      n.subscribe("nav_override", 1, &OverrideCallback);
-
-  std_msgs::Header viz_img_header; // empty viz_img_header
-  viz_img_header.stamp = ros::Time::now(); // time
-  cv_bridge::CvImage viz_img;
-  if (params.evaluator_type == "cost_map") {
-    viz_img = cv_bridge::CvImage(viz_img_header, sensor_msgs::image_encodings::RGB8, navigation_.GetVisualizationImage());
-  }
-  
-  RateLoop loop(1.0 / params.dt);
-  while (run_ && ros::ok()) {
-    visualization::ClearVisualizationMsg(local_viz_msg_);
-    visualization::ClearVisualizationMsg(global_viz_msg_);
-    received_laser_ = false;
-    ros::spinOnce();
-
-    // Run Navigation to get commands
-    Vector2f cmd_vel(0, 0);
-    float cmd_angle_vel(0);
-
-    bool nav_succeeded = navigation_.Run(ros::Time::now().toSec(), cmd_vel, cmd_angle_vel);
-
-    // Publish Nav Status
-    PublishNavStatus();
-
-    if(nav_succeeded) {
-      if (!FLAGS_no_intermed) {
-        // Publish Visualizations
-        auto obstacles = navigation_.GetCostmapObstacles();
-        auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
-
-        // for (const auto& vector : global_obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
-        // }
-
-        // for (const auto& vector : obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
-        // }
-      }
-
-      PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
-      DrawRobot();
-      if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
-        DrawTarget();
-        DrawPathOptions();
-      }
-      PublishVisualizationMarkers();
-      PublishPath();
-      local_viz_msg_.header.stamp = ros::Time::now();
-      global_viz_msg_.header.stamp = ros::Time::now();
-      viz_pub_.publish(local_viz_msg_);
-      viz_pub_.publish(global_viz_msg_);
-      if (params.evaluator_type == "cost_map") {
-        viz_img.image = navigation_.GetVisualizationImage();
-        viz_img_pub_.publish(viz_img.toImageMsg());
-      }
-
-      // Publish Commands
-      SendCommand(cmd_vel, cmd_angle_vel);
+    try {
+        auto node = std::make_shared<NavigationNode>();
+        rclcpp::spin(node);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(rclcpp::get_logger("navigation"), "Exception in navigation node: %s", e.what());
+        return 1;
     }
-    loop.Sleep();
-  }
-  return 0;
+
+    rclcpp::shutdown();
+    return 0;
 }

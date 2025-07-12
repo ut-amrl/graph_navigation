@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>graph_navigation</name>
+  <version>2.0.0</version>
+  <description>Graph-based navigation system with hierarchical planning for autonomous mobile robots</description>
+  <maintainer email="joydeepb@cs.utexas.edu">Joydeep Biswas</maintainer>
+  <license>LGPLv3</license>
+  <url type="website">https://github.com/ut-amrl/graph_navigation</url>
+  <url type="repository">https://github.com/ut-amrl/graph_navigation</url>
+  <url type="bugtracker">https://github.com/ut-amrl/graph_navigation/issues</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- ROS2 Interface Generation -->
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <!-- ROS2 Core Dependencies -->
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>image_transport</depend>
+  <depend>cv_bridge</depend>
+
+  <!-- AMRL Messages (ROS2 compatible) -->
+  <depend>amrl_msgs</depend>
+
+  <!-- System Dependencies -->
+  <depend>libgoogle-glog-dev</depend>
+  <depend>libgflags-dev</depend>
+  <depend>liblua5.1-dev</depend>
+  <depend>libeigen3-dev</depend>
+  <depend>libopencv-dev</depend>
+  <depend>libcostmap-2d-dev</depend>
+
+  <!-- Additional Dependencies -->
+  <depend>ament_index_cpp</depend>
+
+  <!-- Test Dependencies -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package> 

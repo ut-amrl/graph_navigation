@@ -19,12 +19,11 @@
 */
 //========================================================================
 
-
 #include <stdio.h>
 #include <gtest/gtest.h>
 
 #include "eigen3/Eigen/Dense"
-#include "math/geometry.h"
+#include "shared/math/geometry.h"
 
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
@@ -37,5 +36,3 @@ TEST(Run1DTimeOptimalControl, SimpleCases) {
     EXPECT_FLOAT_EQ(v_cmd, 0.1);
   }
 }
-
-

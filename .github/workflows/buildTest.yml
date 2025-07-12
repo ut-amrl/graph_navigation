@@ -4,45 +4,37 @@ on: push
 
 jobs:
   build-test:
-    name: Build Test (ROS1 Noetic)
+    name: Build and Test (ROS2)
     runs-on: ubuntu-22.04
-    container: ros:noetic
-    
+
     defaults:
       run:
         shell: bash -l {0}
 
+    env:
+      ROS_DISTRO: humble # Or whatever ROS2 distribution you want to use, like 'iron' or 'rolling'
+
     steps:
       - name: Run package update
         run: |
-          apt update
-          apt dist-upgrade -y
+          sudo apt update
+          sudo apt dist-upgrade -y
 
       - name: Install Git
-        run: |
-          apt-get install -y git
+        run: sudo apt-get install -y git
 
-      - name: ROSDep Update
+      - name: Install ROS2
         run: |
-          rm -f /etc/ros/rosdep/sources.list.d/20-default.list || true
-          rosdep init || true
-          rosdep update
-
-      - name: Install dependencies
-        run: |
-          apt-get install -y g++ cmake libpopt-dev \
-            liblua5.1-dev libeigen3-dev \
-            libjpeg8-dev libgoogle-perftools-dev \
-            libsuitesparse-dev libblas-dev liblapack-dev libopenmpi-dev \
-            libgoogle-glog-dev libgflags-dev libceres-dev libtbb-dev \
-            ros-noetic-xmlrpcpp python-is-python3 \
-            python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential \
-            ros-noetic-tf ros-noetic-angles ros-noetic-tf2-geometry-msgs ros-noetic-costmap-2d \
-            ros-noetic-cv-bridge ros-noetic-image-transport
+          sudo apt update
+          sudo apt install -y curl gnupg2 lsb-release
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt update
+          sudo apt install -y ros-$ROS_DISTRO-desktop-full python3-colcon-common-extensions
 
       - name: Install wget and unzip
         run: |
-          apt-get update && apt-get install -y wget unzip
+          sudo apt-get update && sudo apt-get install -y wget unzip
 
       # Install libtorch
       - name: Install libtorch
@@ -55,18 +47,50 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Get amrl_msgs
+      # Install dependencies
+      - name: Install additional dependencies
         run: |
-          source /opt/ros/noetic/setup.bash
-          export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/../amrl_msgs
-          cd $GITHUB_WORKSPACE/..
+          sudo apt-get update
+          sudo apt-get install -y \
+              g++ cmake libpopt-dev \
+              liblua5.1-dev libeigen3-dev \
+              libjpeg8-dev libgoogle-perftools-dev \
+              libsuitesparse-dev libblas-dev liblapack-dev libopenmpi-dev \
+              libgoogle-glog-dev libunwind-dev libgflags-dev libceres-dev libtbb-dev \
+              libncurses5-dev \
+              qtbase5-dev libqt5websockets5-dev \
+              python3 python3-pip \
+              libyaml-cpp-dev liblua5.1-0-dev \
+              ros-$ROS_DISTRO-ament-cmake \
+              ros-$ROS_DISTRO-rclcpp \
+              ros-$ROS_DISTRO-std-msgs \
+              ros-$ROS_DISTRO-geometry-msgs \
+              ros-$ROS_DISTRO-sensor-msgs \
+              ros-$ROS_DISTRO-nav-msgs \
+              ros-$ROS_DISTRO-visualization-msgs \
+              ros-$ROS_DISTRO-tf2-geometry-msgs \
+              ros-$ROS_DISTRO-rosbag2-cpp \
+              ros-$ROS_DISTRO-rosbag2-storage \
+              ros-$ROS_DISTRO-angles \
+              ros-$ROS_DISTRO-tf2 \
+              ros-$ROS_DISTRO-ament-index-cpp
+
+      - name: Clone and build amrl_msgs (ROS2)
+        run: |
+          cd ..
           git clone https://github.com/ut-amrl/amrl_msgs.git
           cd amrl_msgs
+          source /opt/ros/$ROS_DISTRO/setup.bash
           make
 
       - name: Run build
         run: |
-          source /opt/ros/noetic/setup.bash
-          export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/../amrl_msgs
-          cd $GITHUB_WORKSPACE
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          export AMENT_PREFIX_PATH=$(pwd)/../amrl_msgs/install:$AMENT_PREFIX_PATH
           make
+
+      - name: Run unit tests
+        run: |
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          export AMENT_PREFIX_PATH=$(pwd)/../amrl_msgs/install:$AMENT_PREFIX_PATH
+          make test

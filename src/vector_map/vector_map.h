@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
-#include "math/line2d.h"
+#include "shared/math/line2d.h"
 
 #include "glog/logging.h"
 

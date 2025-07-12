@@ -19,7 +19,7 @@
 */
 //========================================================================
 #include <string>
-#include "math/geometry.h"
+#include "shared/math/geometry.h"
 #include "social_nav.h"
 
 using Eigen::Vector2f;

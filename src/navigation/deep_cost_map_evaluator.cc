@@ -29,8 +29,8 @@
 #include <thread>
 
 #include "gflags/gflags.h"
-#include "math/line2d.h"
-#include "math/poses_2d.h"
+#include "shared/math/line2d.h"
+#include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "torch/torch.h"

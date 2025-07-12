@@ -27,8 +27,8 @@
 #include <memory>
 #include <vector>
 
-#include "math/line2d.h"
-#include "math/poses_2d.h"
+#include "shared/math/line2d.h"
+#include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 
 #include "shared/math/math_util.h"
@@ -36,12 +36,12 @@
 #include "navigation_parameters.h"
 
 using Eigen::Vector2f;
+using navigation::MotionLimits;
 using std::max;
 using std::min;
 using std::shared_ptr;
 using std::string;
 using std::vector;
-using navigation::MotionLimits;
 using namespace math_util;
 using namespace geometry;
 
@@ -73,7 +73,7 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
       speed * dt +
       Sq(speed) / (2.0 * limits.max_deceleration);
   char phase = '?';
-  if (dist_left >  0) {
+    if (dist_left > 0) {
     if (speed > limits.max_speed) {
       // Over max speed, slow down.
       phase = 'O';
@@ -118,13 +118,12 @@ float Run1DTimeOptimalControl(const MotionLimits& limits,
   return velocity_cmd;
 }
 
-
 float StraightLineClearance(const Line2f& l, 
                             const vector<Vector2f>& points) {
   const Vector2f d = l.Dir();
   const float len = l.Length();
   float clearance = FLT_MAX;
-  for (const Vector2f& p  : points) {
+    for (const Vector2f& p : points) {
     const float x = d.dot(p - l.p0);
     if (x < 0.0f || x > len) continue;
     clearance = min<float>(clearance, l.Distance(p));

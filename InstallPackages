@@ -1,0 +1,34 @@
+#!/bin/bash
+
+echo "Installing Graph Navigation ROS2 dependencies..."
+
+# Core system dependencies
+sudo apt-get update
+sudo apt-get install -y \
+    g++ cmake build-essential \
+    libgoogle-glog-dev libgflags-dev \
+    liblua5.1-dev libeigen3-dev \
+    libboost-all-dev \
+    libopencv-dev \
+    libgtest-dev \
+    libyaml-cpp-dev \
+    python3 python3-pip
+
+# ROS2-specific dependencies
+sudo apt-get install -y \
+    ros-$ROS_DISTRO-ament-cmake \
+    ros-$ROS_DISTRO-rclcpp \
+    ros-$ROS_DISTRO-rclcpp-lifecycle \
+    ros-$ROS_DISTRO-std-msgs \
+    ros-$ROS_DISTRO-geometry-msgs \
+    ros-$ROS_DISTRO-sensor-msgs \
+    ros-$ROS_DISTRO-nav-msgs \
+    ros-$ROS_DISTRO-visualization-msgs \
+    ros-$ROS_DISTRO-tf2-geometry-msgs \
+    ros-$ROS_DISTRO-tf2-ros \
+    ros-$ROS_DISTRO-image-transport \
+    ros-$ROS_DISTRO-cv-bridge \
+    ros-$ROS_DISTRO-angles \
+    ros-$ROS_DISTRO-tf2 \
+    ros-$ROS_DISTRO-ament-index-cpp \
+    ros-$ROS_DISTRO-costmap-2d

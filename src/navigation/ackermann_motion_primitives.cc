@@ -25,7 +25,7 @@
 #include <memory>
 #include <vector>
 
-#include "math/poses_2d.h"
+#include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "config_reader/config_reader.h"

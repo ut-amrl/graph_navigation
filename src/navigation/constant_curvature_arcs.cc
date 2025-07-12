@@ -24,8 +24,8 @@
 #include <memory>
 #include <vector>
 
-#include "math/poses_2d.h"
-#include "math/math_util.h"
+#include "shared/math/poses_2d.h"
+#include "shared/math/math_util.h"
 #include "eigen3/Eigen/Dense"
 
 #include "motion_primitives.h"

@@ -61,13 +61,13 @@ graph_navigation/
 - **`image_tiler.cc/.h`** - Image processing utilities
 
 **ROS Entry Points (Wrappers):**
-- **`navigation_main.cc`** - Main ROS1 node for navigation
-  - **ROS Wrapper**: YES - Needs ROS2 conversion
+- **`navigation_main.cc`** - Main ROS2 node for navigation
+  - **ROS Wrapper**: YES - ROS2 implementation
   - Handles ROS subscribers, publishers, services
   - Manages visualization and status publishing
 
-- **`social_main.cc`** - Social navigation ROS1 node
-  - **ROS Wrapper**: YES - Needs ROS2 conversion
+- **`social_main.cc`** - Social navigation ROS2 node
+  - **ROS Wrapper**: YES - ROS2 implementation
   - Implements social behaviors (follow, pass, halt)
 
 - **`social_nav.cc/.h`** - Social navigation algorithms
@@ -83,7 +83,7 @@ graph_navigation/
 ### 3. Visualization (`src/visualization/`)
 
 - **`visualization.cc/.h`** - Visualization utilities
-  - **ROS Wrapper**: YES - Needs ROS2 conversion
+  - **ROS Wrapper**: YES - ROS2 implementation
   - Creates visualization markers and messages
 
 ### 4. Shared Libraries (`src/shared/`)
@@ -103,9 +103,9 @@ graph_navigation/
 ## 🔧 ROS Interface Components
 
 ### Services (`srv/`)
-- **`graphNavSrv.srv`** - Global path planning service
-- **`socialNavSrv.srv`** - Social navigation service
-- **Status**: Needs ROS2 conversion
+- **`GraphNav.srv`** - Global path planning service
+- **`SocialNav.srv`** - Social navigation service
+- **Status**: ROS2 implementation
 
 ### Configuration (`config/`)
 - **`navigation.lua`** - Main navigation parameters
@@ -115,7 +115,7 @@ graph_navigation/
 
 ### Scripts (`scripts/`)
 - **`waypoint_navigation.py`** - Waypoint following script
-- **Status**: Needs ROS2 conversion (uses ROS1 topics)
+- **Status**: ROS2 implementation
 
 ## 🚀 ROS Entry Points & Data Flow
 
@@ -145,23 +145,23 @@ graph_navigation/
 - `amrl_msgs/*` - Custom AMRL messages
 - Standard ROS message types (geometry_msgs, sensor_msgs, etc.)
 
-**ROS1 Specific APIs:**
-- `ros::init`, `ros::NodeHandle`, `ros::spin`
-- `ros::Publisher`, `ros::Subscriber`
-- `ros::ServiceServer`, `ros::ServiceClient`
-- `tf::TransformListener`
+**ROS2 Specific APIs:**
+- `rclcpp::init`, `rclcpp::Node`, `rclcpp::spin`
+- `rclcpp::Publisher`, `rclcpp::Subscription`
+- `rclcpp::Service`, `rclcpp::Client`
+- `tf2_ros::TransformListener`
 - `image_transport::ImageTransport`
 
 ## 🏗️ Build System
 
-### Current (ROS1)
-- **`CMakeLists.txt`** - Uses `rosbuild` macros
+### Current (ROS2)
+- **`CMakeLists.txt`** - Uses `ament_cmake` macros
 - **`Makefile`** - Build wrapper
-- **`manifest.xml`** - ROS1 package manifest
+- **`package.xml`** - ROS2 package manifest
 
 ### Dependencies
-- **ROS1 Packages**: `roscpp`, `rosbag`, `tf`, `image_transport`
-- **System Libraries**: `glog`, `gflags`, `lua5.1`, `costmap_2d`
+- **ROS2 Packages**: `rclcpp`, `tf2_ros`, `image_transport`
+- **System Libraries**: `glog`, `gflags`, `lua5.1`, `nav2_costmap_2d`
 - **External**: LibTorch, OpenCV
 
 ## 🌐 AMRL Ecosystem Integration
@@ -184,31 +184,22 @@ graph_navigation/
 - **Perception**: Processes lidar and camera data
 - **Planning**: Provides global and local path planning services
 
-## 🎯 ROS2 Transition Strategy
+## 🎯 ROS2 Implementation Status
 
-### Files Requiring ROS2 Conversion
+### Current Implementation Status
 
-**High Priority (Core ROS Wrappers):**
+**Completed (ROS2 Ready):**
 1. `src/navigation/navigation_main.cc` - Main navigation node
 2. `src/navigation/social_main.cc` - Social navigation node
 3. `src/visualization/visualization.cc/.h` - Visualization utilities
 4. `srv/*.srv` - Service definitions
 5. `scripts/waypoint_navigation.py` - Python waypoint script
+6. `CMakeLists.txt` - Build system using ament_cmake
+7. `package.xml` - ROS2 package manifest
 
-**Medium Priority (Configuration):**
-6. `CMakeLists.txt` - Build system conversion
-7. `package.xml` - Create ROS2 package manifest
-8. `manifest.xml` - Remove ROS1 manifest
-
-**Low Priority (Already Compatible):**
-- `src/shared/` - Already ROS1/ROS2 compatible
-- `src/config_reader/` - ROS independent
-- `src/vector_map/` - ROS independent
-- Core algorithm files - Minimal ROS dependencies
-
-### Architecture Preservation
-- **Core algorithms remain unchanged** - Pure C++ mathematical/algorithmic code
-- **ROS wrapper layer conversion** - Replace ROS1 APIs with ROS2 equivalents
+**Architecture Preservation:**
+- **Core algorithms unchanged** - Pure C++ mathematical/algorithmic code
+- **ROS wrapper layer converted** - Uses ROS2 APIs (rclcpp, tf2_ros, etc.)
 - **Configuration system preserved** - Lua-based configuration continues to work
 - **Visualization system adapted** - ROS2 visualization message types
 
@@ -245,10 +236,10 @@ graph_navigation/
 This repository implements a complete autonomous navigation stack with the following key characteristics:
 
 - **Core Algorithms**: Graph-based global planning + local obstacle avoidance
-- **ROS Integration**: Comprehensive ROS1 wrapper layer requiring ROS2 conversion
+- **ROS Integration**: Comprehensive ROS2 implementation with modern ROS2 APIs
 - **Social Navigation**: Advanced behaviors for human-robot interaction
 - **Modularity**: Clear separation between algorithms and ROS interfaces
 - **Extensibility**: Plugin-based path evaluation (linear, neural network)
 - **AMRL Ecosystem**: Integrates with AMRL maps, messages, and hardware systems
 
-The transition to ROS2 should focus on converting the ROS wrapper layer while preserving the core algorithmic components unchanged. 
+The ROS2 implementation preserves all core algorithmic components while utilizing modern ROS2 APIs for communication and visualization. 

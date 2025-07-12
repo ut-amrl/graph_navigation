@@ -23,12 +23,12 @@
 #include "gui_helpers.h"
 
 #include "glog/logging.h"
-#include "ros/ros.h"
-#include "visualization_msgs/Marker.h"
-#include "visualization_msgs/MarkerArray.h"
+#include "rclcpp/rclcpp.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 namespace {
-  int marker_id_ = 0;
+int marker_id_ = 0;
 }  // namespace
 namespace gui_helpers {
 
@@ -47,24 +47,22 @@ void InitializeMarker(
     float scale_x,
     float scale_y,
     float scale_z,
-    visualization_msgs::Marker* msg) {
-  msg->id = marker_id_;
-  ++marker_id_;
-  msg->type = marker_type;
-  msg->action = visualization_msgs::Marker::ADD;
-  msg->pose.position.x = 0;
-  msg->pose.position.y = 0;
-  msg->pose.position.z = 0;
-  msg->pose.orientation.x = 0.0;
-  msg->pose.orientation.y = 0.0;
-  msg->pose.orientation.z = 0.0;
-  msg->pose.orientation.w = 1.0;
-  msg->scale.x = scale_x;
-  msg->scale.y = scale_y;
-  msg->scale.z = scale_z;
-  msg->header.frame_id = "map";
+    visualization_msgs::msg::Marker* msg) {
+    msg->id = marker_id_;
+    ++marker_id_;
+    msg->type = marker_type;
+    msg->action = visualization_msgs::msg::Marker::ADD;
+    msg->pose.position.x = 0;
+    msg->pose.position.y = 0;
+    msg->pose.position.z = 0;
+    msg->pose.orientation.x = 0.0;
+    msg->pose.orientation.y = 0.0;
+    msg->pose.orientation.z = 0.0;
+    msg->pose.orientation.w = 1.0;
+    msg->scale.x = scale_x;
+    msg->scale.y = scale_y;
+    msg->scale.z = scale_z;
+    msg->header.frame_id = "map";
 }
 
 }  // namespace gui_helpers
-
-

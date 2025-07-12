@@ -25,8 +25,8 @@
 #include "eigen3/Eigen/Dense"
 #include "opencv2/core/mat.hpp"
 
-#include "math/line2d.h"
-#include "math/poses_2d.h"
+#include "shared/math/line2d.h"
+#include "shared/math/poses_2d.h"
 #include "navigation_parameters.h"
 
 #ifndef MOTION_PRIMITIVES_H
