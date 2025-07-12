@@ -31,4 +31,5 @@ sudo apt-get install -y \
     ros-$ROS_DISTRO-angles \
     ros-$ROS_DISTRO-tf2 \
     ros-$ROS_DISTRO-ament-index-cpp \
-    ros-$ROS_DISTRO-costmap-2d
+    ros-$ROS_DISTRO-costmap-2d \
+    ros-$ROS_DISTRO-nav2-costmap-2d

@@ -73,7 +73,8 @@ jobs:
               ros-$ROS_DISTRO-rosbag2-storage \
               ros-$ROS_DISTRO-angles \
               ros-$ROS_DISTRO-tf2 \
-              ros-$ROS_DISTRO-ament-index-cpp
+              ros-$ROS_DISTRO-ament-index-cpp \
+              ros-$ROS_DISTRO-nav2-costmap-2d
 
       - name: Clone and build amrl_msgs (ROS2)
         run: |
