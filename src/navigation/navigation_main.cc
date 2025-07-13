@@ -149,7 +149,7 @@ CONFIG_FLOAT(distance_weight, "NavigationParameters.distance_weight");
 CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
 CONFIG_STRING(camera_calibration_path, "NavigationParameters.camera_calibration_path");
 
-class NavigationNode : public rclcpp::Node {
+class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
     NavigationNode() : Node("navigation"),
                        tf_buffer_(this->get_clock()),
@@ -160,6 +160,7 @@ class NavigationNode : public rclcpp::Node {
                        received_laser_(false),
                        current_angle_(0.0),
                        goal_angle_(0.0) {
+        image_node_ = std::make_shared<rclcpp::Node>("image_transport_node");
         // Initialize maps directory
         if (FLAGS_maps_dir.empty()) {
             try {
@@ -203,8 +204,7 @@ class NavigationNode : public rclcpp::Node {
         carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>("carrot", 1);
 
         // Create image transport publisher
-        image_transport::ImageTransport it(shared_from_this());
-        viz_img_pub_ = it.advertise("vis_image", 1);
+        InitImageTransport();
 
         // Create service
         nav_service_ = this->create_service<graph_navigation::srv::GraphNav>(
@@ -264,7 +264,13 @@ class NavigationNode : public rclcpp::Node {
         run_ = false;
     }
 
+    void InitImageTransport() {
+        image_transport::ImageTransport it(image_node_);
+        viz_img_pub_ = it.advertise("vis_image", 1);
+    }
+
    private:
+    rclcpp::Node::SharedPtr image_node_;
     // ROS2 components
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
@@ -815,9 +821,10 @@ int main(int argc, char** argv) {
 
     try {
         auto node = std::make_shared<NavigationNode>();
+        node->InitImageTransport();
         rclcpp::spin(node);
     } catch (const std::exception& e) {
-        RCLCPP_ERROR(rclcpp::get_logger("navigation"), "Exception in navigation node: %s", e.what());
+        RCLCPP_ERROR(rclcpp::get_logger("navigation"), "[main] Exception in navigation node: %s", e.what());
         return 1;
     }
 

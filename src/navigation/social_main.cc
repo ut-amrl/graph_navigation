@@ -136,7 +136,7 @@ DEFINE_string(map, "GDC1", "Name of navigation map file");
 DEFINE_string(robot_config, "config/gym_nav.lua", "Path to config file");
 DEFINE_double(dt, 0.025, "Delta T");
 
-class SocialNavigationNode : public rclcpp::Node {
+class SocialNavigationNode : public rclcpp::Node, public std::enable_shared_from_this<SocialNavigationNode> {
    public:
     SocialNavigationNode() : Node("social_navigation"),
                              run_(true),
