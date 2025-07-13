@@ -94,7 +94,7 @@ DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning");
+DEFINE_bool(do_intermed, true, "Whether to enable intermediate planning");
 DEFINE_bool(debug_images, false, "Show debug images");
 
 // Configuration parameters
@@ -148,6 +148,18 @@ CONFIG_FLOAT(inflation_coeff, "NavigationParameters.inflation_coeff");
 CONFIG_FLOAT(distance_weight, "NavigationParameters.distance_weight");
 CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
 CONFIG_STRING(camera_calibration_path, "NavigationParameters.camera_calibration_path");
+CONFIG_STRING(ackermann_drive_topic, "NavigationParameters.ackermann_drive_topic");
+CONFIG_STRING(nav_status_topic, "NavigationParameters.nav_status_topic");
+CONFIG_STRING(visualization_topic, "NavigationParameters.visualization_topic");
+CONFIG_STRING(fp_pcl_topic, "NavigationParameters.fp_pcl_topic");
+CONFIG_STRING(path_topic, "NavigationParameters.path_topic");
+CONFIG_STRING(carrot_topic, "NavigationParameters.carrot_topic");
+CONFIG_STRING(vis_image_topic, "NavigationParameters.vis_image_topic");
+CONFIG_STRING(goto_topic, "NavigationParameters.goto_topic");
+CONFIG_STRING(goto_amrl_topic, "NavigationParameters.goto_amrl_topic");
+CONFIG_STRING(reset_nav_goals_topic, "NavigationParameters.reset_nav_goals_topic");
+CONFIG_STRING(halt_topic, "NavigationParameters.halt_topic");
+CONFIG_STRING(override_topic, "NavigationParameters.override_topic");
 
 class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
@@ -175,6 +187,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         config_reader::ConfigReader reader({FLAGS_robot_config});
         LoadConfig(&params_);
 
+        // Log the intermediate planning flag
+        RCLCPP_INFO(this->get_logger(), "Intermediate planning (do_intermed) is %s", FLAGS_do_intermed ? "ENABLED" : "DISABLED");
+
         // Load map
         std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
         if (!FileExists(map_path)) {
@@ -191,17 +206,17 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
         // Create publishers
         ackermann_drive_pub_ = this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(
-            "ackermann_curvature_drive", 1);
+            CONFIG_ackermann_drive_topic, 1);
         twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
             FLAGS_twist_drive_topic, 1);
         status_pub_ = this->create_publisher<amrl_msgs::msg::NavStatusMsg>(
-            "navigation_goal_status", 1);
+            CONFIG_nav_status_topic, 1);
         viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(
-            "visualization", 1);
+            CONFIG_visualization_topic, 1);
         fp_pcl_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud>(
-            "forward_predicted_pcl", 1);
-        path_pub_ = this->create_publisher<nav_msgs::msg::Path>("trajectory", 1);
-        carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>("carrot", 1);
+            CONFIG_fp_pcl_topic, 1);
+        path_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_path_topic, 1);
+        carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_carrot_topic, 1);
 
         // Create image transport publisher
         InitImageTransport();
@@ -232,22 +247,22 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             CONFIG_image_topic, 1, std::bind(&NavigationNode::ImageCallback, this, std::placeholders::_1));
 
         goto_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-            "/move_base_simple/goal", 1, std::bind(&NavigationNode::GoToCallback, this, std::placeholders::_1));
+            CONFIG_goto_topic, 1, std::bind(&NavigationNode::GoToCallback, this, std::placeholders::_1));
 
         goto_amrl_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
-            "/move_base_simple/goal_amrl", 1, std::bind(&NavigationNode::GoToCallbackAMRL, this, std::placeholders::_1));
+            CONFIG_goto_amrl_topic, 1, std::bind(&NavigationNode::GoToCallbackAMRL, this, std::placeholders::_1));
 
         reset_nav_goals_sub_ = this->create_subscription<std_msgs::msg::Empty>(
-            "/reset_nav_goals", 1, std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
+            CONFIG_reset_nav_goals_topic, 1, std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
 
         enabler_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_enable_topic, 1, std::bind(&NavigationNode::EnablerCallback, this, std::placeholders::_1));
 
         halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-            "halt_robot", 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
+            CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
 
         override_sub_ = this->create_subscription<amrl_msgs::msg::Pose2Df>(
-            "nav_override", 1, std::bind(&NavigationNode::OverrideCallback, this, std::placeholders::_1));
+            CONFIG_override_topic, 1, std::bind(&NavigationNode::OverrideCallback, this, std::placeholders::_1));
 
         // Initialize visualization markers
         InitSimulatorVizMarkers();
@@ -266,7 +281,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void InitImageTransport() {
         image_transport::ImageTransport it(image_node_);
-        viz_img_pub_ = it.advertise("vis_image", 1);
+        viz_img_pub_ = it.advertise(CONFIG_vis_image_topic, 1);
     }
 
    private:
@@ -442,6 +457,21 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             // Publish visualizations and commands
             PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
             DrawRobot();
+
+            // Visualize costmap obstacles if intermediate planning is enabled
+            if (params_.do_intermed) {
+                auto obstacles = navigation_.GetCostmapObstacles();
+                auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
+
+                // Uncomment to visualize global obstacles
+                for (const auto& vector : global_obstacles) {
+                    visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
+                }
+
+                for (const auto& vector : obstacles) {
+                    visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
+                }
+            }
 
             if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
                 DrawTarget();
@@ -728,7 +758,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void LoadConfig(navigation::NavigationParameters* params) {
         config_reader::ConfigReader reader({FLAGS_robot_config});
-        params->do_intermed = !FLAGS_no_intermed;
+        params->do_intermed = FLAGS_do_intermed;
         params->dt = CONFIG_dt;
         params->linear_limits = navigation::MotionLimits(
             CONFIG_max_linear_accel, CONFIG_max_linear_decel, CONFIG_max_linear_speed);

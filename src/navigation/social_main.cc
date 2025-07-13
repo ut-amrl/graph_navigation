@@ -125,6 +125,19 @@ CONFIG_FLOAT(inflation_coeff, "NavigationParameters.inflation_coeff");
 CONFIG_FLOAT(distance_weight, "NavigationParameters.distance_weight");
 CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
 
+// Add these macros after the other CONFIG_STRING macros
+CONFIG_STRING(ackermann_drive_topic, "NavigationParameters.ackermann_drive_topic");
+CONFIG_STRING(visualization_topic, "NavigationParameters.visualization_topic");
+CONFIG_STRING(visualization_marker_topic, "NavigationParameters.visualization_marker_topic");
+CONFIG_STRING(simulator_visualization_topic, "NavigationParameters.simulator_visualization_topic");
+CONFIG_STRING(human_viz_topic, "NavigationParameters.human_viz_topic");
+CONFIG_STRING(human_states_topic, "NavigationParameters.human_states_topic");
+CONFIG_STRING(set_goal_topic, "NavigationParameters.set_goal_topic");
+CONFIG_STRING(robot_cmd_vel_topic, "NavigationParameters.robot_cmd_vel_topic");
+CONFIG_STRING(graph_nav_service, "NavigationParameters.graph_nav_service");
+CONFIG_STRING(social_nav_service, "NavigationParameters.social_nav_service");
+CONFIG_STRING(social_pips_service, "NavigationParameters.social_pips_service");
+
 // Command Line Flags
 DEFINE_bool(service_mode, false, "Listen to a service instead of topics.");
 DEFINE_bool(social_mode, true, "Enable social navigation behaviors.");
@@ -188,30 +201,30 @@ class SocialNavigationNode : public rclcpp::Node, public std::enable_shared_from
 
         // Create publishers
         ackermann_drive_pub_ = this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(
-            "ackermann_curvature_drive", 1);
+            CONFIG_ackermann_drive_topic, 1);
         twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
             FLAGS_twist_drive_topic, 1);
         viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(
-            "visualization", 1);
+            CONFIG_visualization_topic, 1);
         vis_pub_ = this->create_publisher<visualization_msgs::msg::Marker>(
-            "visualization_marker", 1);
+            CONFIG_visualization_marker_topic, 1);
         map_lines_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(
-            "/simulator_visualization", 6);
+            CONFIG_simulator_visualization_topic, 6);
         pose_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(
-            "/simulator_visualization", 6);
+            CONFIG_simulator_visualization_topic, 6);
         human_marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
-            "/human_viz", 6);
+            CONFIG_human_viz_topic, 6);
 
         // Create services
         plan_service_ = this->create_service<graph_navigation::srv::GraphNav>(
-            "GraphNav", std::bind(&SocialNavigationNode::PlanService, this,
-                                  std::placeholders::_1, std::placeholders::_2));
+            CONFIG_graph_nav_service, std::bind(&SocialNavigationNode::PlanService, this,
+                                                std::placeholders::_1, std::placeholders::_2));
         social_service_ = this->create_service<graph_navigation::srv::SocialNav>(
-            "SocialNav", std::bind(&SocialNavigationNode::SocialService, this,
-                                   std::placeholders::_1, std::placeholders::_2));
+            CONFIG_social_nav_service, std::bind(&SocialNavigationNode::SocialService, this,
+                                                 std::placeholders::_1, std::placeholders::_2));
 
         // Create service client for PIPS
-        pips_client_ = this->create_client<amrl_msgs::srv::SocialPipsSrv>("SocialPipsSrv");
+        pips_client_ = this->create_client<amrl_msgs::srv::SocialPipsSrv>(CONFIG_social_pips_service);
 
         // Create subscribers
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
@@ -227,15 +240,15 @@ class SocialNavigationNode : public rclcpp::Node, public std::enable_shared_from
             std::bind(&SocialNavigationNode::LaserCallback, this, std::placeholders::_1));
 
         human_sub_ = this->create_subscription<amrl_msgs::msg::HumanStateArrayMsg>(
-            "human_states", 1,
+            CONFIG_human_states_topic, 1,
             std::bind(&SocialNavigationNode::HumanCallback, this, std::placeholders::_1));
 
         goal_sub_ = this->create_subscription<amrl_msgs::msg::Pose2Df>(
-            "/set_goal", 1,
+            CONFIG_set_goal_topic, 1,
             std::bind(&SocialNavigationNode::GoalCallback, this, std::placeholders::_1));
 
         vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-            "/robot0/navigation/cmd_vel", 1,
+            CONFIG_robot_cmd_vel_topic, 1,
             std::bind(&SocialNavigationNode::VelocityCallback, this, std::placeholders::_1));
 
         // Initialize visualization markers

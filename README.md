@@ -123,7 +123,7 @@ The `ros2 run graph_navigation navigation` executable supports the following com
 | `--map`             |       | STRING        | Name of navigation map file (default: `UT_Campus`)        |
 | `--twist_drive_topic` |     | STRING        | Drive Command Topic (default: `navigation/cmd_vel`)     |
 | `--no_joystick`     |       | NONE          | Whether to use a joystick or not                          |
-| `--no_intermed`     |       | NONE          | Whether to disable intermediate planning                  |
+| `--do_intermed`     |       | NONE          | Whether to enable intermediate planning                  |
 | `--debug_images`    |       | NONE          | Show debug images                                         |
 
 **Examples:**
@@ -170,5 +170,4 @@ The navigation system publishes rich visualization data for debugging and monito
 - `src/navigation/` - Core navigation algorithms
 - `src/shared/` - AMRL shared utilities (cross-compatible)
 - `src/visualization/` - Visualization utilities
-- `scripts/` - Python utilities and examples
 - `config/` - Configuration files

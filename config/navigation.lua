@@ -57,6 +57,18 @@ NavigationParameters = {
   inflation_coeff = 8;
   distance_weight = 3;
   recovery_carrot_dist = 0.7;
+  goto_topic = "/move_base_simple/goal";
+  goto_amrl_topic = "/move_base_simple/goal_amrl";
+  reset_nav_goals_topic = "/reset_nav_goals";
+  halt_topic = "halt_robot";
+  override_topic = "nav_override";
+  ackermann_drive_topic = "ackermann_curvature_drive";
+  nav_status_topic = "navigation_goal_status";
+  visualization_topic = "visualization";
+  fp_pcl_topic = "forward_predicted_pcl";
+  path_topic = "trajectory";
+  carrot_topic = "carrot";
+  vis_image_topic = "vis_image";
 };
 
 AckermannSampler = {

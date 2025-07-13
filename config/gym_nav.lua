@@ -28,6 +28,18 @@ NavigationParameters = {
   use_map_speed = false;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
+  // --- ROS topic/service names for publishers/subscribers/services ---
+  ackermann_drive_topic = "ackermann_curvature_drive";
+  visualization_topic = "visualization";
+  visualization_marker_topic = "visualization_marker";
+  simulator_visualization_topic = "/simulator_visualization";
+  human_viz_topic = "/human_viz";
+  human_states_topic = "human_states";
+  set_goal_topic = "/set_goal";
+  robot_cmd_vel_topic = "/robot0/navigation/cmd_vel";
+  graph_nav_service = "GraphNav";
+  social_nav_service = "SocialNav";
+  social_pips_service = "SocialPipsSrv";
 };
 
 AckermannSampler = {
