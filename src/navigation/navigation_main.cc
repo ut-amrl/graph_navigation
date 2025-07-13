@@ -108,7 +108,7 @@ const string kOpenCVWindow = "Image window";
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, kAmrlMapsDir, "Directory containing AMRL maps");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(no_intermed, false, "Whether to disable intermediate planning (will use legacy obstacle avoidance planner)");
+DEFINE_bool(do_intermed, true, "Whether to enable intermediate planning (will use intermediate planner if true)");
 
 CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
@@ -807,7 +807,7 @@ void LoadConfig(navigation::NavigationParameters* params) {
   REAL_PARAM(recovery_carrot_dist);
 
   config_reader::ConfigReader reader({FLAGS_robot_config});
-  params->do_intermed = !FLAGS_no_intermed;
+  params->do_intermed = FLAGS_do_intermed;
   params->dt = CONFIG_dt;
   params->linear_limits = MotionLimits(
       CONFIG_max_linear_accel,
@@ -882,6 +882,8 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "navigation", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
   image_transport::ImageTransport it_(n);
+
+  printf("[navigation_main] Intermediate planning (do_intermed) is %s\n", FLAGS_do_intermed ? "ENABLED" : "DISABLED");
 
   // Map Loading
   std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
@@ -981,18 +983,18 @@ int main(int argc, char** argv) {
     PublishNavStatus();
 
     if(nav_succeeded) {
-      if (!FLAGS_no_intermed) {
+      if (FLAGS_do_intermed) {
         // Publish Visualizations
         auto obstacles = navigation_.GetCostmapObstacles();
         auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
 
-        // for (const auto& vector : global_obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
-        // }
+        for (const auto& vector : global_obstacles) {
+          visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
+        }
 
-        // for (const auto& vector : obstacles) {
-        //   visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
-        // }
+        for (const auto& vector : obstacles) {
+          visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
+        }
       }
 
       PublishForwardPredictedPCL(navigation_.GetPredictedCloud());

@@ -18,7 +18,6 @@ graph_navigation/
 │   ├── visualization/     # Visualization utilities
 │   └── third_party/       # External dependencies
 ├── config/                # Configuration files
-├── scripts/               # Python utilities and waypoint navigation
 ├── srv/                   # ROS service definitions
 ├── CMakeLists.txt         # Build configuration
 ├── Makefile              # Build wrapper
@@ -113,10 +112,6 @@ graph_navigation/
 - **`camera_calibration*.yaml`** - Camera calibration data
 - **Status**: ROS independent
 
-### Scripts (`scripts/`)
-- **`waypoint_navigation.py`** - Waypoint following script
-- **Status**: Needs ROS2 conversion (uses ROS1 topics)
-
 ## 🚀 ROS Entry Points & Data Flow
 
 ### Main ROS Nodes
@@ -193,7 +188,6 @@ graph_navigation/
 2. `src/navigation/social_main.cc` - Social navigation node
 3. `src/visualization/visualization.cc/.h` - Visualization utilities
 4. `srv/*.srv` - Service definitions
-5. `scripts/waypoint_navigation.py` - Python waypoint script
 
 **Medium Priority (Configuration):**
 6. `CMakeLists.txt` - Build system conversion
