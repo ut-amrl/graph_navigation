@@ -22,8 +22,6 @@ The AMRL Graph Navigation package provides a sophisticated navigation system tha
 1. [Boost](https://www.boost.org/) - C++ utility libraries
 
 ### Install System Dependencies
-
-#### Ubuntu 20.04/22.04
 ```bash
 # Install dependencies automatically
 ./InstallPackages
@@ -61,17 +59,46 @@ sudo apt install -y \
     ros-$ROS_DISTRO-cv-bridge
 ```
 
-## Build Instructions
-```bash
-# Clone and build locally
-git clone https://github.com/ut-amrl/graph_navigation.git
-cd graph_navigation
-git submodule update --init --recursive
-make -j$(nproc)
-```
+## Setup and Build
+
+1.  **Clone this repository and initialize submodules:**
+    ```bash
+    git clone https://github.com/ut-amrl/graph_navigation.git
+    cd graph_navigation
+    git submodule update --init --recursive
+    ```
+
+2.  **Add the install path to your `AMENT_PREFIX_PATH` in `~/.bashrc`:**
+    ```bash
+    echo "export AMENT_PREFIX_PATH=$(pwd)/install:\$AMENT_PREFIX_PATH" >> ~/.bashrc
+    source ~/.bashrc
+    ```
+
+3.  **Install dependencies:**
+    ```bash
+    ./InstallPackages
+    ```
+
+4.  **Build and install:**
+    ```bash
+    make -j$(nproc)
+    ```
+    This will automatically build and install the package for ROS2. Binaries will be in `install/bin/`.
 
 ## Configuration
-Modify the `config/navigation.lua` file to configure the navigation parameters.
+Configuration files are written in Lua.
+
+By default, the navigation system will try to load the robot configuration file `config/navigation.lua`. To specify a different robot config file, use the `--robot_config` flag (e.g., `--robot_config config/my_robot.lua`).
+
+The base configuration directory is assumed to be `config`, but it can be overridden using the `--config_dir` flag. For example:
+```bash
+ros2 run graph_navigation navigation \
+  --config_dir ~/robot_configs \
+  --robot_config robot1.lua
+```
+This will load the `~/robot_configs/robot1.lua` file. 
+
+The robot configuration file defines the ROS2 topics to listen to, initialization conditions, and navigation algorithm parameters.
 ```lua
 -- Example navigation.lua settings
 NavigationParameters = {
@@ -85,24 +112,30 @@ NavigationParameters = {
 }
 ```
 
-## Usage
+## Command-Line Flags
 
-### Standard Navigation Node
-```bash
-# Launch main navigation
-ros2 run graph_navigation navigation \
-  --robot_config config/navigation.lua \
-  --maps_dir /path/to/maps \
-  --map your_map_name
+The `ros2 run graph_navigation navigation` executable supports the following command-line flags:
 
-# With additional options
-ros2 run graph_navigation navigation \
-  --robot_config config/navigation.lua \
-  --maps_dir /path/to/maps \
-  --map your_map_name \
-  --debug_images \
-  --twist_drive_topic cmd_vel
-```
+| Long Option         | Short | Argument Type | Description                                               |
+|---------------------|-------|---------------|-----------------------------------------------------------|
+| `--robot_config`    |       | STRING        | Robot config file (default: `config/navigation.lua`)    |
+| `--maps_dir`        |       | STRING        | Directory containing AMRL maps                            |
+| `--map`             |       | STRING        | Name of navigation map file (default: `UT_Campus`)        |
+| `--twist_drive_topic` |     | STRING        | Drive Command Topic (default: `navigation/cmd_vel`)     |
+| `--no_joystick`     |       | NONE          | Whether to use a joystick or not                          |
+| `--no_intermed`     |       | NONE          | Whether to disable intermediate planning                  |
+| `--debug_images`    |       | NONE          | Show debug images                                         |
+
+**Examples:**
+
+- Run with a specific robot config and enable debug images:
+  ```bash
+  ros2 run graph_navigation navigation \
+    --robot_config config/my_robot.lua \
+    --maps_dir /path/to/my_maps \
+    --map MyMapName \
+    --debug_images
+  ```
 
 ## ROS2 Topics and Services
 
@@ -133,14 +166,7 @@ The navigation system publishes rich visualization data for debugging and monito
 1. **Global plan**: High-level navigation plan
 1. **Obstacles**: Detected obstacles and cost maps
 
-Use RViz2 to visualize the navigation:
-```bash
-ros2 run rviz2 rviz2 -d config/navigation.rviz  # If config exists
-```
-
-## Development
-
-### Code Structure
+## Code Structure
 - `src/navigation/` - Core navigation algorithms
 - `src/shared/` - AMRL shared utilities (cross-compatible)
 - `src/visualization/` - Visualization utilities
