@@ -14,12 +14,14 @@ The AMRL Graph Navigation package provides a sophisticated navigation system tha
 ## System Dependencies
 
 ### Core Dependencies
-1. [glog](https://github.com/google/glog) - Logging library
-1. [gflags](https://github.com/gflags/gflags) - Command-line flag processing
-1. [Lua5.1](http://www.lua.org/) - Configuration file processing
-1. [Eigen3](https://eigen.tuxfamily.org/) - Linear algebra library
-1. [OpenCV](https://opencv.org/) - Computer vision library
-1. [Boost](https://www.boost.org/) - C++ utility libraries
+- [glog](https://github.com/google/glog) - Logging library
+- [gflags](https://github.com/gflags/gflags) - Command-line flag processing
+- [Lua5.1](http://www.lua.org/) - Configuration file processing
+- [Eigen3](https://eigen.tuxfamily.org/) - Linear algebra library
+- [OpenCV](https://opencv.org/) - Computer vision library
+- [Boost](https://www.boost.org/) - C++ utility libraries
+- [pytorch](https://pytorch.org/) - Pytorch with c++ API for deep learning components. Cmake is configured to find the standard pip-installed headers and libraries in `/usr/local/lib/python3.10/dist-packages/torch`.
+
 
 ### Install System Dependencies
 ```bash

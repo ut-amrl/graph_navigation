@@ -521,7 +521,8 @@ class SocialNavigationNode : public rclcpp::Node, public std::enable_shared_from
         ackermann_drive_pub_->publish(std::move(ackermann_msg));
     }
 
-    void FillRequest(auto& req) {
+    template<typename T>
+    void FillRequest(T& req) {
         req.action = current_action_;
         req.goal_pose.x = goal_.x();
         req.goal_pose.y = goal_.y();

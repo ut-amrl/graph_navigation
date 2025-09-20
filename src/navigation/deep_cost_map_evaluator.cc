@@ -33,8 +33,7 @@
 #include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-#include "torch/torch.h"
-#include "torch/script.h"
+#include "torch.h"
 #include <chrono>
 
 #include "motion_primitives.h"

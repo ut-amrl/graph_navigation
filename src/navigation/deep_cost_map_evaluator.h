@@ -23,7 +23,7 @@
 #include <vector>
 #include <mutex>
 
-#include "torch/torch.h"
+#include "torch.h"
 
 #include "motion_primitives.h"
 #include "image_based_evaluator.h"

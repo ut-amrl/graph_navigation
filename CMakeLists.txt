@@ -43,7 +43,13 @@ find_package(rosidl_cmake REQUIRED)
 
 # Find system dependencies
 FIND_PACKAGE(Lua51 REQUIRED)
-FIND_PACKAGE(OpenCV REQUIRED)
+# Try to use system OpenCV first, prefer version 4.5 to avoid conflicts
+FIND_PACKAGE(OpenCV 4.5 QUIET)
+if(NOT OpenCV_FOUND)
+  MESSAGE(STATUS "OpenCV 4.5 not found, falling back to any available version")
+  FIND_PACKAGE(OpenCV REQUIRED)
+endif()
+MESSAGE(STATUS "Using OpenCV version: ${OpenCV_VERSION}")
 FIND_PACKAGE(Eigen3 REQUIRED)
 
 # Optional LibTorch for deep learning evaluator
@@ -53,11 +59,22 @@ if(Torch_FOUND)
   MESSAGE(STATUS "LibTorch found: ${TORCH_INCLUDE_DIRS}")
   MESSAGE(STATUS "LibTorch libraries: ${TORCH_LIBRARIES}")
   add_compile_definitions(TORCH_AVAILABLE)
+  # Set C++17 standard required for PyTorch
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  # Find PyTorch required dependencies
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GLOG REQUIRED libglog)
 else()
   MESSAGE(WARNING "LibTorch not found - deep learning evaluator disabled")
 endif()
 
-SET(CMAKE_CXX_FLAGS "-std=c++17 -Wall")
+# Use C++20 for auto parameters, but fallback to C++17 for compatibility
+if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "10.0")
+  SET(CMAKE_CXX_FLAGS "-std=c++20 -Wall")
+else()
+  SET(CMAKE_CXX_FLAGS "-std=c++17 -Wall")
+endif()
 
 IF(${CMAKE_BUILD_TYPE} MATCHES "Release")
   MESSAGE(STATUS "Additional Flags for Release mode")
@@ -92,7 +109,14 @@ SET(libs glog gflags boost_system lua5.1 pthread ${LUA_LIBRARIES})
 
 # Optional LibTorch libraries
 if(Torch_FOUND)
+  # Add PyTorch libraries in proper linking order
   LIST(APPEND libs ${TORCH_LIBRARIES})
+  # Explicit PyTorch shared libraries for proper linking
+  LIST(APPEND libs 
+    /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so
+    /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so
+    /usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so
+  )
 endif()
 
 # Shared library for navigation components
@@ -116,6 +140,8 @@ target_include_directories(shared_library PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/shared
     ${OpenCV_INCLUDE_DIRS}
     ${LUA_INCLUDE_DIR}
+    /usr/local/lib/python3.10/dist-packages/torch/include
+    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Navigation library
@@ -159,7 +185,8 @@ target_include_directories(navigation_lib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
-    ${Torch_INCLUDE_DIRS}
+    /usr/local/lib/python3.10/dist-packages/torch/include
+    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Main navigation executable
@@ -193,8 +220,9 @@ target_include_directories(navigation PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
-    ${Torch_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
+    /usr/local/lib/python3.10/dist-packages/torch/include
+    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Social navigation executable
@@ -229,8 +257,9 @@ target_include_directories(social_nav PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
-    ${Torch_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
+    /usr/local/lib/python3.10/dist-packages/torch/include
+    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Navigation tests
@@ -253,8 +282,9 @@ target_include_directories(navigation_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
-    ${Torch_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
+    /usr/local/lib/python3.10/dist-packages/torch/include
+    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Install targets

@@ -40,6 +40,12 @@ using std::shared_ptr;
 using pose_2d::Pose2Df;
 using Eigen::Vector2f;
 
+// Static member definitions
+namespace motion_primitives {
+const int ImageBasedEvaluator::PATCH_SIZE;
+const int ImageBasedEvaluator::HALF_PATCH_SIZE;
+const int ImageBasedEvaluator::PATCH_PIXEL_COUNT;
+}
 
 namespace motion_primitives {
 
