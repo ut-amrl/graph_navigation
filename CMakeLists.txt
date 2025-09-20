@@ -54,6 +54,8 @@ FIND_PACKAGE(Eigen3 REQUIRED)
 
 # Optional LibTorch for deep learning evaluator
 LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
+LIST(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/python3.10/dist-packages/torch/share/cmake/Torch")
+LIST(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/python3.10/dist-packages/torch/share/cmake")
 FIND_PACKAGE(Torch QUIET)
 if(Torch_FOUND)
   MESSAGE(STATUS "LibTorch found: ${TORCH_INCLUDE_DIRS}")
@@ -116,6 +118,7 @@ if(Torch_FOUND)
     /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so
     /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so
     /usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so
+    /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_global_deps.so
   )
 endif()
 
@@ -162,6 +165,12 @@ target_link_libraries(navigation_lib
     ${OpenCV_LIBS}
     amrl_shared_lib
 )
+
+# Explicitly link PyTorch libraries if available
+if(Torch_FOUND)
+  target_link_libraries(navigation_lib ${TORCH_LIBRARIES})
+  target_include_directories(navigation_lib PRIVATE ${TORCH_INCLUDE_DIRS})
+endif()
 ament_target_dependencies(navigation_lib
     rclcpp
     std_msgs
@@ -197,6 +206,11 @@ target_link_libraries(navigation
     navigation_lib
     graph_navigation__rosidl_typesupport_cpp
 )
+
+# Link PyTorch libraries to navigation executable if available
+if(Torch_FOUND)
+  target_link_libraries(navigation ${TORCH_LIBRARIES})
+endif()
 ament_target_dependencies(navigation
     rclcpp
     std_msgs
@@ -234,6 +248,11 @@ target_link_libraries(social_nav
     navigation_lib
     graph_navigation__rosidl_typesupport_cpp
 )
+
+# Link PyTorch libraries to social_nav executable if available
+if(Torch_FOUND)
+  target_link_libraries(social_nav ${TORCH_LIBRARIES})
+endif()
 ament_target_dependencies(social_nav
     rclcpp
     std_msgs
