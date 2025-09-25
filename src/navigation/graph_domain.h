@@ -198,10 +198,10 @@ struct GraphDomain {
     }
 
     bool GetClosestEdge(const Eigen::Vector2f& v, NavigationEdge* closest_edge, float* closest_dist) const {
-        bool found;
-        closest_edge->s0_id = -1;
-        closest_edge->s1_id = -1;
-        if (edges.empty()) return closest_dist;
+        bool found = false;
+        closest_edge->s0_id = static_cast<uint64_t>(-1);
+        closest_edge->s1_id = static_cast<uint64_t>(-1);
+        if (edges.empty()) return false;
         for (const NavigationEdge& e : edges) {
             const float dist = e.edge.Distance(v);
             if (dist < *closest_dist && (!e.has_stairs || params_->can_traverse_stairs)) {

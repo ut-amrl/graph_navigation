@@ -565,14 +565,7 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial,
     GraphVisualizer graph_viz(kVisualize);
     const bool found_path =
         AStar(start, goal, planning_domain_, &graph_viz, &path);
-    if (found_path) {
-        CHECK(path.size() > 0);
-        Vector2f s1 = plan_path_[0].loc;
-        for (size_t i = 1; i < plan_path_.size(); ++i) {
-            Vector2f s2 = plan_path_[i].loc;
-            s1 = s2;
-        }
-    } else {
+    if (!found_path) {
         printf("No path found!\n");
     }
 

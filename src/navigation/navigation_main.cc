@@ -48,7 +48,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <tf2/LinearMath/Transform.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <image_transport/image_transport.hpp>
@@ -569,40 +569,49 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void SendCommand(const Eigen::Vector2f& vel, float ang_vel) {
-        auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
-
-        if (!FLAGS_no_joystick && !enabled_) {
-            twist_msg->linear.x = 0.0;
-            twist_msg->linear.y = 0.0;
-            twist_msg->angular.z = 0.0;
-        } else {
-            twist_msg->linear.x = vel.x();
-            twist_msg->linear.y = vel.y();
-            twist_msg->angular.z = ang_vel;
+        // Determine commanded values first to avoid use-after-move on unique_ptr
+        double cmd_lin_x = 0.0;
+        double cmd_lin_y = 0.0;
+        double cmd_ang_z = 0.0;
+        if (FLAGS_no_joystick || enabled_) {
+            cmd_lin_x = vel.x();
+            cmd_lin_y = vel.y();
+            cmd_ang_z = ang_vel;
         }
 
+        // Minimal one-time debug to help trace potential crashes here
+        static int send_cmd_dbg_printed = 0;
+        if (send_cmd_dbg_printed == 0) {
+            RCLCPP_INFO(this->get_logger(), "SendCommand: vx=%.3f vy=%.3f wz=%.3f", cmd_lin_x, cmd_lin_y, cmd_ang_z);
+            send_cmd_dbg_printed = 1;
+        }
+
+        auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+        twist_msg->linear.x = cmd_lin_x;
+        twist_msg->linear.y = cmd_lin_y;
+        twist_msg->angular.z = cmd_ang_z;
         twist_drive_pub_->publish(std::move(twist_msg));
 
         // Convert to Ackermann if needed
         auto ackermann_msg = std::make_unique<amrl_msgs::msg::AckermannCurvatureDriveMsg>();
         ackermann_msg->header.stamp = this->get_clock()->now();
-        ackermann_msg->velocity = twist_msg->linear.x;
+        ackermann_msg->velocity = cmd_lin_x;
         if (fabs(ackermann_msg->velocity) < 1e-6) {
             ackermann_msg->curvature = 0;
         } else {
-            ackermann_msg->curvature = twist_msg->angular.z / ackermann_msg->velocity;
+            ackermann_msg->curvature = cmd_ang_z / ackermann_msg->velocity;
         }
         ackermann_drive_pub_->publish(std::move(ackermann_msg));
 
         // Update command history
         navigation::Twist twist;
         twist.time = this->get_clock()->now().seconds();
-        twist.linear = {static_cast<float>(twist_msg->linear.x),
-                        static_cast<float>(twist_msg->linear.y),
-                        static_cast<float>(twist_msg->linear.z)};
-        twist.angular = {static_cast<float>(twist_msg->angular.x),
-                         static_cast<float>(twist_msg->angular.y),
-                         static_cast<float>(twist_msg->angular.z)};
+        twist.linear = {static_cast<float>(cmd_lin_x),
+                        static_cast<float>(cmd_lin_y),
+                        0.0f};
+        twist.angular = {0.0f,
+                         0.0f,
+                         static_cast<float>(cmd_ang_z)};
         navigation_.UpdateCommandHistory(twist);
     }
 

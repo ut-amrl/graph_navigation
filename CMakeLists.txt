@@ -54,8 +54,6 @@ FIND_PACKAGE(Eigen3 REQUIRED)
 
 # Optional LibTorch for deep learning evaluator
 LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
-LIST(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/python3.10/dist-packages/torch/share/cmake/Torch")
-LIST(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/python3.10/dist-packages/torch/share/cmake")
 FIND_PACKAGE(Torch QUIET)
 if(Torch_FOUND)
   MESSAGE(STATUS "LibTorch found: ${TORCH_INCLUDE_DIRS}")
@@ -113,13 +111,6 @@ SET(libs glog gflags boost_system lua5.1 pthread ${LUA_LIBRARIES})
 if(Torch_FOUND)
   # Add PyTorch libraries in proper linking order
   LIST(APPEND libs ${TORCH_LIBRARIES})
-  # Explicit PyTorch shared libraries for proper linking
-  LIST(APPEND libs 
-    /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so
-    /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so
-    /usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so
-    /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_global_deps.so
-  )
 endif()
 
 # Shared library for navigation components
@@ -143,8 +134,6 @@ target_include_directories(shared_library PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/shared
     ${OpenCV_INCLUDE_DIRS}
     ${LUA_INCLUDE_DIR}
-    /usr/local/lib/python3.10/dist-packages/torch/include
-    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Navigation library
@@ -166,11 +155,6 @@ target_link_libraries(navigation_lib
     amrl_shared_lib
 )
 
-# Explicitly link PyTorch libraries if available
-if(Torch_FOUND)
-  target_link_libraries(navigation_lib ${TORCH_LIBRARIES})
-  target_include_directories(navigation_lib PRIVATE ${TORCH_INCLUDE_DIRS})
-endif()
 ament_target_dependencies(navigation_lib
     rclcpp
     std_msgs
@@ -194,8 +178,6 @@ target_include_directories(navigation_lib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
-    /usr/local/lib/python3.10/dist-packages/torch/include
-    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Main navigation executable
@@ -207,10 +189,6 @@ target_link_libraries(navigation
     graph_navigation__rosidl_typesupport_cpp
 )
 
-# Link PyTorch libraries to navigation executable if available
-if(Torch_FOUND)
-  target_link_libraries(navigation ${TORCH_LIBRARIES})
-endif()
 ament_target_dependencies(navigation
     rclcpp
     std_msgs
@@ -235,8 +213,6 @@ target_include_directories(navigation PRIVATE
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
-    /usr/local/lib/python3.10/dist-packages/torch/include
-    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Social navigation executable
@@ -249,10 +225,6 @@ target_link_libraries(social_nav
     graph_navigation__rosidl_typesupport_cpp
 )
 
-# Link PyTorch libraries to social_nav executable if available
-if(Torch_FOUND)
-  target_link_libraries(social_nav ${TORCH_LIBRARIES})
-endif()
 ament_target_dependencies(social_nav
     rclcpp
     std_msgs
@@ -277,8 +249,6 @@ target_include_directories(social_nav PRIVATE
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
-    /usr/local/lib/python3.10/dist-packages/torch/include
-    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Navigation tests
@@ -302,13 +272,16 @@ target_include_directories(navigation_tests PRIVATE
     ${AMENT_INCLUDE_DIRS}
     ${nav2_costmap_2d_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
-    /usr/local/lib/python3.10/dist-packages/torch/include
-    /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include
 )
 
 # Install targets
 install(TARGETS navigation social_nav navigation_tests
-  RUNTIME DESTINATION bin
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install shared libraries
+install(TARGETS shared_library navigation_lib
+  DESTINATION lib
 )
 
 install(DIRECTORY config/
