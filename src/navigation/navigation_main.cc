@@ -464,13 +464,13 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
 
                 // Uncomment to visualize global obstacles
-                for (const auto& vector : global_obstacles) {
-                    visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
-                }
+                // for (const auto& vector : global_obstacles) {
+                //     visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
+                // }
 
-                for (const auto& vector : obstacles) {
-                    visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
-                }
+                // for (const auto& vector : obstacles) {
+                //     visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
+                // }
             }
 
             if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
