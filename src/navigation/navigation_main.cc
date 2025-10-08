@@ -201,7 +201,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         navigation_.Initialize(params_, map_path);
 
         // Initialize visualization messages
-        local_viz_msg_ = visualization::NewVisualizationMessage("base_link", "navigation_local");
+        local_viz_msg_ = visualization::NewVisualizationMessage(CONFIG_laser_frame, "navigation_local");
         global_viz_msg_ = visualization::NewVisualizationMessage("map", "navigation_global");
 
         // Create publishers

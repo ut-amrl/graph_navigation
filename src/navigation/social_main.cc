@@ -76,6 +76,7 @@ using namespace std::chrono_literals;
 
 // Found in Config File
 CONFIG_STRING(laser_topic, "NavigationParameters.laser_topic");
+CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
 CONFIG_STRING(loc_topic, "NavigationParameters.localization_topic");
 CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
@@ -196,7 +197,7 @@ class SocialNavigationNode : public rclcpp::Node, public std::enable_shared_from
         }
 
         // Initialize visualization messages
-        local_viz_msg_ = visualization::NewVisualizationMessage("base_link", "navigation_local");
+        local_viz_msg_ = visualization::NewVisualizationMessage(CONFIG_laser_frame, "navigation_local");
         global_viz_msg_ = visualization::NewVisualizationMessage("map", "navigation_global");
 
         // Create publishers

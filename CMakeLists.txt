@@ -260,6 +260,7 @@ target_link_libraries(navigation_tests
     gtest
     gtest_main
     ${libs}
+    ${OpenCV_LIBS}
     rclcpp::rclcpp
 )
 
