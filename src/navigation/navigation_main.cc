@@ -72,6 +72,7 @@
 // Internal includes
 #include "config_reader/config_reader.h"
 #include "motion_primitives.h"
+#include "omnidirectional_motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
@@ -160,6 +161,7 @@ CONFIG_STRING(goto_amrl_topic, "NavigationParameters.goto_amrl_topic");
 CONFIG_STRING(reset_nav_goals_topic, "NavigationParameters.reset_nav_goals_topic");
 CONFIG_STRING(halt_topic, "NavigationParameters.halt_topic");
 CONFIG_STRING(override_topic, "NavigationParameters.override_topic");
+CONFIG_STRING(motion_primitives_mode, "motion_primitives_mode");
 
 class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
@@ -724,18 +726,38 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.GetOption();
 
         for (const auto& rollout : path_rollouts) {
+            // Handle Ackermann motion primitives
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(rollout.get());
             if (arc) {
                 visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(),
                                               0x0000FF, false, local_viz_msg_);
+                continue;
+            }
+            
+            // Handle Omnidirectional motion primitives
+            const auto* omni_move = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(rollout.get());
+            if (omni_move) {
+                // Draw straight line movement
+                const Eigen::Vector2f end_point = omni_move->length * omni_move->direction;
+                visualization::DrawLine(Eigen::Vector2f(0, 0), end_point, 0x0000FF, local_viz_msg_);
             }
         }
 
         if (best_option != nullptr) {
+            // Handle best Ackermann motion primitive
             const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
             if (best_arc) {
                 visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
                                               0xFF0000, true, local_viz_msg_);
+                return;
+            }
+            
+            // Handle best Omnidirectional motion primitive
+            const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
+            if (best_omni) {
+                // Draw straight line movement
+                const Eigen::Vector2f end_point = best_omni->length * best_omni->direction;
+                visualization::DrawLine(Eigen::Vector2f(0, 0), end_point, 0xFF0000, local_viz_msg_);
             }
         }
     }
@@ -808,6 +830,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->inflation_coeff = CONFIG_inflation_coeff;
         params->distance_weight = CONFIG_distance_weight;
         params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
+        params->motion_primitives_mode = CONFIG_motion_primitives_mode;
 
         LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
     }

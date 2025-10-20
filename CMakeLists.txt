@@ -142,6 +142,7 @@ ADD_LIBRARY(navigation_lib
             src/navigation/motion_primitives.cc
             src/navigation/ackermann_motion_primitives.cc
             src/navigation/constant_curvature_arcs.cc
+            src/navigation/omnidirectional_motion_primitives.cc
             src/navigation/linear_evaluator.cc
             src/navigation/image_tiler.cc
             src/navigation/image_based_evaluator.cc

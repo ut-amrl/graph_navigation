@@ -48,6 +48,7 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
+#include "omnidirectional_motion_primitives.h"
 #include "deep_cost_map_evaluator.h"
 #include "linear_evaluator.h"
 #include "amrl_msgs/msg/nav_status_msg.hpp"
@@ -183,7 +184,7 @@ Navigation::Navigation() : robot_loc_(0, 0),
                            global_costmap_(200, 200, 0.5, -50, -50),
                            intermediate_path_found_(false),
                            intermediate_goal_(0, 0) {  // parameters are (x/y size in cells, resolution, bottom left x/y origin coordinates)
-    sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+    sampler_ = nullptr;
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
@@ -200,6 +201,13 @@ void Navigation::Initialize(const NavigationParameters& params,
     LoadVectorMap(map_file);
 
     initialized_ = true;
+    
+    // Initialize sampler based on motion primitives mode
+    if (params_.motion_primitives_mode == "omni") {
+        sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new OmniSampler());
+    } else {
+        sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
+    }
     sampler_->SetNavParams(params);
 
     PathEvaluatorBase* evaluator = nullptr;
@@ -958,6 +966,39 @@ void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
 
 void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     static const bool kDebug = false;
+    
+    // For omnidirectional robots, handle different states appropriately
+    if (params_.motion_primitives_mode == "omni") {
+        if (nav_state_ == NavigationState::kTurnInPlace) {
+            // For turn-in-place state, rotate to match goal orientation (don't move)
+            const float dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
+            cmd_vel = {0, 0};  // No linear motion during turn-in-place
+            cmd_angle_vel = motion_primitives::Run1DTimeOptimalControl(
+                params_.angular_limits, 0, robot_omega_, dTheta, 0, params_.dt);
+        } else {
+            // For other states, move directly toward target
+            Vector2f target;
+            if (nav_state_ == NavigationState::kGoto) {
+                target = local_target_;
+            } else if (nav_state_ == NavigationState::kOverride) {
+                target = override_target_;
+            }
+            
+            // Move directly toward target with appropriate speed
+            if (target.norm() > 0.01f) {  // Avoid division by zero
+                const float speed = motion_primitives::Run1DTimeOptimalControl(
+                    params_.linear_limits, 0, robot_vel_.norm(), target.norm(), 0, params_.dt);
+                cmd_vel = speed * target.normalized();
+                cmd_angle_vel = 0;
+            } else {
+                cmd_vel = {0, 0};
+                cmd_angle_vel = 0;
+            }
+        }
+        return;
+    }
+    
+    // Original Ackermann turn-in-place logic
     const float kMaxLinearSpeed = 0.1;
     const float velocity = robot_vel_.x();
     cmd_angle_vel = 0;

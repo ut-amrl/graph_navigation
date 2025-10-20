@@ -71,7 +71,15 @@ NavigationParameters = {
   vis_image_topic = "vis_image";
 };
 
+motion_primitives_mode = "ackermann";  -- "ackermann" or "omni"
+
 AckermannSampler = {
   max_curvature = 2.5;
   clearance_path_clip_fraction = 0.8;
+};
+
+OmniSampler = {
+  max_speed = 0.5;
+  max_angular_speed = 1.0;
+  num_directions = 8;  -- Number of directions to sample (including turn-in-place)
 };
