@@ -64,6 +64,7 @@
 #include "config_reader/config_reader.h"
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
+#include "omnidirectional_motion_primitives.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
 #include "shared/util/helpers.h"
@@ -117,6 +118,7 @@ CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_STRING(evaluator_type, "NavigationParameters.evaluator_type");
 CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
 CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
+CONFIG_STRING(motion_primitives_mode, "motion_primitives_mode");
 CONFIG_STRING(ackermann_drive_topic, "NavigationParameters.ackermann_drive_topic");
 CONFIG_STRING(nav_status_topic, "NavigationParameters.nav_status_topic");
 CONFIG_STRING(visualization_topic, "NavigationParameters.visualization_topic");
@@ -638,12 +640,23 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(),
                                               0x0000FF, false, local_viz_msg_);
             }
+            const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(rollout.get());
+            if (omni) {
+                // For omni, curvature = 0 (straight line)
+                visualization::DrawPathOption(0.0f, omni->Length(), omni->Clearance(),
+                                              0x0000FF, false, local_viz_msg_);
+            }
         }
 
         if (best_option != nullptr) {
             const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
             if (best_arc) {
                 visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
+                                              0xFF0000, true, local_viz_msg_);
+            }
+            const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
+            if (best_omni) {
+                visualization::DrawPathOption(0.0f, best_omni->Length(), best_omni->Clearance(),
                                               0xFF0000, true, local_viz_msg_);
             }
         }
@@ -683,6 +696,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->evaluator_type = CONFIG_evaluator_type;
         params->carrot_dist = CONFIG_carrot_dist;
         params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
+        params->motion_primitives_mode = CONFIG_motion_primitives_mode;
     }
 };
 

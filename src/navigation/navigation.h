@@ -110,7 +110,6 @@ class Navigation {
     void UpdateCommandHistory(Twist twist);
     void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud,
                            double time);
-    void ObserveImage(cv::Mat image, double time);
     bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
     void GetStraightFreePathLength(float* free_path_length,
                                    float* clearance);
@@ -222,9 +221,6 @@ class Navigation {
     float odom_angle_;
     // Newest odometry message received.
     Odom latest_odom_msg_;
-    // Newest image received.
-    cv::Mat latest_image_;
-    double t_image_;
 
     NavigationState nav_state_;
 

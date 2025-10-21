@@ -48,6 +48,7 @@
 #include "motion_primitives.h"
 #include "constant_curvature_arcs.h"
 #include "ackermann_motion_primitives.h"
+#include "omnidirectional_motion_primitives.h"
 #include "linear_evaluator.h"
 #include "amrl_msgs/msg/nav_status_msg.hpp"
 #include "amrl_msgs/msg/pose2_df.hpp"
@@ -177,7 +178,6 @@ Navigation::Navigation() : robot_loc_(0, 0),
                            initialized_(false),
                            sampler_(nullptr),
                            evaluator_(nullptr) {
-    sampler_ = std::unique_ptr<PathRolloutSamplerBase>(new AckermannSampler());
 }
 
 void Navigation::Initialize(const NavigationParameters& params,
@@ -187,6 +187,19 @@ void Navigation::Initialize(const NavigationParameters& params,
     planning_domain_ = GraphDomain(map_file, &params_);
 
     initialized_ = true;
+
+    // Select motion primitive sampler based on mode
+    PathRolloutSamplerBase* sampler = nullptr;
+    if (params_.motion_primitives_mode == "ackermann") {
+        sampler = new AckermannSampler();
+    } else if (params_.motion_primitives_mode == "omni") {
+        sampler = new OmniSampler();
+    } else {
+        printf("Unknown motion primitives mode %s, defaulting to ackermann\n",
+               params_.motion_primitives_mode.c_str());
+        sampler = new AckermannSampler();
+    }
+    sampler_ = std::unique_ptr<PathRolloutSamplerBase>(sampler);
     sampler_->SetNavParams(params);
 
     PathEvaluatorBase* evaluator = nullptr;
@@ -439,11 +452,6 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
     PruneLatencyQueue();
 }
 
-void Navigation::ObserveImage(cv::Mat image, double time) {
-    latest_image_ = image;
-    t_image_ = time;
-}
-
 vector<int> Navigation::GlobalPlan(const Vector2f& initial,
                                    const Vector2f& end) {
     auto plan = Plan(initial, end);
@@ -545,7 +553,7 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
     }
     // printf("closest: %d %d %f\n", i0, i1, closest_dist);
 
-    if (closest_dist > kSqCarrotDist) {
+    if (closest_dist > carrot_dist) {
         // Closest edge on the plan is farther than carrot dist to the robot.
         // The carrot will be the projection of the robot loc on to the edge.
         const Vector2f v0 = plan_path[i0].loc;
@@ -633,8 +641,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
         local_target = override_target_;
     }
 
-    sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
-    evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, latest_image_);
+    sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, cv::Mat());
+    evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, cv::Mat());
     auto paths = sampler_->GetSamples(params_.num_options);
     if (debug) {
         printf("%lu options\n", paths.size());
@@ -655,14 +663,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     auto best_path = evaluator_->FindBest(paths);
     if (best_path == nullptr) {
         if (debug) printf("No best path found\n");
-        // No valid path found!
-        Eigen::Vector2f prev_local_target = local_target_;
-        Eigen::Vector2f temp_target;
-        GetCarrot(temp_target, params_.recovery_carrot_dist);
-        // Eigen::Vector2f temp_target = GetPathGoal(params_.recovery_carrot_dist);
-        local_target_ = Rotation2Df(-robot_angle_) * (temp_target - robot_loc_);
+        // No valid path found - just turn in place toward target
         TurnInPlace(vel_cmd, ang_vel_cmd);
-        local_target_ = prev_local_target;
         return;
     }
 

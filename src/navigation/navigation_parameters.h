@@ -93,6 +93,9 @@ struct NavigationParameters {
     // Distance of carrot when using turn in place recovery
     float recovery_carrot_dist;
 
+    // Motion primitives mode: "ackermann" or "omni"
+    std::string motion_primitives_mode;
+
     cv::Mat K;
     cv::Mat D;
     cv::Mat H;
@@ -116,7 +119,8 @@ struct NavigationParameters {
                              target_angle_tolerance(0.05),
                              evaluator_type("linear"),
                              carrot_dist(2),
-                             recovery_carrot_dist(0.5) {
+                             recovery_carrot_dist(0.5),
+                             motion_primitives_mode("ackermann") {
     }
 };
 }  // namespace navigation
