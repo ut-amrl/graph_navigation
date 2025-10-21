@@ -28,7 +28,6 @@
 #include <ctime>
 
 #include "eigen3/Eigen/Dense"
-#include <nav2_costmap_2d/costmap_2d.hpp>
 
 #include "config_reader/config_reader.h"
 #include "eight_connected_domain.h"
@@ -124,7 +123,6 @@ class Navigation {
     void SetOverride(const Eigen::Vector2f& loc, float angle);
     void Resume();
     bool PlanStillValid();
-    bool IntermediatePlanStillValid();
 
     void Plan(Eigen::Vector2f goal_loc);
     std::vector<GraphDomain::State> Plan(const Eigen::Vector2f& initial,
@@ -135,9 +133,8 @@ class Navigation {
     std::vector<GraphDomain::State> GetGlobalPath();
 
     Eigen::Vector2f GetPathGoal(float target_distance);
-    bool GetGlobalCarrot(Eigen::Vector2f& carrot);
     bool GetLocalCarrot(Eigen::Vector2f& carrot);
-    bool GetCarrot(Eigen::Vector2f& carrot, bool global, float carrot_dist);
+    bool GetCarrot(Eigen::Vector2f& carrot, float carrot_dist);
     // Enable or disable autonomy.
     void Enable(bool enable);
     // Indicates whether autonomy is enabled or not.
@@ -147,8 +144,6 @@ class Navigation {
     // Set parameters for navigation.
     void Initialize(const NavigationParameters& params,
                     const std::string& map_file);
-    // Map obstacles into global costmap
-    void LoadVectorMap(const std::string& map_file);
 
     // Allow client programs to configure navigation parameters
     void SetMaxVel(const float vel);
@@ -172,13 +167,8 @@ class Navigation {
     float GetObstacleMargin();
     float GetRobotWidth();
     float GetRobotLength();
-    const cv::Mat& GetVisualizationImage();
     std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> GetLastPathOptions();
     std::shared_ptr<motion_primitives::PathRolloutBase> GetOption();
-    std::vector<ObstacleCost> GetCostmapObstacles();
-    std::vector<ObstacleCost> GetGlobalCostmapObstacles();
-
-    Eigen::Vector2f GetIntermediateGoal();
 
    private:
     // Test 1D TOC motion in a straight line.
@@ -300,23 +290,6 @@ class Navigation {
         last_options_;
     // Last PathOption taken
     std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
-
-    // Local 2D cost map from lidar
-    nav2_costmap_2d::Costmap2D costmap_;
-    // List of obstacle points in local costmap for viewing/debugging
-    std::vector<ObstacleCost> costmap_obstacles_;
-    // List of locations of obstacles in previous costmap relative to robot
-    std::vector<SeenObstacle> prev_obstacles_;
-    // Location of robot at last cost map generation
-    Eigen::Vector2f prev_robot_loc_;
-    // Global 2D cost map from loaded map
-    nav2_costmap_2d::Costmap2D global_costmap_;
-    // List of obstacle points in local costmap for viewing/debugging
-    std::vector<ObstacleCost> global_costmap_obstacles_;
-    //
-    bool intermediate_path_found_;
-
-    Eigen::Vector2f intermediate_goal_;
 };
 
 }  // namespace navigation

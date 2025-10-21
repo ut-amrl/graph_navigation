@@ -24,7 +24,6 @@ find_package(tf2_ros REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(ament_index_cpp REQUIRED)
-find_package(nav2_costmap_2d REQUIRED)
 
 # Convert AMENT_PREFIX_PATH to CMAKE_PREFIX_PATH (standard ROS2 pattern)
 if(DEFINED ENV{AMENT_PREFIX_PATH})
@@ -95,7 +94,6 @@ ADD_SUBDIRECTORY(src/shared)
 # Generate ROS2 interfaces (services)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GraphNav.srv"
-  "srv/SocialNav.srv"
   DEPENDENCIES
     std_msgs
     geometry_msgs
@@ -143,9 +141,6 @@ ADD_LIBRARY(navigation_lib
             src/navigation/ackermann_motion_primitives.cc
             src/navigation/constant_curvature_arcs.cc
             src/navigation/linear_evaluator.cc
-            src/navigation/image_tiler.cc
-            src/navigation/image_based_evaluator.cc
-            src/navigation/deep_cost_map_evaluator.cc
             )
 
 target_link_libraries(navigation_lib
@@ -169,7 +164,6 @@ ament_target_dependencies(navigation_lib
     cv_bridge
     amrl_msgs
     ament_index_cpp
-    nav2_costmap_2d
 )
 
 target_include_directories(navigation_lib PRIVATE
@@ -177,7 +171,6 @@ target_include_directories(navigation_lib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
-    ${nav2_costmap_2d_INCLUDE_DIRS}
 )
 
 # Main navigation executable
@@ -203,7 +196,6 @@ ament_target_dependencies(navigation
     cv_bridge
     amrl_msgs
     ament_index_cpp
-    nav2_costmap_2d
 )
 
 target_include_directories(navigation PRIVATE
@@ -211,43 +203,6 @@ target_include_directories(navigation PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
-    ${nav2_costmap_2d_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
-)
-
-# Social navigation executable
-ADD_EXECUTABLE(social_nav
-               src/navigation/social_main.cc
-               src/navigation/social_nav.cc)
-
-target_link_libraries(social_nav
-    navigation_lib
-    graph_navigation__rosidl_typesupport_cpp
-)
-
-ament_target_dependencies(social_nav
-    rclcpp
-    std_msgs
-    geometry_msgs
-    sensor_msgs
-    nav_msgs
-    visualization_msgs
-    tf2
-    tf2_geometry_msgs
-    tf2_ros
-    image_transport
-    cv_bridge
-    amrl_msgs
-    ament_index_cpp
-    nav2_costmap_2d
-)
-
-target_include_directories(social_nav PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
-    ${AMENT_INCLUDE_DIRS}
-    ${nav2_costmap_2d_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
 )
 
@@ -271,12 +226,11 @@ target_include_directories(navigation_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
-    ${nav2_costmap_2d_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
 
 # Install targets
-install(TARGETS navigation social_nav navigation_tests
+install(TARGETS navigation navigation_tests
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -315,4 +269,3 @@ ament_export_dependencies(rosidl_default_runtime)
 ament_package()
 
 add_dependencies(navigation graph_navigation__rosidl_typesupport_cpp)
-add_dependencies(social_nav graph_navigation__rosidl_typesupport_cpp)

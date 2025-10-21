@@ -41,23 +41,15 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/point_cloud.hpp>
-#include <sensor_msgs/msg/compressed_image.hpp>
-#include <sensor_msgs/msg/image.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <tf2/LinearMath/Transform.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-#include <image_transport/image_transport.hpp>
-#include <cv_bridge/cv_bridge.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
-
-// OpenCV includes
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui/highgui.hpp>
 
 // AMRL includes
 #include "amrl_msgs/msg/localization2_d_msg.hpp"
@@ -94,11 +86,8 @@ DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(do_intermed, true, "Whether to enable intermediate planning");
-DEFINE_bool(debug_images, false, "Show debug images");
 
 // Configuration parameters
-CONFIG_STRING(image_topic, "NavigationParameters.image_topic");
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
 CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
 CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
@@ -112,7 +101,6 @@ CONFIG_FLOAT(max_linear_speed, "NavigationParameters.max_linear_speed");
 CONFIG_FLOAT(max_angular_accel, "NavigationParameters.max_angular_accel");
 CONFIG_FLOAT(max_angular_decel, "NavigationParameters.max_angular_decel");
 CONFIG_FLOAT(max_angular_speed, "NavigationParameters.max_angular_speed");
-CONFIG_FLOAT(intermediate_goal_dist, "NavigationParameters.intermediate_goal_dist");
 CONFIG_FLOAT(system_latency, "NavigationParameters.system_latency");
 CONFIG_FLOAT(obstacle_margin, "NavigationParameters.obstacle_margin");
 CONFIG_INT(num_options, "NavigationParameters.num_options");
@@ -121,40 +109,21 @@ CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
 CONFIG_FLOAT(base_link_offset, "NavigationParameters.base_link_offset");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
-CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_BOOL(use_map_speed, "NavigationParameters.use_map_speed");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
 CONFIG_FLOAT(target_vel_tolerance, "NavigationParameters.target_vel_tolerance");
 CONFIG_FLOAT(target_angle_tolerance, "NavigationParameters.target_angle_tolerance");
 CONFIG_FLOAT(local_fov, "NavigationParameters.local_fov");
-CONFIG_BOOL(use_kinect, "NavigationParameters.use_kinect");
-CONFIG_STRING(model_path, "NavigationParameters.model_path");
+CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_STRING(evaluator_type, "NavigationParameters.evaluator_type");
-CONFIG_FLOAT(local_costmap_resolution, "NavigationParameters.local_costmap_resolution");
-CONFIG_FLOAT(max_inflation_radius, "NavigationParameters.max_inflation_radius");
-CONFIG_FLOAT(local_costmap_size, "NavigationParameters.local_costmap_size");
-CONFIG_FLOAT(min_inflation_radius, "NavigationParameters.min_inflation_radius");
-CONFIG_FLOAT(global_costmap_resolution, "NavigationParameters.global_costmap_resolution");
-CONFIG_FLOAT(global_costmap_size_x, "NavigationParameters.global_costmap_size_x");
-CONFIG_FLOAT(global_costmap_size_y, "NavigationParameters.global_costmap_size_y");
-CONFIG_FLOAT(global_costmap_origin_x, "NavigationParameters.global_costmap_origin_x");
-CONFIG_FLOAT(global_costmap_origin_y, "NavigationParameters.global_costmap_origin_y");
 CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
-CONFIG_FLOAT(lidar_range_min, "NavigationParameters.lidar_range_min");
-CONFIG_FLOAT(lidar_range_max, "NavigationParameters.lidar_range_max");
-CONFIG_FLOAT(replan_dist, "NavigationParameters.replan_dist");
-CONFIG_FLOAT(object_lifespan, "NavigationParameters.object_lifespan");
-CONFIG_FLOAT(inflation_coeff, "NavigationParameters.inflation_coeff");
-CONFIG_FLOAT(distance_weight, "NavigationParameters.distance_weight");
 CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
-CONFIG_STRING(camera_calibration_path, "NavigationParameters.camera_calibration_path");
 CONFIG_STRING(ackermann_drive_topic, "NavigationParameters.ackermann_drive_topic");
 CONFIG_STRING(nav_status_topic, "NavigationParameters.nav_status_topic");
 CONFIG_STRING(visualization_topic, "NavigationParameters.visualization_topic");
 CONFIG_STRING(fp_pcl_topic, "NavigationParameters.fp_pcl_topic");
 CONFIG_STRING(path_topic, "NavigationParameters.path_topic");
 CONFIG_STRING(carrot_topic, "NavigationParameters.carrot_topic");
-CONFIG_STRING(vis_image_topic, "NavigationParameters.vis_image_topic");
 CONFIG_STRING(goto_topic, "NavigationParameters.goto_topic");
 CONFIG_STRING(goto_amrl_topic, "NavigationParameters.goto_amrl_topic");
 CONFIG_STRING(reset_nav_goals_topic, "NavigationParameters.reset_nav_goals_topic");
@@ -172,7 +141,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                        received_laser_(false),
                        current_angle_(0.0),
                        goal_angle_(0.0) {
-        image_node_ = std::make_shared<rclcpp::Node>("image_transport_node");
         // Initialize maps directory
         if (FLAGS_maps_dir.empty()) {
             try {
@@ -186,9 +154,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Initialize configuration
         config_reader::ConfigReader reader({FLAGS_robot_config});
         LoadConfig(&params_);
-
-        // Log the intermediate planning flag
-        RCLCPP_INFO(this->get_logger(), "Intermediate planning (do_intermed) is %s", FLAGS_do_intermed ? "ENABLED" : "DISABLED");
 
         // Load map
         std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
@@ -218,9 +183,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         path_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_path_topic, 1);
         carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_carrot_topic, 1);
 
-        // Create image transport publisher
-        InitImageTransport();
-
         // Create service
         nav_service_ = this->create_service<graph_navigation::srv::GraphNav>(
             "GraphNav", std::bind(&NavigationNode::PlanServiceCallback, this,
@@ -242,9 +204,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 });
             laser_subs_.push_back(laser_sub);
         }
-
-        image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
-            CONFIG_image_topic, 1, std::bind(&NavigationNode::ImageCallback, this, std::placeholders::_1));
 
         goto_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
             CONFIG_goto_topic, 1, std::bind(&NavigationNode::GoToCallback, this, std::placeholders::_1));
@@ -279,13 +238,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         run_ = false;
     }
 
-    void InitImageTransport() {
-        image_transport::ImageTransport it(image_node_);
-        viz_img_pub_ = it.advertise(CONFIG_vis_image_topic, 1);
-    }
-
    private:
-    rclcpp::Node::SharedPtr image_node_;
     // ROS2 components
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
@@ -298,13 +251,11 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Publisher<sensor_msgs::msg::PointCloud>::SharedPtr fp_pcl_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr carrot_pub_;
-    image_transport::Publisher viz_img_pub_;
 
     // Subscribers
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr localization_sub_;
     std::vector<rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr> laser_subs_;
-    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr image_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goto_sub_;
     rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr goto_amrl_sub_;
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_nav_goals_sub_;
@@ -334,7 +285,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     float goal_angle_;
     navigation::Odom odom_;
     std::vector<Eigen::Vector2f> point_cloud_;
-    cv::Mat last_image_;
 
     // Visualization
     amrl_msgs::msg::VisualizationMsg local_viz_msg_;
@@ -382,21 +332,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         }
         LaserHandler(*msg, topic);
         navigation_.ObservePointCloud(point_cloud_, rclcpp::Time(msg->header.stamp).seconds());
-    }
-
-    void ImageCallback(const sensor_msgs::msg::CompressedImage::SharedPtr msg) {
-        try {
-            cv_bridge::CvImagePtr image = cv_bridge::toCvCopy(msg, "bgr8");
-            last_image_ = image->image;
-            navigation_.ObserveImage(last_image_, rclcpp::Time(msg->header.stamp).seconds());
-
-            if (FLAGS_debug_images) {
-                cv::imshow("Navigation Image", last_image_);
-                cv::waitKey(3);
-            }
-        } catch (cv_bridge::Exception& e) {
-            RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
-        }
     }
 
     void GoToCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
@@ -458,21 +393,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
             DrawRobot();
 
-            // Visualize costmap obstacles if intermediate planning is enabled
-            if (params_.do_intermed) {
-                auto obstacles = navigation_.GetCostmapObstacles();
-                auto global_obstacles = navigation_.GetGlobalCostmapObstacles();
-
-                // Uncomment to visualize global obstacles
-                // for (const auto& vector : global_obstacles) {
-                //     visualization::DrawPoint(vector.location, vector.cost * 256, global_viz_msg_);
-                // }
-
-                // for (const auto& vector : obstacles) {
-                //     visualization::DrawPoint(vector.location, vector.cost * 256 * 256, global_viz_msg_);
-                // }
-            }
-
             if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
                 DrawTarget();
                 DrawPathOptions();
@@ -488,11 +408,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             // Publish visualization messages
             viz_pub_->publish(local_viz_msg_);
             viz_pub_->publish(global_viz_msg_);
-
-            // Publish cost map visualization if enabled
-            if (params_.evaluator_type == "cost_map") {
-                PublishVisualizationImage();
-            }
 
             // Send commands
             SendCommand(cmd_vel, cmd_angle_vel);
@@ -673,10 +588,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
                 carrot_pub_->publish(std::move(carrot_msg));
             }
-
-            if (navigation_.GetGlobalCarrot(carrot)) {
-                visualization::DrawCross(carrot, 0.2, 0x10E000, global_viz_msg_);
-            }
         }
     }
 
@@ -684,7 +595,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         const float carrot_dist = navigation_.GetCarrotDist();
         const Eigen::Vector2f target = navigation_.GetTarget();
 
-        visualization::DrawCross(navigation_.GetIntermediateGoal(), 0.2, 0x0000FF, global_viz_msg_);
         visualization::DrawArc(Eigen::Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
         visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
     }
@@ -745,21 +655,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // For now, we'll skip this as it requires the full visualization marker setup
     }
 
-    void PublishVisualizationImage() {
-        try {
-            cv::Mat viz_img = navigation_.GetVisualizationImage();
-            if (!viz_img.empty()) {
-                cv_bridge::CvImage cv_image;
-                cv_image.header.stamp = this->get_clock()->now();
-                cv_image.encoding = "rgb8";
-                cv_image.image = viz_img;
-                viz_img_pub_.publish(cv_image.toImageMsg());
-            }
-        } catch (const std::exception& e) {
-            RCLCPP_ERROR(this->get_logger(), "Failed to publish visualization image: %s", e.what());
-        }
-    }
-
     void InitSimulatorVizMarkers() {
         // Initialize visualization markers - simplified for now
         RCLCPP_INFO(this->get_logger(), "Visualization markers initialized");
@@ -767,13 +662,11 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void LoadConfig(navigation::NavigationParameters* params) {
         config_reader::ConfigReader reader({FLAGS_robot_config});
-        params->do_intermed = FLAGS_do_intermed;
         params->dt = CONFIG_dt;
         params->linear_limits = navigation::MotionLimits(
             CONFIG_max_linear_accel, CONFIG_max_linear_decel, CONFIG_max_linear_speed);
         params->angular_limits = navigation::MotionLimits(
             CONFIG_max_angular_accel, CONFIG_max_angular_decel, CONFIG_max_angular_speed);
-        params->intermediate_goal_dist = CONFIG_intermediate_goal_dist;
         params->system_latency = CONFIG_system_latency;
         params->obstacle_margin = CONFIG_obstacle_margin;
         params->num_options = CONFIG_num_options;
@@ -782,63 +675,15 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->base_link_offset = CONFIG_base_link_offset;
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
-        params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->use_map_speed = CONFIG_use_map_speed;
+        params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;
         params->target_vel_tolerance = CONFIG_target_vel_tolerance;
         params->target_angle_tolerance = CONFIG_target_angle_tolerance;
         params->local_fov = CONFIG_local_fov;
-        params->use_kinect = CONFIG_use_kinect;
-        params->model_path = CONFIG_model_path;
         params->evaluator_type = CONFIG_evaluator_type;
-        params->local_costmap_resolution = CONFIG_local_costmap_resolution;
-        params->max_inflation_radius = CONFIG_max_inflation_radius;
-        params->local_costmap_size = CONFIG_local_costmap_size;
-        params->min_inflation_radius = CONFIG_min_inflation_radius;
-        params->global_costmap_resolution = CONFIG_global_costmap_resolution;
-        params->global_costmap_size_x = CONFIG_global_costmap_size_x;
-        params->global_costmap_size_y = CONFIG_global_costmap_size_y;
-        params->global_costmap_origin_x = CONFIG_global_costmap_origin_x;
-        params->global_costmap_origin_y = CONFIG_global_costmap_origin_y;
         params->carrot_dist = CONFIG_carrot_dist;
-        params->lidar_range_min = CONFIG_lidar_range_min;
-        params->lidar_range_max = CONFIG_lidar_range_max;
-        params->replan_dist = CONFIG_replan_dist;
-        params->object_lifespan = CONFIG_object_lifespan;
-        params->inflation_coeff = CONFIG_inflation_coeff;
-        params->distance_weight = CONFIG_distance_weight;
         params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
-
-        LoadCameraCalibrationCV(CONFIG_camera_calibration_path, &params->K, &params->D, &params->H);
-    }
-
-    int LoadCameraCalibrationCV(const std::string& calibration_file,
-                                cv::Mat* camera_mat_ptr,
-                                cv::Mat* dist_coeffs_cv_ptr,
-                                cv::Mat* homography_mat_ptr) {
-        cv::FileStorage camera_settings(calibration_file, cv::FileStorage::READ);
-
-        if (!camera_settings.isOpened()) {
-            RCLCPP_ERROR(this->get_logger(), "Failed to open camera settings file at: %s", calibration_file.c_str());
-            return -1;
-        }
-
-        cv::FileNode node = camera_settings["K"];
-        if (!node.empty() && camera_mat_ptr != nullptr) {
-            *camera_mat_ptr = node.mat();
-        }
-
-        node = camera_settings["D"];
-        if (!node.empty() && dist_coeffs_cv_ptr != nullptr) {
-            *dist_coeffs_cv_ptr = node.mat();
-        }
-
-        node = camera_settings["H"];
-        if (!node.empty() && homography_mat_ptr != nullptr) {
-            *homography_mat_ptr = node.mat();
-        }
-
-        return 0;
     }
 };
 
@@ -860,7 +705,6 @@ int main(int argc, char** argv) {
 
     try {
         auto node = std::make_shared<NavigationNode>();
-        node->InitImageTransport();
         rclcpp::spin(node);
     } catch (const std::exception& e) {
         RCLCPP_ERROR(rclcpp::get_logger("navigation"), "[main] Exception in navigation node: %s", e.what());
