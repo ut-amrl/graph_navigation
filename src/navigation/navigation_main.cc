@@ -650,9 +650,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             }
             const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(rollout.get());
             if (omni) {
-                // For omni, curvature = 0 (straight line)
-                visualization::DrawPathOption(0.0f, omni->Length(), omni->Clearance(),
-                                              0x0000FF, false, local_viz_msg_);
+                // For omni, draw straight line in the direction of motion
+                Eigen::Vector2f endpoint = omni->EndPoint().translation;
+                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0x0000FF, local_viz_msg_);
             }
         }
 
@@ -668,10 +668,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
             if (best_omni) {
                 // Draw best path multiple times to make it thicker (bright red)
-                visualization::DrawPathOption(0.0f, best_omni->Length(), best_omni->Clearance(),
-                                              0xFF0000, true, local_viz_msg_);
-                visualization::DrawPathOption(0.0f, best_omni->Length(), best_omni->Clearance(),
-                                              0xFF0000, true, local_viz_msg_);
+                Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
+                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
+                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
+                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
             }
         }
     }
