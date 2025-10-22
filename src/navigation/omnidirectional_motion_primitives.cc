@@ -132,6 +132,8 @@ void OmniSampler::CheckObstacles(OmnidirectionalMove* move) {
     // Follow exact same logic as Ackermann CheckObstacles for straight lines
     const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
     const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;
+    // The x-coordinate of the rear margin (behind base_link)
+    const float x_min = -0.5 * nav_params.robot_length + nav_params.base_link_offset - nav_params.obstacle_margin;
 
     // Replicate Ackermann straight-line obstacle checking logic
     for (const Vector2f& p : point_cloud) {
@@ -139,6 +141,11 @@ void OmniSampler::CheckObstacles(OmnidirectionalMove* move) {
         const float along_path = p.dot(move->direction);  // equivalent to p.x() in Ackermann
         const Vector2f perpendicular_vec = p - along_path * move->direction;
         const float lateral_distance = perpendicular_vec.norm();  // equivalent to fabs(p.y()) in Ackermann
+
+        // Skip points inside robot body (between x_min and l, within width w)
+        if (along_path > x_min && along_path < l && lateral_distance < w) {
+            continue;  // Point is within robot body boundary
+        }
 
         if (lateral_distance > w || along_path < 0.0f) continue;
         move->fpl = min(move->fpl, along_path - l);
@@ -149,6 +156,11 @@ void OmniSampler::CheckObstacles(OmnidirectionalMove* move) {
         const float along_path = p.dot(move->direction);
         const Vector2f perpendicular_vec = p - along_path * move->direction;
         const float lateral_distance = perpendicular_vec.norm();
+
+        // Skip points inside robot body
+        if (along_path > x_min && along_path < l && lateral_distance < w) {
+            continue;
+        }
 
         if (along_path - l > move->fpl || along_path < 0.0) continue;
         move->clearance = min<float>(move->clearance, fabs(lateral_distance - w));
