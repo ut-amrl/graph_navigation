@@ -659,19 +659,23 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         if (best_option != nullptr) {
             const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
             if (best_arc) {
-                // Draw best path multiple times to make it thicker (bright red)
-                visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
-                                              0xFF0000, true, local_viz_msg_);
                 visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
                                               0xFF0000, true, local_viz_msg_);
             }
             const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
             if (best_omni) {
-                // Draw best path multiple times to make it thicker (bright red)
                 Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
                 visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
-                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
-                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
+
+                // Draw clearance corridor along the chosen direction
+                const float clearance = best_omni->Clearance();
+                const float length = best_omni->Length();
+                // Perpendicular vector to the direction (rotated 90 degrees)
+                Eigen::Vector2f perp(-best_omni->direction.y(), best_omni->direction.x());
+                Eigen::Vector2f clearance_offset = clearance * perp;
+                // Draw clearance lines on both sides of the path
+                visualization::DrawLine(clearance_offset, endpoint + clearance_offset, 0xFF0000, local_viz_msg_);
+                visualization::DrawLine(-clearance_offset, endpoint - clearance_offset, 0xFF0000, local_viz_msg_);
             }
         }
     }
