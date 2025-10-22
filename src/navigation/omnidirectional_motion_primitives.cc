@@ -75,13 +75,34 @@ void OmnidirectionalMove::GetControls(const navigation::MotionLimits& linear_lim
     // Command velocity in the direction of motion (2D velocity vector)
     vel_cmd = speed * direction;
 
-    // No rotation during straight-line motion
-    ang_vel_cmd = 0;
+    // Simultaneously apply 1D TOC for angular rotation to face the direction of motion
+    // Target angle: direction of motion
+    const float target_angle = atan2(direction.y(), direction.x());
+    // Current angle is 0 in robot frame, so angle difference = target_angle
+    const float dTheta = AngleMod(target_angle);
+
+    // Use 1D TOC with sign handling
+    const float s = Sign(dTheta);
+    if (ang_vel * dTheta < 0.0f) {
+        // Turning the wrong way - decelerate first
+        const float dv = dt * angular_limits.max_acceleration;
+        if (fabs(ang_vel) < dv) {
+            ang_vel_cmd = 0;
+        } else {
+            ang_vel_cmd = ang_vel - Sign(ang_vel) * dv;
+        }
+    } else {
+        // Apply 1D TOC to reach target orientation
+        ang_vel_cmd = s * Run1DTimeOptimalControl(
+                              angular_limits, 0, s * ang_vel, s * dTheta, 0, dt);
+    }
 }
 
 Pose2Df OmnidirectionalMove::GetIntermediateState(float f) const {
-    // Straight line movement only
-    return Pose2Df(0, f * length * direction);
+    // Position: straight line movement
+    // Orientation: gradually rotate to face the direction of motion
+    const float target_angle = atan2(direction.y(), direction.x());
+    return Pose2Df(f * target_angle, f * length * direction);
 }
 
 Pose2Df OmnidirectionalMove::EndPoint() const {
