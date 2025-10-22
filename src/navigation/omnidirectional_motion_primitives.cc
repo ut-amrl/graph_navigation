@@ -39,10 +39,6 @@ using std::shared_ptr;
 using std::vector;
 using namespace math_util;
 
-CONFIG_FLOAT(max_speed, "OmniSampler.max_speed");
-CONFIG_FLOAT(max_angular_speed, "OmniSampler.max_angular_speed");
-CONFIG_INT(num_directions, "OmniSampler.num_directions");
-
 namespace motion_primitives {
 
 // OmnidirectionalMove implementation
@@ -117,13 +113,10 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMove* move) {
 vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
     vector<shared_ptr<PathRolloutBase>> samples;
 
-    // Use configured number of directions if available, otherwise use n
-    const int num_samples = (CONFIG_num_directions > 0) ? CONFIG_num_directions : n;
-
     // Sample uniformly in full 360° circle, just like Ackermann samples all curvatures
     // The FOV check in Run() will handle turning in place if target is outside FOV
-    for (int i = 0; i < num_samples; ++i) {
-        const float angle = (2.0f * M_PI * i) / num_samples;
+    for (int i = 0; i < n; ++i) {
+        const float angle = (2.0f * M_PI * i) / n;
         const Vector2f direction(cos(angle), sin(angle));
 
         auto move = new OmnidirectionalMove(direction, 0);

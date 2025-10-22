@@ -27,13 +27,13 @@ NavigationParameters = {
   robot_width = 0.44;
   robot_length = 0.5;
   base_link_offset = 0;
-  max_free_path_length = 6.0;
+  max_free_path_length = 6.0;  -- max length of path rollout in the sampler
   max_clearance = 1.0;
   can_traverse_stairs = false;
   use_map_speed = true;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
-  target_angle_tolerance = 0.05;
+  target_angle_tolerance = deg2rad(5);
   local_fov = deg2rad(90);
   evaluator_type = "linear";
   recovery_carrot_dist = 0.7;
@@ -55,10 +55,4 @@ motion_primitives_mode = "omni";  -- "ackermann" or "omni"
 AckermannSampler = {
   max_curvature = 2.5;
   clearance_path_clip_fraction = 0.8;
-};
-
-OmniSampler = {
-  max_speed = 0.5;
-  max_angular_speed = 1.0;
-  num_directions = 7;
 };

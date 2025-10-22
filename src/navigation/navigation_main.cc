@@ -598,6 +598,14 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
         visualization::DrawArc(Eigen::Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
         visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
+
+        // Draw FOV cone (dark yellow 0xFFCC00)
+        const float fov_length = 2.0f;  // Length of FOV lines in meters
+        const float fov_angle = CONFIG_local_fov;
+        Eigen::Vector2f fov_left(fov_length * cos(fov_angle), fov_length * sin(fov_angle));
+        Eigen::Vector2f fov_right(fov_length * cos(-fov_angle), fov_length * sin(-fov_angle));
+        visualization::DrawLine(Eigen::Vector2f(0, 0), fov_left, 0xFFCC00, local_viz_msg_);
+        visualization::DrawLine(Eigen::Vector2f(0, 0), fov_right, 0xFFCC00, local_viz_msg_);
     }
 
     void DrawRobot() {
@@ -651,11 +659,17 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         if (best_option != nullptr) {
             const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
             if (best_arc) {
+                // Draw best path multiple times to make it thicker (bright red)
+                visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
+                                              0xFF0000, true, local_viz_msg_);
                 visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
                                               0xFF0000, true, local_viz_msg_);
             }
             const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
             if (best_omni) {
+                // Draw best path multiple times to make it thicker (bright red)
+                visualization::DrawPathOption(0.0f, best_omni->Length(), best_omni->Clearance(),
+                                              0xFF0000, true, local_viz_msg_);
                 visualization::DrawPathOption(0.0f, best_omni->Length(), best_omni->Clearance(),
                                               0xFF0000, true, local_viz_msg_);
             }
