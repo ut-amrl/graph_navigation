@@ -20,7 +20,6 @@
 //========================================================================
 
 #include <vector>
-#include "opencv2/opencv.hpp"
 
 #ifndef NAVIGATION_PARAMETERS_H
 #define NAVIGATION_PARAMETERS_H
@@ -91,10 +90,6 @@ struct NavigationParameters {
     // Motion primitives mode: "ackermann" or "omni"
     std::string motion_primitives_mode;
     bool do_ang_toc;
-
-    cv::Mat K;
-    cv::Mat D;
-    cv::Mat H;
 
     // Default constructor, just set defaults.
     NavigationParameters()

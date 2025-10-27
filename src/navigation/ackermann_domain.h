@@ -53,35 +53,27 @@ struct AckermannDomain {
         //   2: West  (-ve X axis)
         //   3: South (-ve Y axis)
         int orientation;
-        State(float x,
-              float y,
-              int orientation) : loc(x, y), orientation(orientation) {
+        State(float x, float y, int orientation) : loc(x, y), orientation(orientation) {
             DCHECK_GE(orientation, 0);
             DCHECK_LE(orientation, 3);
         }
-        State(const Eigen::Vector2f& loc,
-              int orientation) : loc(loc), orientation(orientation) {
+        State(const Eigen::Vector2f& loc, int orientation) : loc(loc), orientation(orientation) {
             DCHECK_GE(orientation, 0);
             DCHECK_LE(orientation, 3);
         }
     };
 
     struct Visualizer {
-        Visualizer(float radius,
-                   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub,
-                   visualization_msgs::msg::Marker* msg_ptr) : kRadius(radius), publisher(pub), msg(*msg_ptr) {
+        Visualizer(float radius, rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr pub,
+                   visualization_msgs::msg::Marker* msg_ptr)
+            : kRadius(radius), publisher(pub), msg(*msg_ptr) {
             ros_helpers::ClearMarker(msg_ptr);
         }
         void DrawEdge(const State& s1, const State& s2) {
             static const bool kDebug = false;
             if (kDebug) {
-                printf("%7.2f,%7.2f,%1d -> %7.2f,%7.2f,%1d\n",
-                       s1.loc.x(),
-                       s1.loc.y(),
-                       s1.orientation,
-                       s2.loc.x(),
-                       s2.loc.y(),
-                       s2.orientation);
+                printf("%7.2f,%7.2f,%1d -> %7.2f,%7.2f,%1d\n", s1.loc.x(), s1.loc.y(), s1.orientation, s2.loc.x(),
+                       s2.loc.y(), s2.orientation);
             }
             const int kSegments = 10;
             if (s1.orientation == s2.orientation) {
@@ -118,17 +110,14 @@ struct AckermannDomain {
                 if (turn < 0) a0 = math_util::AngleMod(a0 + M_PI);
                 const float a1 = a0 + turn * 0.5 * M_PI;
                 const float da = (a1 - a0) / static_cast<float>(kSegments);
-                Eigen::Vector2f p0 =
-                    center + kRadius * Eigen::Vector2f(cos(a0), sin(a0));
+                Eigen::Vector2f p0 = center + kRadius * Eigen::Vector2f(cos(a0), sin(a0));
                 for (int i = 0; i < kSegments; ++i) {
                     float a = a0 + da * static_cast<float>(i);
-                    Eigen::Vector2f p1 =
-                        center + kRadius * Eigen::Vector2f(cos(a), sin(a));
+                    Eigen::Vector2f p1 = center + kRadius * Eigen::Vector2f(cos(a), sin(a));
                     ros_helpers::DrawEigen2DLine(p0, p1, &msg);
                     p0 = p1;
                 }
-                Eigen::Vector2f p1 =
-                    center + kRadius * Eigen::Vector2f(cos(a1), sin(a1));
+                Eigen::Vector2f p1 = center + kRadius * Eigen::Vector2f(cos(a1), sin(a1));
                 ros_helpers::DrawEigen2DLine(p0, p1, &msg);
             }
             publisher->publish(msg);
@@ -139,16 +128,14 @@ struct AckermannDomain {
         visualization_msgs::msg::Marker& msg;
     };
 
-    AckermannDomain(float size_x,
-                    float size_y,
-                    const Eigen::Vector2f& origin,
-                    float turn_radius) : kTurnRadius(turn_radius),
-                                         kMapWidth(size_x / turn_radius),
-                                         kMapHeight(size_y / turn_radius),
-                                         kStateStepSize(4),
-                                         kStateStride(4 * kMapWidth),
-                                         kMapOrigin(origin),
-                                         kArcLength(kTurnRadius * 0.5 * M_PI) {}
+    AckermannDomain(float size_x, float size_y, const Eigen::Vector2f& origin, float turn_radius)
+        : kTurnRadius(turn_radius),
+          kMapWidth(size_x / turn_radius),
+          kMapHeight(size_y / turn_radius),
+          kStateStepSize(4),
+          kStateStride(4 * kMapWidth),
+          kMapOrigin(origin),
+          kArcLength(kTurnRadius * 0.5 * M_PI) {}
 
     State KeyToState(uint64_t key) const {
         const float y = key / kStateStride;
@@ -158,15 +145,12 @@ struct AckermannDomain {
     }
 
     uint64_t StateToKey(const State& s) const {
-        Eigen::Vector2i loc_int =
-            ((s.loc - kMapOrigin) / kTurnRadius).cast<int>();
+        Eigen::Vector2i loc_int = ((s.loc - kMapOrigin) / kTurnRadius).cast<int>();
         math_util::Bound<int>(0, kMapWidth, &(loc_int.x()));
         math_util::Bound<int>(0, kMapHeight, &(loc_int.y()));
         CHECK_GE(s.orientation, 0);
         CHECK_LE(s.orientation, 3);
-        return (loc_int.y() * kStateStride +
-                loc_int.x() * kStateStepSize +
-                s.orientation);
+        return (loc_int.y() * kStateStride + loc_int.x() * kStateStepSize + s.orientation);
     }
 
     // Return the edge cost, assuming the two states are indeed connectable.
@@ -190,33 +174,21 @@ struct AckermannDomain {
         return kArcLength;
     }
 
-    float Heuristic(const State& s1, const State& s2) const {
-        return (s1.loc - s2.loc).norm();
-    }
+    float Heuristic(const State& s1, const State& s2) const { return (s1.loc - s2.loc).norm(); }
 
     float Heuristic(const uint64_t k_s1, const uint64_t k_s2) const {
         return (KeyToState(k_s1).loc - KeyToState(k_s2).loc).norm();
     }
 
-    int GetOrientation(uint64_t s_key) const {
-        return (s_key % 4);
-    }
+    int GetOrientation(uint64_t s_key) const { return (s_key % 4); }
 
-    int GetX(uint64_t s_key) const {
-        return ((s_key % kStateStride) / 4);
-    }
+    int GetX(uint64_t s_key) const { return ((s_key % kStateStride) / 4); }
 
-    int GetY(uint64_t s_key) const {
-        return (s_key / kStateStride);
-    }
+    int GetY(uint64_t s_key) const { return (s_key / kStateStride); }
 
-    bool CheckLineCollision(const Eigen::Vector2f& v1,
-                            const Eigen::Vector2f& v2) {
-        return false;
-    }
+    bool CheckLineCollision(const Eigen::Vector2f& v1, const Eigen::Vector2f& v2) { return false; }
 
-    void GetNeighbors(const State& s,
-                      std::vector<State>* neighbors) const {
+    void GetNeighbors(const State& s, std::vector<State>* neighbors) const {
         int o = s.orientation;
         neighbors->clear();
         switch (o) {
@@ -255,8 +227,7 @@ struct AckermannDomain {
         }
     }
     // Get neighbors to a state.
-    void GetNeighborsKeys(uint64_t s_key,
-                          std::vector<uint64_t>* neighbors) const {
+    void GetNeighborsKeys(uint64_t s_key, std::vector<uint64_t>* neighbors) const {
         int o = GetOrientation(s_key);
         int y = GetY(s_key);
         int x = GetX(s_key);

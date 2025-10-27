@@ -19,7 +19,8 @@
 */
 //========================================================================
 
-// NOTE: This file is an exact copy of `src/navigation_map/navigation_map.h` in `https://github.com/ut-amrl/vector_display`. This should be kept in sync.
+// NOTE: This file is an exact copy of `src/navigation_map/navigation_map.h` in
+// `https://github.com/ut-amrl/vector_display`. This should be kept in sync.
 
 // C headers.
 #include <inttypes.h>
@@ -49,6 +50,8 @@
 #include "vector_map/vector_map.h"
 #include "navigation_parameters.h"
 
+#include <cfloat>
+#include <iomanip>
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
@@ -120,9 +123,7 @@ struct GraphDomain {
         }
     };
 
-    GraphDomain() {
-        this->params_ = new NavigationParameters();
-    }
+    GraphDomain() { this->params_ = new NavigationParameters(); }
 
     explicit GraphDomain(const std::string& map_file, const navigation::NavigationParameters* params) {
         // Load graph from file.
@@ -135,14 +136,10 @@ struct GraphDomain {
         return states[key];
     }
 
-    uint64_t StateToKey(const State& s) const {
-        return s.id;
-    }
+    uint64_t StateToKey(const State& s) const { return s.id; }
 
     // Return the edge cost, assuming the two states are indeed connectable.
-    float EdgeCost(const State& s0, const State& s1) const {
-        return (s0.loc - s1.loc).norm();
-    }
+    float EdgeCost(const State& s0, const State& s1) const { return (s0.loc - s1.loc).norm(); }
 
     float EdgeCost(const uint64_t k_s1, const uint64_t k_s2) const {
         DCHECK_LT(k_s1, states.size());
@@ -150,9 +147,7 @@ struct GraphDomain {
         return EdgeCost(states[k_s1], states[k_s2]);
     }
 
-    float Heuristic(const State& s0, const State& s1) const {
-        return (s0.loc - s1.loc).norm();
-    }
+    float Heuristic(const State& s0, const State& s1) const { return (s0.loc - s1.loc).norm(); }
 
     float Heuristic(const uint64_t k_s1, const uint64_t k_s2) const {
         DCHECK_LT(k_s1, states.size());
@@ -161,13 +156,14 @@ struct GraphDomain {
     }
 
     // Get neighbors to a state.
-    void GetNeighborsKeys(uint64_t s_key,
-                          std::vector<uint64_t>* state_neighbors) const {
+    void GetNeighborsKeys(uint64_t s_key, std::vector<uint64_t>* state_neighbors) const {
         CHECK_LT(s_key, states.size());
         state_neighbors->clear();
         for (const NavigationEdge& e : edges) {
-            if (e.s0_id == s_key && (!e.has_stairs || params_->can_traverse_stairs)) state_neighbors->push_back(e.s1_id);
-            if (e.s1_id == s_key && (!e.has_stairs || params_->can_traverse_stairs)) state_neighbors->push_back(e.s0_id);
+            if (e.s0_id == s_key && (!e.has_stairs || params_->can_traverse_stairs))
+                state_neighbors->push_back(e.s1_id);
+            if (e.s1_id == s_key && (!e.has_stairs || params_->can_traverse_stairs))
+                state_neighbors->push_back(e.s0_id);
         }
     }
 
@@ -248,21 +244,14 @@ struct GraphDomain {
         // This edge must exist, hence the list can't be empty.
         CHECK_GT(edges.size(), 0);
         for (int i = edges.size() - 1; i >= 0; --i) {
-            if ((edges[i].s0_id == s0 &&
-                 edges[i].s1_id == s1) ||
-                (edges[i].s0_id == s1 &&
-                 edges[i].s1_id == s0)) {
+            if ((edges[i].s0_id == s0 && edges[i].s1_id == s1) || (edges[i].s0_id == s1 && edges[i].s1_id == s0)) {
                 edges.erase(edges.begin() + i);
             }
         }
     }
 
-    void AddUndirectedEdge(const uint64_t s0,
-                           const uint64_t s1,
-                           const float max_speed,
-                           const float max_clearance,
-                           const bool has_door,
-                           const bool has_stairs) {
+    void AddUndirectedEdge(const uint64_t s0, const uint64_t s1, const float max_speed, const float max_clearance,
+                           const bool has_door, const bool has_stairs) {
         CHECK_LT(s0, states.size());
         CHECK_LT(s1, states.size());
         NavigationEdge e;
@@ -336,8 +325,7 @@ struct GraphDomain {
         AddUndirectedEdge(pmid_id, v_id, closest_edge.max_speed, closest_edge.max_clearance, false, false);
 
         if (kDebug) {
-            printf("Adding dynamic state %f,%f (%lu) %lu %lu %lu\n",
-                   v.x(), v.y(), v_id, p0_id, p1_id, pmid_id);
+            printf("Adding dynamic state %f,%f (%lu) %lu %lu %lu\n", v.x(), v.y(), v_id, p0_id, p1_id, pmid_id);
         }
         return v_id;
     }
@@ -402,10 +390,7 @@ struct GraphDomain {
             AddUndirectedEdge(j);
         }
 
-        printf("Loaded %s with %lu states, %lu edges\n",
-               file.c_str(),
-               states.size(),
-               edges.size());
+        printf("Loaded %s with %lu states, %lu edges\n", file.c_str(), states.size(), edges.size());
 
         if (kDebug) DrawMap();
 
@@ -424,9 +409,7 @@ struct GraphDomain {
         int num_edges = 0;
         int num_neighbors = 0;
         states.clear();
-        while (valid &&
-               !feof(fid()) &&
-               fscanf(fid(), "%lu, %f, %f, %d", &id, &x, &y, &num_neighbors) == 4) {
+        while (valid && !feof(fid()) && fscanf(fid(), "%lu, %f, %f, %d", &id, &x, &y, &num_neighbors) == 4) {
             GrowIfNeeded(id);
             states[id] = State(id, x, y);
             for (int i = 0; i < num_neighbors; ++i) {
@@ -441,10 +424,7 @@ struct GraphDomain {
             }
         }
 
-        printf("Loaded %s with %d states, %d edges\n",
-               in_file.c_str(),
-               static_cast<int>(states.size()),
-               num_edges);
+        printf("Loaded %s with %d states, %d edges\n", in_file.c_str(), static_cast<int>(states.size()), num_edges);
 
         DrawMap();
 
@@ -453,9 +433,7 @@ struct GraphDomain {
         return true;
     }
 
-    void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p,
-                                     float* clearance,
-                                     float* speed) const {
+    void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p, float* clearance, float* speed) const {
         if (edges.empty()) return;
         NavigationEdge closest_edge;
         float closest_dist = FLT_MAX;

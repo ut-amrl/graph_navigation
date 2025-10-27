@@ -19,7 +19,6 @@
 */
 //========================================================================
 
-
 #include <memory>
 #include <vector>
 
@@ -33,24 +32,22 @@
 
 namespace motion_primitives {
 
-// Path rollout sampler. 
+// Path rollout sampler.
 struct AckermannSampler : PathRolloutSamplerBase {
-  // Given the robot's current dynamic state and an obstacle point cloud, return
-  // a set of valid path rollout options that are collision-free.
-  std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) override;
-  // Default constructor, init parameters.
-  AckermannSampler();
+    // Given the robot's current dynamic state and an obstacle point cloud, return
+    // a set of valid path rollout options that are collision-free.
+    std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) override;
+    // Default constructor, init parameters.
+    AckermannSampler();
 
-  // Compute free path lengths and clearances.
-  void CheckObstacles(
-      std::vector<std::shared_ptr<PathRolloutBase>>& samples);
+    // Compute free path lengths and clearances.
+    void CheckObstacles(std::vector<std::shared_ptr<PathRolloutBase>>& samples);
 
-  // Limit the maximum path length to the closest point of approach to the local
-  // target.
-  void SetMaxPathLength(ConstantCurvatureArc* path);
+    // Limit the maximum path length to the closest point of approach to the local
+    // target.
+    void SetMaxPathLength(ConstantCurvatureArc* path);
 
-  void CheckObstacles(ConstantCurvatureArc* path);
-
+    void CheckObstacles(ConstantCurvatureArc* path);
 };
 
 }  // namespace motion_primitives

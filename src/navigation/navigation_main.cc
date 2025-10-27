@@ -90,22 +90,15 @@ DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
-DEFINE_bool(do_ang_toc, false, "Whether to use 1D TOC for angular motion in omni mode");
 
-// Configuration parameters
-CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
-CONFIG_STRING(laser_frame, "NavigationParameters.laser_frame");
-CONFIG_STRING(odom_topic, "NavigationParameters.odom_topic");
-CONFIG_STRING(localization_topic, "NavigationParameters.localization_topic");
-CONFIG_STRING(init_topic, "NavigationParameters.init_topic");
-CONFIG_STRING(enable_topic, "NavigationParameters.enable_topic");
+// NavigationParameters
 CONFIG_FLOAT(dt, "NavigationParameters.dt");
-CONFIG_FLOAT(max_linear_accel, "NavigationParameters.max_linear_accel");
-CONFIG_FLOAT(max_linear_decel, "NavigationParameters.max_linear_decel");
-CONFIG_FLOAT(max_linear_speed, "NavigationParameters.max_linear_speed");
-CONFIG_FLOAT(max_angular_accel, "NavigationParameters.max_angular_accel");
-CONFIG_FLOAT(max_angular_decel, "NavigationParameters.max_angular_decel");
-CONFIG_FLOAT(max_angular_speed, "NavigationParameters.max_angular_speed");
+CONFIG_FLOAT(max_linear_accel, "NavigationParameters.linear_limits.max_acceleration");
+CONFIG_FLOAT(max_linear_decel, "NavigationParameters.linear_limits.max_deceleration");
+CONFIG_FLOAT(max_linear_speed, "NavigationParameters.linear_limits.max_speed");
+CONFIG_FLOAT(max_angular_accel, "NavigationParameters.angular_limits.max_acceleration");
+CONFIG_FLOAT(max_angular_decel, "NavigationParameters.angular_limits.max_deceleration");
+CONFIG_FLOAT(max_angular_speed, "NavigationParameters.angular_limits.max_speed");
 CONFIG_FLOAT(system_latency, "NavigationParameters.system_latency");
 CONFIG_FLOAT(obstacle_margin, "NavigationParameters.obstacle_margin");
 CONFIG_INT(num_options, "NavigationParameters.num_options");
@@ -114,26 +107,35 @@ CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
 CONFIG_FLOAT(base_link_offset, "NavigationParameters.base_link_offset");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
+CONFIG_FLOAT(local_fov, "NavigationParameters.local_fov");
 CONFIG_BOOL(use_map_speed, "NavigationParameters.use_map_speed");
+CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
 CONFIG_FLOAT(target_vel_tolerance, "NavigationParameters.target_vel_tolerance");
 CONFIG_FLOAT(target_angle_tolerance, "NavigationParameters.target_angle_tolerance");
-CONFIG_FLOAT(local_fov, "NavigationParameters.local_fov");
-CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_STRING(evaluator_type, "NavigationParameters.evaluator_type");
 CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
 CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
-CONFIG_STRING(motion_primitives_mode, "motion_primitives_mode");
-CONFIG_STRING(ackermann_drive_topic, "NavigationParameters.ackermann_drive_topic");
-CONFIG_STRING(nav_status_topic, "NavigationParameters.nav_status_topic");
-CONFIG_STRING(visualization_topic, "NavigationParameters.visualization_topic");
-CONFIG_STRING(fp_pcl_topic, "NavigationParameters.fp_pcl_topic");
-CONFIG_STRING(path_topic, "NavigationParameters.path_topic");
-CONFIG_STRING(carrot_topic, "NavigationParameters.carrot_topic");
-CONFIG_STRING(goto_topic, "NavigationParameters.goto_topic");
-CONFIG_STRING(goto_amrl_topic, "NavigationParameters.goto_amrl_topic");
-CONFIG_STRING(reset_nav_goals_topic, "NavigationParameters.reset_nav_goals_topic");
-CONFIG_STRING(halt_topic, "NavigationParameters.halt_topic");
+CONFIG_STRING(motion_primitives_mode, "NavigationParameters.motion_primitives_mode");
+CONFIG_BOOL(do_ang_toc, "NavigationParameters.do_ang_toc");
+
+// ROS Topics and Frames
+CONFIG_STRINGLIST(laser_topics, "ROSTopics.laser_topics");
+CONFIG_STRING(laser_frame, "ROSTopics.laser_frame");
+CONFIG_STRING(odom_topic, "ROSTopics.odom_topic");
+CONFIG_STRING(localization_topic, "ROSTopics.localization_topic");
+CONFIG_STRING(init_topic, "ROSTopics.init_topic");
+CONFIG_STRING(enable_topic, "ROSTopics.enable_topic");
+CONFIG_STRING(ackermann_drive_topic, "ROSTopics.ackermann_drive_topic");
+CONFIG_STRING(nav_status_topic, "ROSTopics.nav_status_topic");
+CONFIG_STRING(visualization_topic, "ROSTopics.visualization_topic");
+CONFIG_STRING(fp_pcl_topic, "ROSTopics.fp_pcl_topic");
+CONFIG_STRING(path_topic, "ROSTopics.path_topic");
+CONFIG_STRING(carrot_topic, "ROSTopics.carrot_topic");
+CONFIG_STRING(goto_topic, "ROSTopics.goto_topic");
+CONFIG_STRING(goto_amrl_topic, "ROSTopics.goto_amrl_topic");
+CONFIG_STRING(reset_nav_goals_topic, "ROSTopics.reset_nav_goals_topic");
+CONFIG_STRING(halt_topic, "ROSTopics.halt_topic");
 
 class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
@@ -684,17 +686,17 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->base_link_offset = CONFIG_base_link_offset;
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
+        params->local_fov = CONFIG_local_fov;
         params->use_map_speed = CONFIG_use_map_speed;
         params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;
         params->target_vel_tolerance = CONFIG_target_vel_tolerance;
         params->target_angle_tolerance = CONFIG_target_angle_tolerance;
-        params->local_fov = CONFIG_local_fov;
         params->evaluator_type = CONFIG_evaluator_type;
         params->carrot_dist = CONFIG_carrot_dist;
         params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
         params->motion_primitives_mode = CONFIG_motion_primitives_mode;
-        params->do_ang_toc = FLAGS_do_ang_toc;
+        params->do_ang_toc = CONFIG_do_ang_toc;
     }
 };
 

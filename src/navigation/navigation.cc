@@ -77,6 +77,7 @@ using namespace math_util;
 using namespace motion_primitives;
 
 #include <fcntl.h>
+#include <cfloat>
 #include <glog/logging.h>
 
 DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
@@ -174,7 +175,6 @@ void Navigation::Initialize(const NavigationParameters& params, const string& ma
     // Initialize status message
     params_ = params;
     planning_domain_ = GraphDomain(map_file, &params_);
-
     initialized_ = true;
 
     // Select motion primitive sampler based on mode
@@ -573,8 +573,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
 
     Vector2f local_target = local_target_;
 
-    sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_, cv::Mat());
-    evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_, cv::Mat());
+    sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+    evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_);
     auto paths = sampler_->GetSamples(params_.num_options);
     if (debug) {
         printf("%lu options\n", paths.size());

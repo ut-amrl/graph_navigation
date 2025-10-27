@@ -39,51 +39,36 @@ using navigation::MotionLimits;
 
 namespace motion_primitives {
 
-float ConstantCurvatureArc::Length() const {
-  return length;
-}
+float ConstantCurvatureArc::Length() const { return length; }
 
-float ConstantCurvatureArc::FPL() const {
-  return fpl;
-}
+float ConstantCurvatureArc::FPL() const { return fpl; }
 
-float ConstantCurvatureArc::AngularLength() const {
-  return angular_length;
-}
+float ConstantCurvatureArc::AngularLength() const { return angular_length; }
 
-float ConstantCurvatureArc::Clearance() const {
-  return clearance;
-}
+float ConstantCurvatureArc::Clearance() const { return clearance; }
 
-void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits,
-                                       const MotionLimits& angular_limits,
-                                       const float dt,
-                                       const Vector2f& vel,
-                                       const float ang_vel,
-                                       Vector2f& vel_cmd,
+void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits, const MotionLimits& angular_limits,
+                                       const float dt, const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
                                        float& ang_vel_cmd) const {
-  vel_cmd.y() = 0;
-  vel_cmd.x() = Run1DTimeOptimalControl(
-      linear_limits, 0, vel.x(), length, 0, dt);
-  ang_vel_cmd = vel_cmd.x() * curvature;
+    vel_cmd.y() = 0;
+    vel_cmd.x() = Run1DTimeOptimalControl(linear_limits, 0, vel.x(), length, 0, dt);
+    ang_vel_cmd = vel_cmd.x() * curvature;
 }
 
 Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
-  const float a = Sign(curvature) * angular_length * f;
-  if (length == 0) {
-    // Pure rotational motion
-    return Pose2Df(a, Vector2f(0, 0));
-  }
-  if (fabs(curvature) < FLT_MIN) {
-    // Straight-line motion
-    return Pose2Df(0, Vector2f(f * length, 0));
-  }
-  const float r = 1.0 / curvature;
-  return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
+    const float a = Sign(curvature) * angular_length * f;
+    if (length == 0) {
+        // Pure rotational motion
+        return Pose2Df(a, Vector2f(0, 0));
+    }
+    if (fabs(curvature) < FLT_MIN) {
+        // Straight-line motion
+        return Pose2Df(0, Vector2f(f * length, 0));
+    }
+    const float r = 1.0 / curvature;
+    return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
 }
 
-Pose2Df ConstantCurvatureArc::EndPoint() const {
-  return GetIntermediateState(1.0);
-}
+Pose2Df ConstantCurvatureArc::EndPoint() const { return GetIntermediateState(1.0); }
 
 }  // namespace motion_primitives

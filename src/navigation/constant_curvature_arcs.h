@@ -19,7 +19,6 @@
 */
 //========================================================================
 
-
 #include <memory>
 #include <vector>
 
@@ -34,47 +33,42 @@
 namespace motion_primitives {
 
 struct ConstantCurvatureArc : PathRolloutBase {
-  ~ConstantCurvatureArc() = default;
+    ~ConstantCurvatureArc() = default;
 
-  // Length of the path rollout.
-  float Length() const override;
+    // Length of the path rollout.
+    float Length() const override;
 
-  // FPL
-  float FPL() const override;
+    // FPL
+    float FPL() const override;
 
-  // Angular distance traversed.
-  float AngularLength() const override;
+    // Angular distance traversed.
+    float AngularLength() const override;
 
-  // Clearance along path.
-  float Clearance() const override;
+    // Clearance along path.
+    float Clearance() const override;
 
-  // Default constructor.
-  ConstantCurvatureArc() : curvature(0), length(0), angular_length(0) {}
+    // Default constructor.
+    ConstantCurvatureArc() : curvature(0), length(0), angular_length(0) {}
 
-  // Explicit constructor from curvature.
-  explicit ConstantCurvatureArc(float curvature) : 
-      curvature(curvature), length(0), angular_length(0) {}
+    // Explicit constructor from curvature.
+    explicit ConstantCurvatureArc(float curvature) : curvature(curvature), length(0), angular_length(0) {}
 
-  // The pose of the robot at the end of the path rollout.
-  pose_2d::Pose2Df EndPoint() const override;
+    // The pose of the robot at the end of the path rollout.
+    pose_2d::Pose2Df EndPoint() const override;
 
-  pose_2d::Pose2Df GetIntermediateState(float f) const override;
+    pose_2d::Pose2Df GetIntermediateState(float f) const override;
 
-  // The pose of the robot at the end of the path rollout.
-  void GetControls(const navigation::MotionLimits& linear_limits,
-                   const navigation::MotionLimits& angular_limits,
-                   const float dt,
-                   const Eigen::Vector2f& linear_vel,
-                   const float angular_vel,
-                   Eigen::Vector2f& vel_cmd,
-                   float& ang_vel_cmd) const override;
+    // The pose of the robot at the end of the path rollout.
+    void GetControls(const navigation::MotionLimits& linear_limits, const navigation::MotionLimits& angular_limits,
+                     const float dt, const Eigen::Vector2f& linear_vel, const float angular_vel,
+                     Eigen::Vector2f& vel_cmd, float& ang_vel_cmd) const override;
 
-  float curvature;
-  float length;
-  float fpl;
-  float angular_length;
-  float clearance;
-  Eigen::Vector2f obstruction;
+    float curvature;
+    float length;
+    float fpl;
+    float angular_length;
+    float clearance;
+    Eigen::Vector2f obstruction;
 };
 
 }  // namespace motion_primitives
