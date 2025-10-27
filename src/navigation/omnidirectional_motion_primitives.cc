@@ -41,21 +41,21 @@ using namespace math_util;
 
 namespace motion_primitives {
 
-// OmnidirectionalMove implementation
-float OmnidirectionalMove::Length() const { return length; }
+// OmnidirectionalMovePath implementation
+float OmnidirectionalMovePath::Length() const { return length; }
 
-float OmnidirectionalMove::FPL() const { return fpl; }
+float OmnidirectionalMovePath::FPL() const { return fpl; }
 
-float OmnidirectionalMove::AngularLength() const {
+float OmnidirectionalMovePath::AngularLength() const {
     return 0.0f;  // No angular movement for straight line motion
 }
 
-float OmnidirectionalMove::Clearance() const { return clearance; }
+float OmnidirectionalMovePath::Clearance() const { return clearance; }
 
-void OmnidirectionalMove::GetControls(const navigation::MotionLimits& linear_limits,
-                                      const navigation::MotionLimits& angular_limits, const float dt,
-                                      const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
-                                      float& ang_vel_cmd) const {
+void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear_limits,
+                                          const navigation::MotionLimits& angular_limits, const float dt,
+                                          const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
+                                          float& ang_vel_cmd) const {
     // Calculate velocity component along the path direction
     const float velocity_along_path = vel.dot(direction);
 
@@ -92,7 +92,7 @@ void OmnidirectionalMove::GetControls(const navigation::MotionLimits& linear_lim
     }
 }
 
-Pose2Df OmnidirectionalMove::GetIntermediateState(float f) const {
+Pose2Df OmnidirectionalMovePath::GetIntermediateState(float f) const {
     if (do_ang_toc) {
         // Position: straight line movement
         // Orientation: gradually rotate to face the direction of motion
@@ -104,12 +104,12 @@ Pose2Df OmnidirectionalMove::GetIntermediateState(float f) const {
     }
 }
 
-Pose2Df OmnidirectionalMove::EndPoint() const { return GetIntermediateState(1.0); }
+Pose2Df OmnidirectionalMovePath::EndPoint() const { return GetIntermediateState(1.0); }
 
 // OmniSampler implementation
 OmniSampler::OmniSampler() {}
 
-void OmniSampler::SetMaxPathLength(OmnidirectionalMove* move) {
+void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     // Distance to goal along this direction
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
 
@@ -136,7 +136,7 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
         const float angle = (2.0f * M_PI * i) / n;
         const Vector2f direction(cos(angle), sin(angle));
 
-        auto move = new OmnidirectionalMove(direction, 0, nav_params.do_ang_toc);
+        auto move = new OmnidirectionalMovePath(direction, 0, nav_params.do_ang_toc);
         SetMaxPathLength(move);
         CheckObstacles(move);
         samples.push_back(shared_ptr<PathRolloutBase>(move));
@@ -145,7 +145,7 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
     return samples;
 }
 
-void OmniSampler::CheckObstacles(OmnidirectionalMove* move) {
+void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
     // Follow exact same logic as Ackermann CheckObstacles for straight lines
     const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
     const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;

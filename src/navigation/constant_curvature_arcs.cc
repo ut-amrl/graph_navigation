@@ -39,23 +39,23 @@ using navigation::MotionLimits;
 
 namespace motion_primitives {
 
-float ConstantCurvatureArc::Length() const { return length; }
+float ConstantCurvatureArcPath::Length() const { return length; }
 
-float ConstantCurvatureArc::FPL() const { return fpl; }
+float ConstantCurvatureArcPath::FPL() const { return fpl; }
 
-float ConstantCurvatureArc::AngularLength() const { return angular_length; }
+float ConstantCurvatureArcPath::AngularLength() const { return angular_length; }
 
-float ConstantCurvatureArc::Clearance() const { return clearance; }
+float ConstantCurvatureArcPath::Clearance() const { return clearance; }
 
-void ConstantCurvatureArc::GetControls(const MotionLimits& linear_limits, const MotionLimits& angular_limits,
-                                       const float dt, const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
-                                       float& ang_vel_cmd) const {
+void ConstantCurvatureArcPath::GetControls(const MotionLimits& linear_limits, const MotionLimits& angular_limits,
+                                           const float dt, const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
+                                           float& ang_vel_cmd) const {
     vel_cmd.y() = 0;
     vel_cmd.x() = Run1DTimeOptimalControl(linear_limits, 0, vel.x(), length, 0, dt);
     ang_vel_cmd = vel_cmd.x() * curvature;
 }
 
-Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
+Pose2Df ConstantCurvatureArcPath::GetIntermediateState(float f) const {
     const float a = Sign(curvature) * angular_length * f;
     if (length == 0) {
         // Pure rotational motion
@@ -69,6 +69,6 @@ Pose2Df ConstantCurvatureArc::GetIntermediateState(float f) const {
     return Pose2Df(a, r * Vector2f(sin(a), 1.0 - cos(a)));
 }
 
-Pose2Df ConstantCurvatureArc::EndPoint() const { return GetIntermediateState(1.0); }
+Pose2Df ConstantCurvatureArcPath::EndPoint() const { return GetIntermediateState(1.0); }
 
 }  // namespace motion_primitives

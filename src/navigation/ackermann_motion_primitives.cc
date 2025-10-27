@@ -53,8 +53,8 @@ namespace motion_primitives {
 
 AckermannSampler::AckermannSampler() {}
 
-void AckermannSampler::SetMaxPathLength(ConstantCurvatureArc* path_ptr) {
-    ConstantCurvatureArc& path = *path_ptr;
+void AckermannSampler::SetMaxPathLength(ConstantCurvatureArcPath* path_ptr) {
+    ConstantCurvatureArcPath& path = *path_ptr;
     if (fabs(path.curvature) < kEpsilon) {
         path.length = min(nav_params.max_free_path_length, local_target.x());
         path.fpl = path.length;
@@ -77,9 +77,9 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     vector<shared_ptr<PathRolloutBase>> samples;
     if (false) {
         samples = {
-            shared_ptr<PathRolloutBase>(new ConstantCurvatureArc(-0.1)),
-            shared_ptr<PathRolloutBase>(new ConstantCurvatureArc(0)),
-            shared_ptr<PathRolloutBase>(new ConstantCurvatureArc(0.1)),
+            shared_ptr<PathRolloutBase>(new ConstantCurvatureArcPath(-0.1)),
+            shared_ptr<PathRolloutBase>(new ConstantCurvatureArcPath(0)),
+            shared_ptr<PathRolloutBase>(new ConstantCurvatureArcPath(0.1)),
         };
         return samples;
     }
@@ -96,7 +96,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     // printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
     if (false) {
         for (float c = c_min; c <= c_max; c += dc) {
-            auto sample = new ConstantCurvatureArc(c);
+            auto sample = new ConstantCurvatureArcPath(c);
             SetMaxPathLength(sample);
             CheckObstacles(sample);
             sample->angular_length = fabs(sample->length * c);
@@ -105,7 +105,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     } else {
         const float dc = (2.0f * CONFIG_max_curvature) / static_cast<float>(n - 1);
         for (float c = -CONFIG_max_curvature; c <= CONFIG_max_curvature; c += dc) {
-            auto sample = new ConstantCurvatureArc(c);
+            auto sample = new ConstantCurvatureArcPath(c);
             SetMaxPathLength(sample);
             CheckObstacles(sample);
             sample->angular_length = fabs(sample->length * c);
@@ -116,8 +116,8 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     return samples;
 }
 
-void AckermannSampler::CheckObstacles(ConstantCurvatureArc* path_ptr) {
-    ConstantCurvatureArc& path = *path_ptr;
+void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
+    ConstantCurvatureArcPath& path = *path_ptr;
     // How much the robot's body extends in front of its base link frame.
     const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
     // The robot's half-width.

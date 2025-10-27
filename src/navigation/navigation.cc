@@ -580,7 +580,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
         printf("%lu options\n", paths.size());
         int i = 0;
         for (auto p : paths) {
-            ConstantCurvatureArc arc = *reinterpret_cast<ConstantCurvatureArc*>(p.get());
+            ConstantCurvatureArcPath arc = *reinterpret_cast<ConstantCurvatureArcPath*>(p.get());
             printf("%3d: %7.5f %7.3f %7.3f\n", i++, arc.curvature, arc.length, arc.curvature);
         }
     }

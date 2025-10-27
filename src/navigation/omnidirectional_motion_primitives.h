@@ -27,8 +27,8 @@
 namespace motion_primitives {
 
 // Omnidirectional motion primitive - straight line movement in x-y plane
-struct OmnidirectionalMove : PathRolloutBase {
-    ~OmnidirectionalMove() = default;
+struct OmnidirectionalMovePath : PathRolloutBase {
+    ~OmnidirectionalMovePath() = default;
 
     float Length() const override;
     float FPL() const override;
@@ -41,10 +41,10 @@ struct OmnidirectionalMove : PathRolloutBase {
                      Eigen::Vector2f& vel_cmd, float& ang_vel_cmd) const override;
 
     // Default constructor
-    OmnidirectionalMove() : direction(0, 0), length(0), fpl(0), clearance(0), do_ang_toc(false) {}
+    OmnidirectionalMovePath() : direction(0, 0), length(0), fpl(0), clearance(0), do_ang_toc(false) {}
 
     // Constructor for straight line movement
-    OmnidirectionalMove(const Eigen::Vector2f& dir, float len, bool ang_toc = false)
+    OmnidirectionalMovePath(const Eigen::Vector2f& dir, float len, bool ang_toc = false)
         : direction(dir.normalized()), length(len), fpl(len), clearance(0), do_ang_toc(ang_toc) {}
 
     Eigen::Vector2f direction;    // Unit vector for movement direction
@@ -60,8 +60,8 @@ struct OmniSampler : PathRolloutSamplerBase {
     std::vector<std::shared_ptr<PathRolloutBase>> GetSamples(int n) override;
     OmniSampler();
 
-    void CheckObstacles(OmnidirectionalMove* move);
-    void SetMaxPathLength(OmnidirectionalMove* move);
+    void CheckObstacles(OmnidirectionalMovePath* move);
+    void SetMaxPathLength(OmnidirectionalMovePath* move);
 };
 
 }  // namespace motion_primitives

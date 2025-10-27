@@ -45,9 +45,9 @@ struct AckermannSampler : PathRolloutSamplerBase {
 
     // Limit the maximum path length to the closest point of approach to the local
     // target.
-    void SetMaxPathLength(ConstantCurvatureArc* path);
+    void SetMaxPathLength(ConstantCurvatureArcPath* path);
 
-    void CheckObstacles(ConstantCurvatureArc* path);
+    void CheckObstacles(ConstantCurvatureArcPath* path);
 };
 
 }  // namespace motion_primitives

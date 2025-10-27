@@ -32,8 +32,8 @@
 
 namespace motion_primitives {
 
-struct ConstantCurvatureArc : PathRolloutBase {
-    ~ConstantCurvatureArc() = default;
+struct ConstantCurvatureArcPath : PathRolloutBase {
+    ~ConstantCurvatureArcPath() = default;
 
     // Length of the path rollout.
     float Length() const override;
@@ -48,10 +48,10 @@ struct ConstantCurvatureArc : PathRolloutBase {
     float Clearance() const override;
 
     // Default constructor.
-    ConstantCurvatureArc() : curvature(0), length(0), angular_length(0) {}
+    ConstantCurvatureArcPath() : curvature(0), length(0), angular_length(0) {}
 
     // Explicit constructor from curvature.
-    explicit ConstantCurvatureArc(float curvature) : curvature(curvature), length(0), angular_length(0) {}
+    explicit ConstantCurvatureArcPath(float curvature) : curvature(curvature), length(0), angular_length(0) {}
 
     // The pose of the robot at the end of the path rollout.
     pose_2d::Pose2Df EndPoint() const override;

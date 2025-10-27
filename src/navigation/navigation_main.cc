@@ -625,12 +625,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
 
         for (const auto& rollout : path_rollouts) {
-            const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(rollout.get());
+            const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(rollout.get());
             if (arc) {
                 visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(), 0x0000FF, false,
                                               local_viz_msg_);
             }
-            const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(rollout.get());
+            const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(rollout.get());
             if (omni) {
                 // For omni, draw straight line in the direction of motion
                 Eigen::Vector2f endpoint = omni->EndPoint().translation;
@@ -639,12 +639,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         }
 
         if (best_option != nullptr) {
-            const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
+            const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(best_option.get());
             if (best_arc) {
                 visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(), 0xFF0000,
                                               true, local_viz_msg_);
             }
-            const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
+            const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_option.get());
             if (best_omni) {
                 Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
                 visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
