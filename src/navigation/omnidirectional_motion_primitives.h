@@ -36,25 +36,23 @@ struct OmnidirectionalMove : PathRolloutBase {
     float Clearance() const override;
     pose_2d::Pose2Df EndPoint() const override;
     pose_2d::Pose2Df GetIntermediateState(float f) const override;
-    void GetControls(const navigation::MotionLimits& linear_limits,
-                     const navigation::MotionLimits& angular_limits,
-                     const float dt,
-                     const Eigen::Vector2f& linear_vel,
-                     const float angular_vel,
-                     Eigen::Vector2f& vel_cmd,
-                     float& ang_vel_cmd) const override;
+    void GetControls(const navigation::MotionLimits& linear_limits, const navigation::MotionLimits& angular_limits,
+                     const float dt, const Eigen::Vector2f& linear_vel, const float angular_vel,
+                     Eigen::Vector2f& vel_cmd, float& ang_vel_cmd) const override;
 
     // Default constructor
-    OmnidirectionalMove() : direction(0, 0), length(0), fpl(0), clearance(0) {}
+    OmnidirectionalMove() : direction(0, 0), length(0), fpl(0), clearance(0), do_ang_toc(false) {}
 
     // Constructor for straight line movement
-    OmnidirectionalMove(const Eigen::Vector2f& dir, float len) : direction(dir.normalized()), length(len), fpl(len), clearance(0) {}
+    OmnidirectionalMove(const Eigen::Vector2f& dir, float len, bool ang_toc = false)
+        : direction(dir.normalized()), length(len), fpl(len), clearance(0), do_ang_toc(ang_toc) {}
 
     Eigen::Vector2f direction;    // Unit vector for movement direction
     float length;                 // Distance to travel
     float fpl;                    // Free path length
     float clearance;              // Minimum clearance to obstacles
     Eigen::Vector2f obstruction;  // Location of closest obstacle
+    bool do_ang_toc;              // Whether to use 1D TOC for angular motion
 };
 
 // Omnidirectional path rollout sampler

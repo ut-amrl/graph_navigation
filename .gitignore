@@ -12,6 +12,7 @@ srv_gen/
 
 # IDE and Editor files
 .vscode/
+.clang-format
 .clangd/
 compile_commands.json
 *.sublime-workspace

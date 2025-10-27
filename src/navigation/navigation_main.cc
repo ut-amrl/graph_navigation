@@ -45,7 +45,11 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <tf2/LinearMath/Transform.h>
+#if __has_include(<tf2_geometry_msgs/tf2_geometry_msgs.hpp>)
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#else
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#endif
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -86,6 +90,7 @@ DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
+DEFINE_bool(do_ang_toc, false, "Whether to use 1D TOC for angular motion in omni mode");
 
 // Configuration parameters
 CONFIG_STRINGLIST(laser_topics, "NavigationParameters.laser_topics");
@@ -129,19 +134,19 @@ CONFIG_STRING(goto_topic, "NavigationParameters.goto_topic");
 CONFIG_STRING(goto_amrl_topic, "NavigationParameters.goto_amrl_topic");
 CONFIG_STRING(reset_nav_goals_topic, "NavigationParameters.reset_nav_goals_topic");
 CONFIG_STRING(halt_topic, "NavigationParameters.halt_topic");
-CONFIG_STRING(override_topic, "NavigationParameters.override_topic");
 
 class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
-    NavigationNode() : Node("navigation"),
-                       tf_buffer_(this->get_clock()),
-                       tf_listener_(tf_buffer_),
-                       run_(true),
-                       enabled_(false),
-                       received_odom_(false),
-                       received_laser_(false),
-                       current_angle_(0.0),
-                       goal_angle_(0.0) {
+    NavigationNode()
+        : Node("navigation"),
+          tf_buffer_(this->get_clock()),
+          tf_listener_(tf_buffer_),
+          run_(true),
+          enabled_(false),
+          received_odom_(false),
+          received_laser_(false),
+          current_angle_(0.0),
+          goal_angle_(0.0) {
         // Initialize maps directory
         if (FLAGS_maps_dir.empty()) {
             try {
@@ -171,36 +176,32 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         global_viz_msg_ = visualization::NewVisualizationMessage("map", "navigation_global");
 
         // Create publishers
-        ackermann_drive_pub_ = this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(
-            CONFIG_ackermann_drive_topic, 1);
-        twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
-            FLAGS_twist_drive_topic, 1);
-        status_pub_ = this->create_publisher<amrl_msgs::msg::NavStatusMsg>(
-            CONFIG_nav_status_topic, 1);
-        viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(
-            CONFIG_visualization_topic, 1);
-        fp_pcl_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud>(
-            CONFIG_fp_pcl_topic, 1);
+        ackermann_drive_pub_ =
+            this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(CONFIG_ackermann_drive_topic, 1);
+        twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(FLAGS_twist_drive_topic, 1);
+        status_pub_ = this->create_publisher<amrl_msgs::msg::NavStatusMsg>(CONFIG_nav_status_topic, 1);
+        viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(CONFIG_visualization_topic, 1);
+        fp_pcl_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud>(CONFIG_fp_pcl_topic, 1);
         path_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_path_topic, 1);
         carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_carrot_topic, 1);
 
         // Create service
         nav_service_ = this->create_service<graph_navigation::srv::GraphNav>(
-            "GraphNav", std::bind(&NavigationNode::PlanServiceCallback, this,
-                                  std::placeholders::_1, std::placeholders::_2));
+            "GraphNav",
+            std::bind(&NavigationNode::PlanServiceCallback, this, std::placeholders::_1, std::placeholders::_2));
 
         // Create subscribers
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             CONFIG_odom_topic, 1, std::bind(&NavigationNode::OdometryCallback, this, std::placeholders::_1));
 
         localization_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
-            CONFIG_localization_topic, 1, std::bind(&NavigationNode::LocalizationCallback, this, std::placeholders::_1));
+            CONFIG_localization_topic, 1,
+            std::bind(&NavigationNode::LocalizationCallback, this, std::placeholders::_1));
 
         // Create laser subscribers
         for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
             auto laser_sub = this->create_subscription<sensor_msgs::msg::LaserScan>(
-                CONFIG_laser_topics[i], 1,
-                [this, i](const sensor_msgs::msg::LaserScan::SharedPtr msg) {
+                CONFIG_laser_topics[i], 1, [this, i](const sensor_msgs::msg::LaserScan::SharedPtr msg) {
                     LaserCallback(msg, CONFIG_laser_topics[i]);
                 });
             laser_subs_.push_back(laser_sub);
@@ -213,7 +214,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             CONFIG_goto_amrl_topic, 1, std::bind(&NavigationNode::GoToCallbackAMRL, this, std::placeholders::_1));
 
         reset_nav_goals_sub_ = this->create_subscription<std_msgs::msg::Empty>(
-            CONFIG_reset_nav_goals_topic, 1, std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
+            CONFIG_reset_nav_goals_topic, 1,
+            std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
 
         enabler_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_enable_topic, 1, std::bind(&NavigationNode::EnablerCallback, this, std::placeholders::_1));
@@ -221,23 +223,17 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
 
-        override_sub_ = this->create_subscription<amrl_msgs::msg::Pose2Df>(
-            CONFIG_override_topic, 1, std::bind(&NavigationNode::OverrideCallback, this, std::placeholders::_1));
-
         // Initialize visualization markers
         InitSimulatorVizMarkers();
 
         // Create timer for main loop
-        timer_ = this->create_wall_timer(
-            std::chrono::duration<double>(params_.dt),
-            std::bind(&NavigationNode::TimerCallback, this));
+        timer_ = this->create_wall_timer(std::chrono::duration<double>(params_.dt),
+                                         std::bind(&NavigationNode::TimerCallback, this));
 
         RCLCPP_INFO(this->get_logger(), "Navigation node initialized");
     }
 
-    ~NavigationNode() {
-        run_ = false;
-    }
+    ~NavigationNode() { run_ = false; }
 
    private:
     // ROS2 components
@@ -262,7 +258,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_nav_goals_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr enabler_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr halt_sub_;
-    rclcpp::Subscription<amrl_msgs::msg::Pose2Df>::SharedPtr override_sub_;
 
     // Service
     rclcpp::Service<graph_navigation::srv::GraphNav>::SharedPtr nav_service_;
@@ -305,9 +300,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     std::unordered_map<std::string, LaserCache> laser_caches_;
 
     // Callback functions
-    void EnablerCallback(const std_msgs::msg::Bool::SharedPtr msg) {
-        enabled_ = msg->data;
-    }
+    void EnablerCallback(const std_msgs::msg::Bool::SharedPtr msg) { enabled_ = msg->data; }
 
     void OdometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
         received_odom_ = true;
@@ -355,14 +348,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         navigation_.ResetNavGoals();
     }
 
-    void HaltCallback(const std_msgs::msg::Bool::SharedPtr msg) {
-        navigation_.Pause();
-    }
-
-    void OverrideCallback(const amrl_msgs::msg::Pose2Df::SharedPtr msg) {
-        const Eigen::Vector2f loc(msg->x, msg->y);
-        navigation_.SetOverride(loc, msg->theta);
-    }
+    void HaltCallback(const std_msgs::msg::Bool::SharedPtr msg) { navigation_.Pause(); }
 
     void PlanServiceCallback(const std::shared_ptr<graph_navigation::srv::GraphNav::Request> request,
                              std::shared_ptr<graph_navigation::srv::GraphNav::Response> response) {
@@ -391,10 +377,11 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
         if (nav_succeeded) {
             // Publish visualizations and commands
-            PublishForwardPredictedPCL(navigation_.GetPredictedCloud());
+            PublishForwardPredictedPCL(navigation_.fp_point_cloud_);
             DrawRobot();
 
-            if (navigation_.GetNavStatusUint8() != static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+            if (static_cast<uint8_t>(navigation_.nav_state_) !=
+                static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
                 DrawTarget();
                 DrawPathOptions();
             }
@@ -419,12 +406,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     navigation::Odom OdomHandler(const nav_msgs::msg::Odometry& msg) {
         navigation::Odom odom;
         odom.time = rclcpp::Time(msg.header.stamp).seconds();
-        odom.orientation = {static_cast<float>(msg.pose.pose.orientation.w),
-                            static_cast<float>(msg.pose.pose.orientation.x),
-                            static_cast<float>(msg.pose.pose.orientation.y),
-                            static_cast<float>(msg.pose.pose.orientation.z)};
-        odom.position = {static_cast<float>(msg.pose.pose.position.x),
-                         static_cast<float>(msg.pose.pose.position.y),
+        odom.orientation = {
+            static_cast<float>(msg.pose.pose.orientation.w), static_cast<float>(msg.pose.pose.orientation.x),
+            static_cast<float>(msg.pose.pose.orientation.y), static_cast<float>(msg.pose.pose.orientation.z)};
+        odom.position = {static_cast<float>(msg.pose.pose.position.x), static_cast<float>(msg.pose.pose.position.y),
                          static_cast<float>(msg.pose.pose.position.z)};
         return odom;
     }
@@ -432,8 +417,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void LaserHandler(const sensor_msgs::msg::LaserScan& msg, const std::string& topic) {
         auto& cache = laser_caches_[topic];
 
-        if (cache.dtheta != msg.angle_increment ||
-            cache.angle_min != msg.angle_min ||
+        if (cache.dtheta != msg.angle_increment || cache.angle_min != msg.angle_min ||
             cache.rays.size() != msg.ranges.size()) {
             cache.dtheta = msg.angle_increment;
             cache.angle_min = msg.angle_min;
@@ -451,15 +435,16 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         point_cloud_.resize(start_idx + cache.rays.size());
 
         for (size_t i = 0; i < cache.rays.size(); ++i) {
-            const float r = ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ? msg.ranges[i] : msg.range_max);
+            const float r =
+                ((msg.ranges[i] > msg.range_min && msg.ranges[i] < msg.range_max) ? msg.ranges[i] : msg.range_max);
             point_cloud_[start_idx + i] = (cache.frame_tf * (r * cache.rays[i])).head<2>();
         }
     }
 
     void RetrieveTransform(const std_msgs::msg::Header& msg, Eigen::Affine3f& frame_tf) {
         try {
-            geometry_msgs::msg::TransformStamped transform_stamped = tf_buffer_.lookupTransform(
-                CONFIG_laser_frame, msg.frame_id, tf2::TimePointZero);
+            geometry_msgs::msg::TransformStamped transform_stamped =
+                tf_buffer_.lookupTransform(CONFIG_laser_frame, msg.frame_id, tf2::TimePointZero);
 
             tf2::Transform tf_transform;
             tf2::fromMsg(transform_stamped.transform, tf_transform);
@@ -480,7 +465,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void PublishNavStatus() {
         auto status = std::make_unique<amrl_msgs::msg::NavStatusMsg>();
         status->header.stamp = this->get_clock()->now();
-        status->status = navigation_.GetNavStatusUint8();
+        status->status = static_cast<uint8_t>(navigation_.nav_state_);
         status_pub_->publish(std::move(status));
     }
 
@@ -522,12 +507,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Update command history
         navigation::Twist twist;
         twist.time = this->get_clock()->now().seconds();
-        twist.linear = {static_cast<float>(cmd_lin_x),
-                        static_cast<float>(cmd_lin_y),
-                        0.0f};
-        twist.angular = {0.0f,
-                         0.0f,
-                         static_cast<float>(cmd_ang_z)};
+        twist.linear = {static_cast<float>(cmd_lin_x), static_cast<float>(cmd_lin_y), 0.0f};
+        twist.angular = {0.0f, 0.0f, static_cast<float>(cmd_ang_z)};
         navigation_.UpdateCommandHistory(twist);
     }
 
@@ -544,7 +525,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void PublishPath() {
-        const auto path = navigation_.GetPlanPath();
+        const auto path = navigation_.plan_path_;
         if (path.size() >= 2) {
             auto path_msg = std::make_unique<nav_msgs::msg::Path>();
             path_msg->header.stamp = this->get_clock()->now();
@@ -567,14 +548,14 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             }
 
             // Draw global path
-            const auto global_path = navigation_.GetGlobalPath();
+            const auto global_path = navigation_.global_plan_path_;
             for (size_t i = 1; i < global_path.size(); i++) {
                 visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, global_viz_msg_);
             }
 
             // Draw carrot
             Eigen::Vector2f carrot;
-            if (navigation_.GetLocalCarrot(carrot)) {
+            if (navigation_.GetCarrot(carrot)) {
                 auto carrot_msg = std::make_unique<nav_msgs::msg::Path>();
                 carrot_msg->header.stamp = this->get_clock()->now();
                 carrot_msg->header.frame_id = "map";
@@ -593,8 +574,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawTarget() {
-        const float carrot_dist = navigation_.GetCarrotDist();
-        const Eigen::Vector2f target = navigation_.GetTarget();
+        const float carrot_dist = navigation_.params_.carrot_dist;
+        const Eigen::Vector2f target = navigation_.local_target_;
 
         visualization::DrawArc(Eigen::Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
         visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
@@ -609,10 +590,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawRobot() {
-        const float kRobotLength = navigation_.GetRobotLength();
-        const float kRobotWidth = navigation_.GetRobotWidth();
+        const float kRobotLength = navigation_.params_.robot_length;
+        const float kRobotWidth = navigation_.params_.robot_width;
         const float kRearAxleOffset = 0.0;
-        const float kObstacleMargin = navigation_.GetObstacleMargin();
+        const float kObstacleMargin = navigation_.params_.obstacle_margin;
 
         // Draw robot with margin
         {
@@ -638,15 +619,14 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawPathOptions() {
-        std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts =
-            navigation_.GetLastPathOptions();
-        std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.GetOption();
+        std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.last_options_;
+        std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
 
         for (const auto& rollout : path_rollouts) {
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(rollout.get());
             if (arc) {
-                visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(),
-                                              0x0000FF, false, local_viz_msg_);
+                visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(), 0x0000FF, false,
+                                              local_viz_msg_);
             }
             const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(rollout.get());
             if (omni) {
@@ -659,8 +639,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         if (best_option != nullptr) {
             const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArc*>(best_option.get());
             if (best_arc) {
-                visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(),
-                                              0xFF0000, true, local_viz_msg_);
+                visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(), 0xFF0000,
+                                              true, local_viz_msg_);
             }
             const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMove*>(best_option.get());
             if (best_omni) {
@@ -669,7 +649,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
                 // Draw clearance corridor along the chosen direction
                 const float clearance = best_omni->Clearance();
-                const float length = best_omni->Length();
                 // Perpendicular vector to the direction (rotated 90 degrees)
                 Eigen::Vector2f perp(-best_omni->direction.y(), best_omni->direction.x());
                 Eigen::Vector2f clearance_offset = clearance * perp;
@@ -693,10 +672,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void LoadConfig(navigation::NavigationParameters* params) {
         config_reader::ConfigReader reader({FLAGS_robot_config});
         params->dt = CONFIG_dt;
-        params->linear_limits = navigation::MotionLimits(
-            CONFIG_max_linear_accel, CONFIG_max_linear_decel, CONFIG_max_linear_speed);
-        params->angular_limits = navigation::MotionLimits(
-            CONFIG_max_angular_accel, CONFIG_max_angular_decel, CONFIG_max_angular_speed);
+        params->linear_limits =
+            navigation::MotionLimits(CONFIG_max_linear_accel, CONFIG_max_linear_decel, CONFIG_max_linear_speed);
+        params->angular_limits =
+            navigation::MotionLimits(CONFIG_max_angular_accel, CONFIG_max_angular_decel, CONFIG_max_angular_speed);
         params->system_latency = CONFIG_system_latency;
         params->obstacle_margin = CONFIG_obstacle_margin;
         params->num_options = CONFIG_num_options;
@@ -715,6 +694,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->carrot_dist = CONFIG_carrot_dist;
         params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
         params->motion_primitives_mode = CONFIG_motion_primitives_mode;
+        params->do_ang_toc = FLAGS_do_ang_toc;
     }
 };
 

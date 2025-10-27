@@ -41,7 +41,6 @@ NavigationParameters = {
   goto_amrl_topic = "/move_base_simple/goal_amrl";
   reset_nav_goals_topic = "/reset_nav_goals";
   halt_topic = "halt_robot";
-  override_topic = "nav_override";
   ackermann_drive_topic = "ackermann_curvature_drive";
   nav_status_topic = "navigation_goal_status";
   visualization_topic = "visualization";

@@ -38,15 +38,10 @@ struct MotionLimits {
     // NOTE: Must be positive!
     float max_speed;
 
-    MotionLimits() : max_acceleration(0),
-                     max_deceleration(0),
-                     max_speed(0) {}
+    MotionLimits() : max_acceleration(0), max_deceleration(0), max_speed(0) {}
 
-    MotionLimits(float max_acceleration,
-                 float max_deceleration,
-                 float max_speed) : max_acceleration(max_acceleration),
-                                    max_deceleration(max_deceleration),
-                                    max_speed(max_speed) {}
+    MotionLimits(float max_acceleration, float max_deceleration, float max_speed)
+        : max_acceleration(max_acceleration), max_deceleration(max_deceleration), max_speed(max_speed) {}
 };
 
 struct NavigationParameters {
@@ -95,33 +90,35 @@ struct NavigationParameters {
 
     // Motion primitives mode: "ackermann" or "omni"
     std::string motion_primitives_mode;
+    bool do_ang_toc;
 
     cv::Mat K;
     cv::Mat D;
     cv::Mat H;
 
     // Default constructor, just set defaults.
-    NavigationParameters() : dt(0.025),
-                             linear_limits(0.5, 0.5, 0.5),
-                             angular_limits(0.5, 0.5, 1.0),
-                             system_latency(0.24),
-                             obstacle_margin(0.15),
-                             num_options(41),
-                             robot_width(0.44),
-                             robot_length(0.5),
-                             base_link_offset(0),
-                             max_free_path_length(10.0),
-                             max_clearance(1.0),
-                             use_map_speed(true),
-                             can_traverse_stairs(false),
-                             target_dist_tolerance(0.1),
-                             target_vel_tolerance(0.1),
-                             target_angle_tolerance(0.05),
-                             evaluator_type("linear"),
-                             carrot_dist(2),
-                             recovery_carrot_dist(0.5),
-                             motion_primitives_mode("ackermann") {
-    }
+    NavigationParameters()
+        : dt(0.025),
+          linear_limits(0.5, 0.5, 0.5),
+          angular_limits(0.5, 0.5, 1.0),
+          system_latency(0.24),
+          obstacle_margin(0.15),
+          num_options(41),
+          robot_width(0.44),
+          robot_length(0.5),
+          base_link_offset(0),
+          max_free_path_length(10.0),
+          max_clearance(1.0),
+          use_map_speed(true),
+          can_traverse_stairs(false),
+          target_dist_tolerance(0.1),
+          target_vel_tolerance(0.1),
+          target_angle_tolerance(0.05),
+          evaluator_type("linear"),
+          carrot_dist(2),
+          recovery_carrot_dist(0.5),
+          motion_primitives_mode("ackermann"),
+          do_ang_toc(false) {}
 };
 }  // namespace navigation
 

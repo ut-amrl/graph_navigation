@@ -42,76 +42,72 @@ using namespace math_util;
 namespace motion_primitives {
 
 // OmnidirectionalMove implementation
-float OmnidirectionalMove::Length() const {
-    return length;
-}
+float OmnidirectionalMove::Length() const { return length; }
 
-float OmnidirectionalMove::FPL() const {
-    return fpl;
-}
+float OmnidirectionalMove::FPL() const { return fpl; }
 
 float OmnidirectionalMove::AngularLength() const {
     return 0.0f;  // No angular movement for straight line motion
 }
 
-float OmnidirectionalMove::Clearance() const {
-    return clearance;
-}
+float OmnidirectionalMove::Clearance() const { return clearance; }
 
 void OmnidirectionalMove::GetControls(const navigation::MotionLimits& linear_limits,
-                                      const navigation::MotionLimits& angular_limits,
-                                      const float dt,
-                                      const Vector2f& vel,
-                                      const float ang_vel,
-                                      Vector2f& vel_cmd,
+                                      const navigation::MotionLimits& angular_limits, const float dt,
+                                      const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
                                       float& ang_vel_cmd) const {
     // Calculate velocity component along the path direction
     const float velocity_along_path = vel.dot(direction);
 
     // Use 1D Time Optimal Control: accelerate/decelerate to reach target distance
-    const float speed = Run1DTimeOptimalControl(
-        linear_limits, 0, velocity_along_path, length, 0, dt);
+    const float speed = Run1DTimeOptimalControl(linear_limits, 0, velocity_along_path, length, 0, dt);
 
     // Command velocity in the direction of motion (2D velocity vector)
     vel_cmd = speed * direction;
 
-    // Simultaneously apply 1D TOC for angular rotation to face the direction of motion
-    // Target angle: direction of motion
-    const float target_angle = atan2(direction.y(), direction.x());
-    // Current angle is 0 in robot frame, so angle difference = target_angle
-    const float dTheta = AngleMod(target_angle);
+    if (do_ang_toc) {
+        // Simultaneously apply 1D TOC for angular rotation to face the direction of motion
+        // Target angle: direction of motion
+        const float target_angle = atan2(direction.y(), direction.x());
+        // Current angle is 0 in robot frame, so angle difference = target_angle
+        const float dTheta = AngleMod(target_angle);
 
-    // Use 1D TOC with sign handling
-    const float s = Sign(dTheta);
-    if (ang_vel * dTheta < 0.0f) {
-        // Turning the wrong way - decelerate first
-        const float dv = dt * angular_limits.max_acceleration;
-        if (fabs(ang_vel) < dv) {
-            ang_vel_cmd = 0;
+        // Use 1D TOC with sign handling
+        const float s = Sign(dTheta);
+        if (ang_vel * dTheta < 0.0f) {
+            // Turning the wrong way - decelerate first
+            const float dv = dt * angular_limits.max_acceleration;
+            if (fabs(ang_vel) < dv) {
+                ang_vel_cmd = 0;
+            } else {
+                ang_vel_cmd = ang_vel - Sign(ang_vel) * dv;
+            }
         } else {
-            ang_vel_cmd = ang_vel - Sign(ang_vel) * dv;
+            // Apply 1D TOC to reach target orientation
+            ang_vel_cmd = s * Run1DTimeOptimalControl(angular_limits, 0, s * ang_vel, s * dTheta, 0, dt);
         }
     } else {
-        // Apply 1D TOC to reach target orientation
-        ang_vel_cmd = s * Run1DTimeOptimalControl(
-                              angular_limits, 0, s * ang_vel, s * dTheta, 0, dt);
+        // No rotation during straight-line motion
+        ang_vel_cmd = 0;
     }
 }
 
 Pose2Df OmnidirectionalMove::GetIntermediateState(float f) const {
-    // Position: straight line movement
-    // Orientation: gradually rotate to face the direction of motion
-    const float target_angle = atan2(direction.y(), direction.x());
-    return Pose2Df(f * target_angle, f * length * direction);
+    if (do_ang_toc) {
+        // Position: straight line movement
+        // Orientation: gradually rotate to face the direction of motion
+        const float target_angle = atan2(direction.y(), direction.x());
+        return Pose2Df(f * target_angle, f * length * direction);
+    } else {
+        // Straight line movement only
+        return Pose2Df(0, f * length * direction);
+    }
 }
 
-Pose2Df OmnidirectionalMove::EndPoint() const {
-    return GetIntermediateState(1.0);
-}
+Pose2Df OmnidirectionalMove::EndPoint() const { return GetIntermediateState(1.0); }
 
 // OmniSampler implementation
-OmniSampler::OmniSampler() {
-}
+OmniSampler::OmniSampler() {}
 
 void OmniSampler::SetMaxPathLength(OmnidirectionalMove* move) {
     // Distance to goal along this direction
@@ -140,7 +136,7 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
         const float angle = (2.0f * M_PI * i) / n;
         const Vector2f direction(cos(angle), sin(angle));
 
-        auto move = new OmnidirectionalMove(direction, 0);
+        auto move = new OmnidirectionalMove(direction, 0, nav_params.do_ang_toc);
         SetMaxPathLength(move);
         CheckObstacles(move);
         samples.push_back(shared_ptr<PathRolloutBase>(move));
@@ -193,8 +189,7 @@ void OmniSampler::CheckObstacles(OmnidirectionalMove* move) {
     move->fpl = max(0.0f, move->fpl);
     move->length = min(move->fpl, move->length);
 
-    const float stopping_dist =
-        vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
+    const float stopping_dist = vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
     if (move->fpl < stopping_dist) {
         move->length = 0;
     }
