@@ -128,7 +128,6 @@ class Navigation {
     void Initialize(const NavigationParameters& params, const std::string& map_file);
     // Set path evaluator clearance weight.
     void SetEvaluatorClearanceWeight(const float weight);
-
     // Point cloud in robot frame from last laser scan observed, forward predicted for latency compensation.
     std::vector<Eigen::Vector2f> fp_point_cloud_;
     // Global path plan computed by A* planner on the navigation graph (map frame).
@@ -157,145 +156,61 @@ class Navigation {
     void LatencyTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
     // Run local obstacle avoidance planner (robot frame).
     void RunObstacleAvoidance(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-
-    // Remove commands older than latest real robot updates (odometry and LIDAR),
-    // accounting for latency (global).
-    // SUGGESTED RENAME: RemoveOldCommandsFromLatencyHistory()
+    // Remove commands older than latest real robot updates (odometry and LIDAR), for latency compensation.
     void PruneLatencyQueue();
-
-    // Perform latency compensation by forward-predicting the commands within the latency
-    // interval (global).
-    // SUGGESTED RENAME: ForwardPredictRobotState()
+    // Perform latency compensation by forward-predicting the state and observations.
     void ForwardPredict(double t);
-
-    // Run 1D time-optimal control (global).
-    // SUGGESTED RENAME: Run1DTimeOptimalControl()
-    float Run1DTOC(float x_now, float x_target, float v_now, float max_speed, float a_max, float d_max, float dt) const;
-
-    // Come to a halt (global).
-    // SUGGESTED RENAME: HaltRobot()
+    // Come to a halt.
     void Halt(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-
-    // Turn around in-place to face the next waypoint (robot frame).
-    // SUGGESTED RENAME: TurnInPlaceToFaceTarget()
+    // Turn around in-place to face local target.
     void TurnInPlace(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-
     // Draw the robot's outline for visualization (robot frame).
-    // SUGGESTED RENAME: DrawRobotOutline()
     void DrawRobot();
-
-    // Publish a status message (global).
-    // SUGGESTED RENAME: PublishNavigationStatus()
+    // Publish a status message.
     void PublishNavStatus(const Eigen::Vector2f& carrot);
-
-    // Current robot location in map frame (from localization system).
-    // USAGE: Used for global planning, carrot computation, and state updates
-    // SUGGESTED RENAME: current_robot_location_map_frame_
+    // Current robot location in map frame (from localization).
     Eigen::Vector2f robot_loc_;
-
     // Current robot orientation in map frame (from localization system).
-    // USAGE: Used for coordinate transformations and navigation state
-    // SUGGESTED RENAME: current_robot_orientation_map_frame_
     float robot_angle_;
-
-    // Current robot linear velocity in map frame (forward predicted).
-    // USAGE: Used by motion primitive sampler and control generation
-    // SUGGESTED RENAME: current_robot_velocity_map_frame_
+    // Latest robot linear velocity (forward predicted).
     Eigen::Vector2f robot_vel_;
-
-    // Current robot angular velocity (forward predicted).
-    // USAGE: Used by motion primitive sampler and control generation
-    // SUGGESTED RENAME: current_robot_angular_velocity_
+    // Latest robot angular velocity (forward predicted).
     float robot_omega_;
-
-    // Current robot location in odometry frame (from wheel encoders).
-    // USAGE: Used for latency compensation and forward prediction
-    // SUGGESTED RENAME: current_robot_location_odom_frame_
+    // Current robot location in odometry frame (from odom topic).
     Eigen::Vector2f odom_loc_;
-
-    // Current robot orientation in odometry frame (from wheel encoders).
-    // USAGE: Used for latency compensation and forward prediction
-    // SUGGESTED RENAME: current_robot_orientation_odom_frame_
+    // Current robot orientation in odometry frame (from odom topic).
     float odom_angle_;
-
-    // Newest odometry message received (odometry frame).
-    // USAGE: Used for forward prediction and latency compensation
-    // SUGGESTED RENAME: latest_odometry_message_
+    // Latest odometry message received (odometry frame).
     Odom latest_odom_msg_;
-
     // Final navigation goal location in map frame.
-    // USAGE: Target location for global planning
-    // SUGGESTED RENAME: final_goal_location_map_frame_
     Eigen::Vector2f nav_goal_loc_;
-
     // Final navigation goal orientation in map frame.
-    // USAGE: Target orientation for final approach
-    // SUGGESTED RENAME: final_goal_orientation_map_frame_
     float nav_goal_angle_;
-
-    // Indicates whether an odometry message has been received (global).
-    // USAGE: Tracks if odometry system is ready
-    // SUGGESTED RENAME: odometry_initialized_
+    // Indicates whether an odometry message has been received.
     bool odom_initialized_;
-
-    // Indicates whether localization system has been initialized (global).
-    // USAGE: Tracks if localization system is ready
-    // SUGGESTED RENAME: localization_initialized_
+    // Indicates whether localization system has been initialized.
     bool loc_initialized_;
-
-    // Odometry-reported starting location (for testing).
-    // USAGE: Used in trapezoid test for distance calculation
-    // SUGGESTED RENAME: odom_starting_location_odom_frame_
+    // Odometry-reported starting location.
     Eigen::Vector2f starting_loc_;
-
-    // Raw point cloud from last laser scan observed (robot frame).
-    // USAGE: Source data for forward prediction, not used directly by planner
-    // SUGGESTED RENAME: raw_laser_cloud_robot_frame_
+    // Raw point cloud from latest laser scan observed (robot frame).
     std::vector<Eigen::Vector2f> point_cloud_;
-
-    // Time stamp of observation of point cloud (global).
-    // USAGE: Used for latency compensation and data synchronization
-    // SUGGESTED RENAME: laser_scan_timestamp_
+    // Time stamp of observation of latest point cloud.
     double t_point_cloud_;
-
-    // Time stamp of latest odometry message (global).
-    // USAGE: Used for latency compensation and data synchronization
-    // SUGGESTED RENAME: odometry_timestamp_
+    // Time stamp of latest odometry message.
     double t_odometry_;
-
     // Directory containing navigation maps (global).
-    // USAGE: Path to map files for loading navigation graphs
-    // SUGGESTED RENAME: navigation_maps_directory_
     const std::string maps_dir_;
-
     // Planning domain for A* global path planner (map frame).
-    // USAGE: Navigation graph used for global path planning
-    // SUGGESTED RENAME: global_path_planning_domain_
     GraphDomain planning_domain_;
-
     // History of commands sent, to perform latency compensation.
-    // USAGE: Used for forward prediction and latency compensation
-    // SUGGESTED RENAME: sent_command_history_for_latency_compensation_
     std::deque<Twist> command_history_;
-
-    // Whether to enable autonomous navigation or not (global).
-    // USAGE: Controls whether navigation system is active
-    // SUGGESTED RENAME: navigation_enabled_
+    // Whether to enable autonomous navigation or not.
     bool enabled_;
-
-    // Whether or not things have been initialized (global).
-    // USAGE: Indicates if navigation system is ready to operate
-    // SUGGESTED RENAME: navigation_initialized_
+    // Whether or not things have been initialized.
     bool initialized_;
-
     // Motion primitive sampler for local planning (generates path options).
-    // USAGE: Samples different path options in robot frame for obstacle avoidance
-    // SUGGESTED RENAME: local_path_sampler_
     std::unique_ptr<motion_primitives::PathRolloutSamplerBase> sampler_;
-
     // Motion primitive evaluator for local planning (selects best path).
-    // USAGE: Evaluates and selects the best path option from sampled options
-    // SUGGESTED RENAME: local_path_evaluator_
     std::unique_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
 };
 
