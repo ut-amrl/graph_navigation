@@ -195,7 +195,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Create subscribers
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             CONFIG_odom_topic, 1, std::bind(&NavigationNode::OdometryCallback, this, std::placeholders::_1));
-
         localization_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
             CONFIG_localization_topic, 1,
             std::bind(&NavigationNode::LocalizationCallback, this, std::placeholders::_1));
@@ -335,14 +334,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         const float angle = 2.0 * atan2(msg->pose.orientation.z, msg->pose.orientation.w);
         RCLCPP_INFO(this->get_logger(), "Goal: (%f,%f) %f°", loc.x(), loc.y(), angle);
         navigation_.SetNavGoal(loc, angle);
-        navigation_.Resume();
     }
 
     void GoToCallbackAMRL(const amrl_msgs::msg::Localization2DMsg::SharedPtr msg) {
         const Eigen::Vector2f loc(msg->pose.x, msg->pose.y);
         RCLCPP_INFO(this->get_logger(), "Goal: (%f,%f) %f°", loc.x(), loc.y(), msg->pose.theta);
         navigation_.SetNavGoal(loc, msg->pose.theta);
-        navigation_.Resume();
     }
 
     void ResetNavGoalsCallback(const std_msgs::msg::Empty::SharedPtr msg) {
@@ -350,13 +347,19 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         navigation_.ResetNavGoals();
     }
 
-    void HaltCallback(const std_msgs::msg::Bool::SharedPtr msg) { navigation_.Pause(); }
+    void HaltCallback(const std_msgs::msg::Bool::SharedPtr msg) {
+        navigation_.nav_state_ = navigation::NavigationState::kStopped;
+    }
 
     void PlanServiceCallback(const std::shared_ptr<graph_navigation::srv::GraphNav::Request> request,
                              std::shared_ptr<graph_navigation::srv::GraphNav::Response> response) {
         const Eigen::Vector2f start(request->start.x, request->start.y);
         const Eigen::Vector2f end(request->end.x, request->end.y);
-        const std::vector<int> plan = navigation_.GlobalPlan(start, end);
+        auto plan_states = navigation_.Plan(start, end);
+        std::vector<int> plan;
+        for (auto& node : plan_states) {
+            plan.push_back(node.id);
+        }
         response->plan = plan;
     }
 
@@ -372,7 +375,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         Eigen::Vector2f cmd_vel(0, 0);
         float cmd_angle_vel(0);
 
-        bool nav_succeeded = navigation_.Run(this->get_clock()->now().seconds(), cmd_vel, cmd_angle_vel);
+        const double cmd_plan_start_time = this->get_clock()->now().seconds();
+        bool nav_succeeded = navigation_.Run(cmd_plan_start_time, cmd_vel, cmd_angle_vel);
 
         // Publish status
         PublishNavStatus();
@@ -400,7 +404,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             viz_pub_->publish(global_viz_msg_);
 
             // Send commands
-            SendCommand(cmd_vel, cmd_angle_vel);
+            SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
     }
 
@@ -471,7 +475,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         status_pub_->publish(std::move(status));
     }
 
-    void SendCommand(const Eigen::Vector2f& vel, float ang_vel) {
+    void SendCommand(const Eigen::Vector2f& vel, float ang_vel, double cmd_plan_start_time) {
         // Determine commanded values first to avoid use-after-move on unique_ptr
         double cmd_lin_x = 0.0;
         double cmd_lin_y = 0.0;
@@ -480,13 +484,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             cmd_lin_x = vel.x();
             cmd_lin_y = vel.y();
             cmd_ang_z = ang_vel;
-        }
-
-        // Minimal one-time debug to help trace potential crashes here
-        static int send_cmd_dbg_printed = 0;
-        if (send_cmd_dbg_printed == 0) {
-            RCLCPP_INFO(this->get_logger(), "SendCommand: vx=%.3f vy=%.3f wz=%.3f", cmd_lin_x, cmd_lin_y, cmd_ang_z);
-            send_cmd_dbg_printed = 1;
         }
 
         auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
@@ -508,7 +505,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
         // Update command history
         navigation::Twist twist;
-        twist.time = this->get_clock()->now().seconds();
+        twist.cmd_plan_start_time = cmd_plan_start_time;
+        twist.cmd_exec_start_time = cmd_plan_start_time + navigation_.params_.system_latency;
         twist.linear = {static_cast<float>(cmd_lin_x), static_cast<float>(cmd_lin_y), 0.0f};
         twist.angular = {0.0f, 0.0f, static_cast<float>(cmd_ang_z)};
         navigation_.UpdateCommandHistory(twist);
@@ -547,12 +545,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             // Draw path visualization
             for (size_t i = 1; i < path.size(); i++) {
                 visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, global_viz_msg_);
-            }
-
-            // Draw global path
-            const auto global_path = navigation_.global_plan_path_;
-            for (size_t i = 1; i < global_path.size(); i++) {
-                visualization::DrawLine(global_path[i - 1].loc, global_path[i].loc, 0xA86032, global_viz_msg_);
             }
 
             // Draw carrot
@@ -621,7 +613,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawPathOptions() {
-        std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.last_options_;
+        std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.sampled_paths_;
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
 
         for (const auto& rollout : path_rollouts) {

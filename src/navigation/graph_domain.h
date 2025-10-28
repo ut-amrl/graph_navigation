@@ -289,7 +289,6 @@ struct GraphDomain {
     }
 
     uint64_t AddDynamicState(const Eigen::Vector2f& v) {
-        static const bool kDebug = false;
         CHECK(!states.empty());
         // Find the closest Edge.
         NavigationEdge closest_edge;
@@ -324,9 +323,6 @@ struct GraphDomain {
         // Additionally, we adopt the max_speed and max_clearance of the closest edge.
         AddUndirectedEdge(pmid_id, v_id, closest_edge.max_speed, closest_edge.max_clearance, false, false);
 
-        if (kDebug) {
-            printf("Adding dynamic state %f,%f (%lu) %lu %lu %lu\n", v.x(), v.y(), v_id, p0_id, p1_id, pmid_id);
-        }
         return v_id;
     }
 
@@ -364,7 +360,6 @@ struct GraphDomain {
 
     // Load from a V2 map file.
     bool Load(const std::string& file) {
-        static const bool kDebug = false;
         printf("Loading %s...\n", file.c_str());
         std::ifstream i(file);
         json j;
@@ -391,8 +386,6 @@ struct GraphDomain {
         }
 
         printf("Loaded %s with %lu states, %lu edges\n", file.c_str(), states.size(), edges.size());
-
-        if (kDebug) DrawMap();
 
         static_edges = edges;
         static_states = states;

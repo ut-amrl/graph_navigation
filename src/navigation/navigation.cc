@@ -29,6 +29,7 @@
 #include <iostream>
 #include <fstream>
 #include <queue>
+#include <limits>
 
 #include "navigation.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -56,7 +57,9 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
+using Eigen::Affine2f;
 using Eigen::Rotation2Df;
+using Eigen::Translation2f;
 using Eigen::Vector2f;
 using navigation::MotionLimits;
 using navigation::Odom;
@@ -158,14 +161,14 @@ Navigation::Navigation()
     : robot_loc_(0, 0),
       robot_angle_(0),
       robot_vel_(0, 0),
-      robot_omega_(0),
       nav_state_(NavigationState::kStopped),
+      robot_omega_(0),
       nav_goal_loc_(0, 0),
       nav_goal_angle_(0),
       odom_initialized_(false),
       loc_initialized_(false),
-      t_point_cloud_(0),
-      t_odometry_(0),
+      t_point_cloud_(std::numeric_limits<double>::quiet_NaN()),
+      t_odometry_(std::numeric_limits<double>::quiet_NaN()),
       enabled_(false),
       initialized_(false),
       sampler_(nullptr),
@@ -201,10 +204,10 @@ void Navigation::Initialize(const NavigationParameters& params, const string& ma
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
-    nav_state_ = NavigationState::kGoto;
     nav_goal_loc_ = loc;
     nav_goal_angle_ = angle;
     plan_path_.clear();
+    nav_state_ = NavigationState::kGoto;
 }
 
 void Navigation::ResetNavGoals() {
@@ -214,8 +217,6 @@ void Navigation::ResetNavGoals() {
     local_target_.setZero();
     plan_path_.clear();
 }
-
-void Navigation::Resume() { nav_state_ = NavigationState::kGoto; }
 
 void Navigation::UpdateMap(const string& map_path) {
     planning_domain_.Load(map_path);
@@ -230,27 +231,26 @@ void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
 
 void Navigation::PruneLatencyQueue() {
     if (command_history_.empty()) return;
-    const double update_time = min(t_point_cloud_, t_odometry_);
-    static const bool kDebug = false;
-    for (size_t i = 0; i < command_history_.size(); ++i) {
-        const double t_cmd = command_history_[i].time;
-        if (kDebug) {
-            printf("Command %d %f\n", int(i), t_cmd - update_time);
-        }
-        if (t_cmd < update_time - params_.dt) {
-            if (kDebug) {
-                printf("Erase %d %f %f\n", int(i), t_cmd - update_time, command_history_[i].linear.x());
-            }
-            command_history_.erase(command_history_.begin() + i);
-            --i;
-        }
-    }
+    // If one sensor time is uninitialized, use the other.
+    const bool has_odom = std::isfinite(t_odometry_);
+    const bool has_lidar = std::isfinite(t_point_cloud_);
+    if (!has_odom && !has_lidar) return;
+    const double update_time =
+        has_odom && has_lidar ? std::min(t_point_cloud_, t_odometry_) : (has_odom ? t_odometry_ : t_point_cloud_);
+    // Drop any segment whose active window [t_cmd, t_cmd+dt) ends at or before update_time.
+    const double dt = params_.dt;
+    auto keep = [&](const Twist& c) {
+        return (c.cmd_exec_start_time + dt) > update_time;  // strictly overlaps [update_time, ∞)
+    };
+    command_history_.erase(
+        std::remove_if(command_history_.begin(), command_history_.end(), [&](const Twist& c) { return !keep(c); }),
+        command_history_.end());
 }
 
 void Navigation::UpdateOdometry(const Odom& msg) {
     latest_odom_msg_ = msg;
     t_odometry_ = msg.time;
-    PruneLatencyQueue();
+    PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
     if (!odom_initialized_) {
         starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
         odom_initialized_ = true;
@@ -258,51 +258,72 @@ void Navigation::UpdateOdometry(const Odom& msg) {
 }
 
 void Navigation::UpdateCommandHistory(Twist twist) {
-    twist.time += params_.system_latency;
-    command_history_.push_back(twist);
-    if (false) {
-        printf("Push %f %f\n", twist.linear.x(), command_history_.back().linear.x());
+    // ?? this assumes system_latency is actuation latency (al)
+    // Keep history sorted by execution start time (robust to rare out-of-order inserts).
+    if (!command_history_.empty() && twist.cmd_exec_start_time < command_history_.back().cmd_exec_start_time) {
+        auto it = std::upper_bound(command_history_.begin(), command_history_.end(), twist.cmd_exec_start_time,
+                                   [](const double t, const Twist& a) { return t < a.cmd_exec_start_time; });
+        command_history_.insert(it, twist);
+    } else {
+        command_history_.push_back(twist);
     }
 }
 
 void Navigation::ForwardPredict(double t) {
+    const double dt_seg = params_.dt;
+    // (A) Predicted velocity just BEFORE time t (Pattern A)
     if (command_history_.empty()) {
-        robot_vel_ = Vector2f(0, 0);
-        robot_omega_ = 0;
+        robot_vel_ = Vector2f(0.f, 0.f);
+        robot_omega_ = 0.f;
     } else {
-        const Twist latest_twist = command_history_.back();
-        robot_vel_ = Vector2f(latest_twist.linear.x(), latest_twist.linear.y());
-        robot_omega_ = latest_twist.angular.z();
-    }
-    if (false) {
-        for (size_t i = 0; i < command_history_.size(); ++i) {
-            const auto& c = command_history_[i];
-            printf("%d %f %f\n", int(i), t - c.time, c.linear.x());
+        // last command with start time <= t (active on [t-dt, t) if present)
+        const Twist* active = nullptr;
+        for (const Twist& c : command_history_) {
+            if (c.cmd_exec_start_time <= t)
+                active = &c;
+            else
+                break;  // relies on sorted history
         }
-        printf("Predict: %f %f\n", t - t_odometry_, t - t_point_cloud_);
+        if (!active) active = &command_history_.front();
+        robot_vel_ = Vector2f(active->linear.x(), active->linear.y());
+        robot_omega_ = static_cast<float>(active->angular.z());
     }
+    // (B) Initialize pose at the odometry stamp
     odom_loc_ = Vector2f(latest_odom_msg_.position.x(), latest_odom_msg_.position.y());
-    odom_angle_ = 2.0f * atan2f(latest_odom_msg_.orientation.z(), latest_odom_msg_.orientation.w());
-    using Eigen::Affine2f;
-    using Eigen::Rotation2Df;
-    using Eigen::Translation2f;
+    {
+        const auto& q = latest_odom_msg_.orientation;
+        odom_angle_ = YawFromQuat(q.x(), q.y(), q.z(), q.w());
+    }
+    // (C) Accumulate forward pose and inverse LiDAR motion
     Affine2f lidar_tf = Affine2f::Identity();
     for (const Twist& c : command_history_) {
-        const double cmd_time = c.time;
-        if (cmd_time > t) continue;
-        if (cmd_time >= t_odometry_ - params_.dt) {
-            const float dt = (t_odometry_ > cmd_time) ? min<double>(t_odometry_ - cmd_time, params_.dt)
-                                                      : min<double>(t - cmd_time, params_.dt);
-            odom_loc_ += dt * (Rotation2Df(odom_angle_) * Vector2f(c.linear.x(), c.linear.y()));
-            odom_angle_ = AngleMod(odom_angle_ + dt * c.angular.z());
+        const double seg0 = c.cmd_exec_start_time;
+        const double seg1 = c.cmd_exec_start_time + dt_seg;
+        if (seg0 >= t) break;  // sorted history => nothing else overlaps [*, t)
+        // ---- Odom: integrate forward over [t_odometry_, t)
+        {
+            const double dto = overlap(seg0, seg1, t_odometry_, t);
+            if (dto > 0.0) {
+                const float fdto = static_cast<float>(dto);
+                const Vector2f v_b(c.linear.x(), c.linear.y());
+                odom_loc_ += fdto * (Rotation2Df(odom_angle_) * v_b);
+                odom_angle_ = AngleMod(odom_angle_ + fdto * static_cast<float>(c.angular.z()));
+            }
         }
-        if (t_point_cloud_ >= cmd_time - params_.dt) {
-            const float dt = (t_point_cloud_ > cmd_time) ? min<double>(t_point_cloud_ - cmd_time, params_.dt)
-                                                         : min<double>(t - cmd_time, params_.dt);
-            lidar_tf =
-                Translation2f(-dt * Vector2f(c.linear.x(), c.linear.y())) * Rotation2Df(-c.angular.z() * dt) * lidar_tf;
+        // ---- LiDAR: accumulate inverse motion over [t_point_cloud_, t)
+        {
+            const double dtl = overlap(seg0, seg1, t_point_cloud_, t);
+            if (dtl > 0.0) {
+                const float fdtl = static_cast<float>(dtl);
+                const float dth = -static_cast<float>(c.angular.z()) * fdtl;  // inverse rotation
+                Rotation2Df Rstep(dth);
+                const Vector2f v_b(c.linear.x(), c.linear.y());
+                const Vector2f tstep = -(Rstep * v_b) * fdtl;  // rotate translation for inverse step
+                lidar_tf = Translation2f(tstep) * Rstep * lidar_tf;
+            }
         }
     }
+    // (D) Warp the cloud from t_point_cloud_ to t
     fp_point_cloud_.resize(point_cloud_.size());
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
         fp_point_cloud_[i] = lidar_tf * point_cloud_[i];
@@ -396,16 +417,7 @@ float GetClosestDistance(const PathOption& o, const Vector2f& target) {
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
     point_cloud_ = cloud;
     t_point_cloud_ = time;
-    PruneLatencyQueue();
-}
-
-vector<int> Navigation::GlobalPlan(const Vector2f& initial, const Vector2f& end) {
-    auto plan = Plan(initial, end);
-    std::vector<int> path;
-    for (auto& node : plan) {
-        path.push_back(node.id);
-    }
-    return path;
+    PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
 }
 
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vector2f& end) {
@@ -433,7 +445,8 @@ void Navigation::PlannerTest() {
     Plan(robot_loc_, nav_goal_loc_);
 }
 
-bool Navigation::PlanStillValid() {
+bool Navigation::PlanStillValid() {  // ??, why max_plan_deviation is needed? it should just go to the closest point on
+                                     // path right howsoever far?
     if (plan_path_.size() < 2) return false;
     for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
         const float dist_from_segment =
@@ -443,22 +456,6 @@ bool Navigation::PlanStillValid() {
         }
     }
     return false;
-}
-
-Vector2f Navigation::GetPathGoal(float target_distance) {
-    CHECK_GE(plan_path_.size(), 2u);
-
-    float total_distance = 0.0;
-
-    for (int i = plan_path_.size() - 1; i >= 0; --i) {
-        if (i + 1 < static_cast<int>(plan_path_.size())) {
-            total_distance += (plan_path_[i].loc - plan_path_[i + 1].loc).norm();
-        }
-        if (total_distance > target_distance) {
-            return plan_path_[i].loc;
-        }
-    }
-    return plan_path_[0].loc;
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
@@ -569,30 +566,18 @@ Vector2f GetFinalPoint(const PathOption& o) {
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     static CumulativeFunctionTimer function_timer_(__FUNCTION__);
     CumulativeFunctionTimer::Invocation invoke(&function_timer_);
-    const bool debug = FLAGS_v > 1;
-
     Vector2f local_target = local_target_;
 
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
     evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_);
     auto paths = sampler_->GetSamples(params_.num_options);
-    if (debug) {
-        printf("%lu options\n", paths.size());
-        int i = 0;
-        for (auto p : paths) {
-            ConstantCurvatureArcPath arc = *reinterpret_cast<ConstantCurvatureArcPath*>(p.get());
-            printf("%3d: %7.5f %7.3f %7.3f\n", i++, arc.curvature, arc.length, arc.curvature);
-        }
-    }
     if (paths.size() == 0) {
         // No options, just stop.
         Halt(vel_cmd, ang_vel_cmd);
-        if (debug) printf("No paths found\n");
         return;
     }
     auto best_path = evaluator_->FindBest(paths);
     if (best_path == nullptr) {
-        if (debug) printf("No best path found\n");
         // No valid path found - just turn in place toward target
         TurnInPlace(vel_cmd, ang_vel_cmd);
         return;
@@ -607,7 +592,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
     best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd,
                            ang_vel_cmd);
-    last_options_ = paths;
+    sampled_paths_ = paths;
     best_option_ = best_path;
 }
 
@@ -631,7 +616,6 @@ void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
 }
 
 void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
-    static const bool kDebug = false;
     const float kMaxLinearSpeed = 0.1;
     const float velocity = robot_vel_.x();
     cmd_angle_vel = 0;
@@ -646,11 +630,9 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
         dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
     }
-    if (kDebug) printf("dTheta: %f robot_angle: %f\n", RadToDeg(dTheta), RadToDeg(robot_angle_));
 
     const float s = Sign(dTheta);
     if (robot_omega_ * dTheta < 0.0f) {
-        if (kDebug) printf("Wrong way\n");
         const float dv = params_.dt * params_.angular_limits.max_acceleration;
         // Turning the wrong way!
         if (fabs(robot_omega_) < dv) {
@@ -665,22 +647,21 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     cmd_vel = {0, 0};
 }
 
-void Navigation::Pause() { nav_state_ = NavigationState::kPaused; }
-
-void Navigation::SetClearanceWeight(const float weight) {
+void Navigation::SetEvaluatorClearanceWeight(const float weight) {
     LinearEvaluator* evaluator = dynamic_cast<LinearEvaluator*>(evaluator_.get());
     evaluator->SetClearanceWeight(weight);
     return;
 }
 
 bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel) {
-    const bool kDebug = FLAGS_v > 0;
     if (!initialized_) {
-        if (kDebug) printf("Parameters and maps not initialized\n");
         return false;
     }
     if (!odom_initialized_) {
-        if (kDebug) printf("Odometry not initialized\n");
+        return false;
+    }
+    // ?? should we check if t_point_cloud_ and t_odometry_ are finite? or update the initialized variables logic?
+    if (!std::isfinite(t_point_cloud_) || !std::isfinite(t_odometry_)) {
         return false;
     }
 
@@ -703,24 +684,20 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
     }
 
     // Before switching states we need to update the local target.
-
     if (nav_state_ == NavigationState::kGoto) {
         // Recompute global plan as necessary.
         if (!PlanStillValid()) {
-            if (kDebug) printf("Replanning\n");
             plan_path_ = Plan(robot_loc_, nav_goal_loc_);
         }
-        if (nav_state_ == NavigationState::kGoto) {
-            // Get Carrot and check if done
-            Vector2f carrot(0, 0);
-            bool foundCarrot = GetCarrot(carrot);
-            if (!foundCarrot) {
-                Halt(cmd_vel, cmd_angle_vel);
-                return false;
-            }
-            // Local Navigation
-            local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+        // Get Carrot and check if done
+        Vector2f carrot(0, 0);
+        bool foundCarrot = GetCarrot(carrot);
+        if (!foundCarrot) {
+            Halt(cmd_vel, cmd_angle_vel);
+            return false;
         }
+        // Local Navigation
+        local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
     }
 
     // Switch between navigation states.
@@ -738,23 +715,17 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
 
     switch (nav_state_) {
         case NavigationState::kStopped: {
-            if (kDebug) printf("\nNav complete\n");
-        } break;
-        case NavigationState::kPaused: {
-            if (kDebug) printf("\nNav paused\n");
         } break;
         case NavigationState::kGoto: {
-            if (kDebug) printf("\nNav Goto\n");
         } break;
         case NavigationState::kTurnInPlace: {
-            if (kDebug) printf("\nNav TurnInPlace\n");
         } break;
         default: {
             fprintf(stderr, "ERROR: Unknown nav state %d\n", static_cast<int>(nav_state_));
         }
     }
 
-    if (nav_state_ == NavigationState::kPaused || nav_state_ == NavigationState::kStopped) {
+    if (nav_state_ == NavigationState::kStopped) {
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
@@ -765,15 +736,12 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         }
         if (!FLAGS_no_local) {
             if (fabs(theta) > params_.local_fov) {
-                if (kDebug) printf("TurnInPlace\n");
                 TurnInPlace(cmd_vel, cmd_angle_vel);
             } else {
-                if (kDebug) printf("ObstAv\n");
                 RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
             }
         }
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
-        if (kDebug) printf("Reached Goal: TurnInPlace\n");
         TurnInPlace(cmd_vel, cmd_angle_vel);
     }
 

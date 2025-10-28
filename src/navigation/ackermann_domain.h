@@ -70,11 +70,6 @@ struct AckermannDomain {
             ros_helpers::ClearMarker(msg_ptr);
         }
         void DrawEdge(const State& s1, const State& s2) {
-            static const bool kDebug = false;
-            if (kDebug) {
-                printf("%7.2f,%7.2f,%1d -> %7.2f,%7.2f,%1d\n", s1.loc.x(), s1.loc.y(), s1.orientation, s2.loc.x(),
-                       s2.loc.y(), s2.orientation);
-            }
             const int kSegments = 10;
             if (s1.orientation == s2.orientation) {
                 // Straight line motion.
@@ -121,7 +116,6 @@ struct AckermannDomain {
                 ros_helpers::DrawEigen2DLine(p0, p1, &msg);
             }
             publisher->publish(msg);
-            if (kDebug) Sleep(0.01);
         }
         const float kRadius;
         rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr publisher;
