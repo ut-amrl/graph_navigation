@@ -52,7 +52,7 @@ struct NavigationParameters {
     MotionLimits angular_limits;
     // System latency in seconds, including sensing latency, processing latency,
     // and actuation latency.
-    float system_latency;
+    float actuation_latency;
     // Safety obstacle margin around the robot.
     float obstacle_margin;
     // Number of options to consider for the local planner.
@@ -96,7 +96,7 @@ struct NavigationParameters {
         : dt(0.025),
           linear_limits(0.5, 0.5, 0.5),
           angular_limits(0.5, 0.5, 1.0),
-          system_latency(0.24),
+          actuation_latency(0.24),
           obstacle_margin(0.15),
           num_options(41),
           robot_width(0.44),

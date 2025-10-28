@@ -246,7 +246,6 @@ install(DIRECTORY config/
 
 install(FILES
   README.md
-  CODE_EXPLANATION.md
   DESTINATION share/${PROJECT_NAME}
 )
 

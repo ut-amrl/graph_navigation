@@ -258,7 +258,6 @@ void Navigation::UpdateOdometry(const Odom& msg) {
 }
 
 void Navigation::UpdateCommandHistory(Twist twist) {
-    // ?? this assumes system_latency is actuation latency (al)
     // Keep history sorted by execution start time (robust to rare out-of-order inserts).
     if (!command_history_.empty() && twist.cmd_exec_start_time < command_history_.back().cmd_exec_start_time) {
         auto it = std::upper_bound(command_history_.begin(), command_history_.end(), twist.cmd_exec_start_time,
@@ -665,7 +664,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
-    ForwardPredict(time + params_.system_latency);
+    ForwardPredict(time + params_.actuation_latency);
     if (FLAGS_test_toc) {
         TrapezoidTest(cmd_vel, cmd_angle_vel);
         return true;

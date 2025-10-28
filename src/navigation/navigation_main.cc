@@ -88,7 +88,6 @@ using namespace std::chrono_literals;
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
-DEFINE_string(twist_drive_topic, "navigation/cmd_vel", "Drive Command Topic");
 DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
 // NavigationParameters
@@ -99,7 +98,7 @@ CONFIG_FLOAT(max_linear_speed, "NavigationParameters.linear_limits.max_speed");
 CONFIG_FLOAT(max_angular_accel, "NavigationParameters.angular_limits.max_acceleration");
 CONFIG_FLOAT(max_angular_decel, "NavigationParameters.angular_limits.max_deceleration");
 CONFIG_FLOAT(max_angular_speed, "NavigationParameters.angular_limits.max_speed");
-CONFIG_FLOAT(system_latency, "NavigationParameters.system_latency");
+CONFIG_FLOAT(actuation_latency, "NavigationParameters.actuation_latency");
 CONFIG_FLOAT(obstacle_margin, "NavigationParameters.obstacle_margin");
 CONFIG_INT(num_options, "NavigationParameters.num_options");
 CONFIG_FLOAT(robot_width, "NavigationParameters.robot_width");
@@ -124,7 +123,6 @@ CONFIG_STRINGLIST(laser_topics, "ROSTopics.laser_topics");
 CONFIG_STRING(laser_frame, "ROSTopics.laser_frame");
 CONFIG_STRING(odom_topic, "ROSTopics.odom_topic");
 CONFIG_STRING(localization_topic, "ROSTopics.localization_topic");
-CONFIG_STRING(init_topic, "ROSTopics.init_topic");
 CONFIG_STRING(enable_topic, "ROSTopics.enable_topic");
 CONFIG_STRING(ackermann_drive_topic, "ROSTopics.ackermann_drive_topic");
 CONFIG_STRING(nav_status_topic, "ROSTopics.nav_status_topic");
@@ -136,6 +134,7 @@ CONFIG_STRING(goto_topic, "ROSTopics.goto_topic");
 CONFIG_STRING(goto_amrl_topic, "ROSTopics.goto_amrl_topic");
 CONFIG_STRING(reset_nav_goals_topic, "ROSTopics.reset_nav_goals_topic");
 CONFIG_STRING(halt_topic, "ROSTopics.halt_topic");
+CONFIG_STRING(twist_drive_topic, "ROSTopics.twist_drive_topic");
 
 class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
@@ -146,9 +145,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
           run_(true),
           enabled_(false),
           received_odom_(false),
-          received_laser_(false),
-          current_angle_(0.0),
-          goal_angle_(0.0) {
+          received_laser_(false) {
         // Initialize maps directory
         if (FLAGS_maps_dir.empty()) {
             try {
@@ -180,7 +177,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Create publishers
         ackermann_drive_pub_ =
             this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(CONFIG_ackermann_drive_topic, 1);
-        twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(FLAGS_twist_drive_topic, 1);
+        twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(CONFIG_twist_drive_topic, 1);
         status_pub_ = this->create_publisher<amrl_msgs::msg::NavStatusMsg>(CONFIG_nav_status_topic, 1);
         viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(CONFIG_visualization_topic, 1);
         fp_pcl_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud>(CONFIG_fp_pcl_topic, 1);
@@ -198,8 +195,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         localization_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
             CONFIG_localization_topic, 1,
             std::bind(&NavigationNode::LocalizationCallback, this, std::placeholders::_1));
-
-        // Create laser subscribers
         for (size_t i = 0; i < CONFIG_laser_topics.size(); ++i) {
             auto laser_sub = this->create_subscription<sensor_msgs::msg::LaserScan>(
                 CONFIG_laser_topics[i], 1, [this, i](const sensor_msgs::msg::LaserScan::SharedPtr msg) {
@@ -207,20 +202,15 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 });
             laser_subs_.push_back(laser_sub);
         }
-
         goto_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
             CONFIG_goto_topic, 1, std::bind(&NavigationNode::GoToCallback, this, std::placeholders::_1));
-
         goto_amrl_sub_ = this->create_subscription<amrl_msgs::msg::Localization2DMsg>(
             CONFIG_goto_amrl_topic, 1, std::bind(&NavigationNode::GoToCallbackAMRL, this, std::placeholders::_1));
-
         reset_nav_goals_sub_ = this->create_subscription<std_msgs::msg::Empty>(
             CONFIG_reset_nav_goals_topic, 1,
             std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
-
         enabler_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_enable_topic, 1, std::bind(&NavigationNode::EnablerCallback, this, std::placeholders::_1));
-
         halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
 
@@ -275,11 +265,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     bool enabled_;
     bool received_odom_;
     bool received_laser_;
-    Eigen::Vector2f goal_{0, 0};
-    Eigen::Vector2f current_loc_{0, 0};
-    Eigen::Vector2f current_vel_{0, 0};
-    float current_angle_;
-    float goal_angle_;
     navigation::Odom odom_;
     std::vector<Eigen::Vector2f> point_cloud_;
 
@@ -316,8 +301,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             map = msg->map;
             navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg->map));
         }
-        current_loc_ = Eigen::Vector2f(msg->pose.x, msg->pose.y);
-        current_angle_ = msg->pose.theta;
     }
 
     void LaserCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg, const std::string& topic) {
@@ -506,7 +489,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Update command history
         navigation::Twist twist;
         twist.cmd_plan_start_time = cmd_plan_start_time;
-        twist.cmd_exec_start_time = cmd_plan_start_time + navigation_.params_.system_latency;
+        twist.cmd_exec_start_time = cmd_plan_start_time + navigation_.params_.actuation_latency;
         twist.linear = {static_cast<float>(cmd_lin_x), static_cast<float>(cmd_lin_y), 0.0f};
         twist.angular = {0.0f, 0.0f, static_cast<float>(cmd_ang_z)};
         navigation_.UpdateCommandHistory(twist);
@@ -670,7 +653,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             navigation::MotionLimits(CONFIG_max_linear_accel, CONFIG_max_linear_decel, CONFIG_max_linear_speed);
         params->angular_limits =
             navigation::MotionLimits(CONFIG_max_angular_accel, CONFIG_max_angular_decel, CONFIG_max_angular_speed);
-        params->system_latency = CONFIG_system_latency;
+        params->actuation_latency = CONFIG_actuation_latency;
         params->obstacle_margin = CONFIG_obstacle_margin;
         params->num_options = CONFIG_num_options;
         params->robot_width = CONFIG_robot_width;
