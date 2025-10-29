@@ -26,6 +26,7 @@
 #include <unordered_set>
 #include <set>
 #include <ctime>
+#include <fstream>
 
 #include "eigen3/Eigen/Dense"
 
@@ -34,6 +35,7 @@
 #include "graph_domain.h"
 #include "navigation_parameters.h"
 #include "motion_primitives.h"
+#include "gflags/gflags.h"
 
 #include "amrl_msgs/msg/localization2_d_msg.hpp"
 #include "amrl_msgs/msg/visualization_msg.hpp"
@@ -41,6 +43,9 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "amrl_msgs/msg/ackermann_curvature_drive_msg.hpp"
+
+// Declare gflags in global namespace to avoid namespace-mismatch at link time.
+DECLARE_string(debug_file);
 
 #ifndef NAVIGATION_H
 #define NAVIGATION_H
@@ -130,6 +135,10 @@ class Navigation {
     std::vector<GraphDomain::State> plan_path_;
     // Navigation parameters.
     NavigationParameters params_;
+    // Forward-predicted robot location in map frame at actuation time.
+    Eigen::Vector2f robot_loc_fp_;
+    // Forward-predicted robot yaw in map frame at actuation time.
+    float robot_angle_fp_;
     // Global carrot transformed to robot's reference frame for local navigation (robot frame).
     Eigen::Vector2f local_target_;
     // Last set of sampled path options from local planner (robot frame).
@@ -197,6 +206,17 @@ class Navigation {
     // Motion primitive evaluator for local planning (selects best path).
     std::unique_ptr<motion_primitives::PathEvaluatorBase> evaluator_;
 };
+
+namespace navigation_debug {
+inline void DebugLog(const std::string& line) {
+    if (::FLAGS_debug_file.empty()) return;
+    static std::mutex mtx;
+    std::lock_guard<std::mutex> lock(mtx);
+    std::ofstream ofs(::FLAGS_debug_file, std::ios::out | std::ios::app);
+    if (!ofs.good()) return;
+    ofs << line << '\n';
+}
+}  // namespace navigation_debug
 
 }  // namespace navigation
 

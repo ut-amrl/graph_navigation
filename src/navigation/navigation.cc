@@ -151,6 +151,8 @@ namespace navigation {
 Navigation::Navigation()
     : robot_loc_(0, 0),
       robot_angle_(0),
+      robot_loc_fp_(0, 0),
+      robot_angle_fp_(0),
       robot_vel_(0, 0),
       nav_state_(NavigationState::kStopped),
       robot_omega_(0),
@@ -240,7 +242,7 @@ void Navigation::PruneLatencyQueue() {
 void Navigation::UpdateOdometry(const Odom& msg) {
     latest_odom_msg_ = msg;
     t_odometry_ = msg.time;
-    PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
+    // PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
     if (!odom_initialized_) {
         starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
         odom_initialized_ = true;
@@ -321,12 +323,28 @@ void Navigation::ForwardPredict(double t) {
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
         fp_point_cloud_[i] = lidar_tf * point_cloud_[i];
     }
+
+    // Compute predicted base pose in map frame at actuation time
+    {
+        Affine2f T_map_odom = Affine2f::Identity();
+        const float odom_yaw_last = YawFromQuat(latest_odom_msg_.orientation.x(), latest_odom_msg_.orientation.y(),
+                                                latest_odom_msg_.orientation.z(), latest_odom_msg_.orientation.w());
+        const Affine2f T_odom_base_last =
+            Translation2f(latest_odom_msg_.position.x(), latest_odom_msg_.position.y()) * Rotation2Df(odom_yaw_last);
+        if (loc_initialized_) {
+            const Affine2f T_map_base_last = Translation2f(robot_loc_) * Rotation2Df(robot_angle_);
+            T_map_odom = T_map_base_last * T_odom_base_last.inverse();
+        }
+        const Affine2f T_map_base_pred = T_map_odom * (Translation2f(odom_loc_) * Rotation2Df(odom_angle_));
+        robot_loc_fp_ = T_map_base_pred.translation();
+        robot_angle_fp_ = std::atan2(T_map_base_pred.linear()(1, 0), T_map_base_pred.linear()(0, 0));
+    }
 }
 
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
     point_cloud_ = cloud;
     t_point_cloud_ = time;
-    PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
+    // PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
 }
 
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vector2f& end) {
@@ -354,10 +372,11 @@ bool Navigation::PlanStillValid() {
     // ??, why max_plan_deviation is needed? it should just go to the closest point on path right howsoever far?
     if (plan_path_.size() < 2)
         return false;  // ?? is it due to (start, end) atleast. In that case, why would the distance check be false
-                       // ever?
+    // ever?
+    const Vector2f pose = robot_loc_fp_;  // predicted pose at actuation time
     for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
         const float dist_from_segment =
-            geometry::DistanceFromLineSegment(robot_loc_, plan_path_[i].loc, plan_path_[i + 1].loc);
+            geometry::DistanceFromLineSegment(pose, plan_path_[i].loc, plan_path_[i + 1].loc);
         if (dist_from_segment < FLAGS_max_plan_deviation) {
             return true;
         }
@@ -370,11 +389,16 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
     if (carrot_dist < 0) {
         carrot_dist = params_.carrot_dist;
     }
-    vector<GraphDomain::State> plan_path = plan_path_;
+    const auto& plan_path = plan_path_;
+    if (plan_path.size() < 2u) {  // guard, ?? is this needed?
+        return false;
+    }
+    // Predicted map pose at actuation time.
+    const Vector2f pose = robot_loc_fp_;
     const float kSqCarrotDist = Sq(carrot_dist);
 
     // If goal (map frame) is within the carrot dist, set the carrot (map frame) to the goal
-    if ((plan_path[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
+    if ((plan_path[0].loc - pose).squaredNorm() < kSqCarrotDist) {
         carrot = plan_path[0].loc;
         return true;
     }
@@ -385,11 +409,11 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
     for (size_t i = 0; i + 1 < plan_path.size(); ++i) {
         const Vector2f v0 = plan_path[i].loc;
         const Vector2f v1 = plan_path[i + 1].loc;
-        const float dist_to_segment = geometry::DistanceFromLineSegment(robot_loc_, v0, v1);
+        const float dist_to_segment = geometry::DistanceFromLineSegment(pose, v0, v1);
         if (dist_to_segment < closest_dist) {
             closest_dist = dist_to_segment;
-            i0 = i;
-            i1 = i + 1;
+            i0 = static_cast<int>(i);
+            i1 = static_cast<int>(i + 1);
         }
     }
 
@@ -397,7 +421,7 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
     if (closest_dist > carrot_dist) {
         const Vector2f v0 = plan_path[i0].loc;
         const Vector2f v1 = plan_path[i1].loc;
-        carrot = geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
+        carrot = geometry::ProjectPointOntoLineSegment(pose, v0, v1);
         return true;
     }
 
@@ -413,22 +437,25 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
         i0 = i;
         // const Vector2f v0 = plan_path_[i].loc;
         const Vector2f v1 = plan_path[i - 1].loc;  // vertex closer to goal (map frame)
-        if ((v1 - robot_loc_).squaredNorm() > kSqCarrotDist) {
+        if ((v1 - pose).squaredNorm() > kSqCarrotDist) {
             break;  // Found first vertex outside carrot distance - this defines our target segment
         }
     }
     i1 = i0 - 1;
+    if (i1 < 0) {
+        carrot = plan_path[0].loc;
+        return true;
+    }
 
     const Vector2f v0 = plan_path[i0].loc;
     const Vector2f v1 = plan_path[i1].loc;
     Vector2f r0, r1;
     // Calculate where carrot circle intersects the target path segment
-    const int num_intersections = geometry::CircleLineIntersection<float>(robot_loc_, carrot_dist, v0, v1, &r0, &r1);
+    const int num_intersections = geometry::CircleLineIntersection<float>(pose, carrot_dist, v0, v1, &r0, &r1);
     if (num_intersections == 0) {
         fprintf(stderr,
-                "Error obtaining intersections:\n v0: (%f %f), v1: (%f %f), robot_loc_: (%f %f) sq_carrot_dist: (%f) "
-                "closest_dist: (%f)\n",
-                v0.x(), v0.y(), v1.x(), v1.y(), robot_loc_.x(), robot_loc_.y(), kSqCarrotDist, closest_dist);
+                "GetCarrot: Error obtaining intersections; v0:(%f %f) v1:(%f %f) pose:(%f %f) carrot^2:%f closest:%f\n",
+                v0.x(), v0.y(), v1.x(), v1.y(), pose.x(), pose.y(), kSqCarrotDist, closest_dist);
         return false;
     }
 
@@ -445,11 +472,17 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     static CumulativeFunctionTimer function_timer_(__FUNCTION__);
     CumulativeFunctionTimer::Invocation invoke(&function_timer_);
     Vector2f local_target = local_target_;
+
     // Update planner components with current state and obstacles
     // ?? everything looks correct (fp), except local_target, which is in map frame and based on robot_loc, and
     // robot_loc
+    // Reconstruct predicted map pose at actuation time
+    const Vector2f map_loc_pred = robot_loc_fp_;
+    const float yaw_map_pred = robot_angle_fp_;
+
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
-    evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+    evaluator_->Update(map_loc_pred, yaw_map_pred, robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+
     // Generate path options
     auto paths = sampler_->GetSamples(params_.num_options);
     if (paths.size() == 0) {
@@ -467,7 +500,7 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
 
     float max_map_speed = params_.linear_limits.max_speed;
     // ?? again robot_loc is in map frame and not fp
-    planning_domain_.GetClearanceAndSpeedFromLoc(robot_loc_, nullptr, &max_map_speed);
+    planning_domain_.GetClearanceAndSpeedFromLoc(map_loc_pred, nullptr, &max_map_speed);
     auto linear_limits = params_.linear_limits;
     linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
 
@@ -521,6 +554,9 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
         return;
     }
 
+    // Predicted yaw in map frame at actuation time
+    const float yaw_map_pred = robot_angle_fp_;
+
     // Desired heading error
     float dTheta = 0.0f;
     if (nav_state_ == NavigationState::kGoto) {
@@ -529,7 +565,7 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
         dTheta = atan2(local_target_.y(), local_target_.x());
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
         // Turn towards nav_goal_angle_ in map frame
-        dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
+        dTheta = AngleDiff(nav_goal_angle_, yaw_map_pred);
     }
 
     // If already close enough, stop
@@ -566,12 +602,16 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
-    printf("command_history_ length: %zu\n", command_history_.size());
+    navigation_debug::DebugLog(std::string("[") + std::to_string(static_cast<int>(nav_state_)) +
+                               "] command_history_ length: " + std::to_string(command_history_.size()));
 
+    PruneLatencyQueue();
     // Forward predict robot state to account for actuation latency
     ForwardPredict(time + params_.actuation_latency);
 
-    // Update local target for kGoto state
+    // Local target in predicted base frame at actuation time
+    const Affine2f T_map_base_pred = Translation2f(robot_loc_fp_) * Rotation2Df(robot_angle_fp_);
+
     if (nav_state_ == NavigationState::kGoto) {
         // Recompute global plan if current plan is invalid
         if (!PlanStillValid()) {
@@ -586,7 +626,15 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             return false;
         }
         // Transform carrot from map frame to robot frame for local planning
-        local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+        // local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
+        // Compute local target in the predicted base frame at actuation time.
+        const Affine2f T_base_map_pred = T_map_base_pred.inverse();
+        local_target_ = T_base_map_pred * carrot;
+
+        // Clamp local target length for OA
+        if (local_target_.squaredNorm() > Sq(params_.carrot_dist)) {
+            local_target_ = params_.carrot_dist * local_target_.normalized();
+        }
     }
 
     // Switch between navigation states.
@@ -599,7 +647,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             nav_state_ = NavigationState::kTurnInPlace;
             // Transition from kTurnInPlace to kStopped when final orientation is reached
         } else if (nav_state_ == NavigationState::kTurnInPlace &&
-                   AngleDist(robot_angle_, nav_goal_angle_) < params_.target_angle_tolerance) {
+                   AngleDist(robot_angle_fp_, nav_goal_angle_) < params_.target_angle_tolerance) {
             nav_state_ = NavigationState::kStopped;
         }
         // continue until no more state changes can happen
@@ -622,13 +670,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
-        // Local target processing for obstacle avoidance
-        Vector2f local_target = local_target_;
-        const float theta = atan2(local_target.y(), local_target.x());
-        // Clamp local target to carrot distance if too far
-        if (local_target.squaredNorm() > Sq(params_.carrot_dist)) {
-            local_target = params_.carrot_dist * local_target.normalized();
-        }
+        const float theta = atan2(local_target_.y(), local_target_.x());
         // Choose between turning in place or obstacle avoidance based on FOV
         if (fabs(theta) > params_.local_fov) {
             // Target outside FOV: turn in place first

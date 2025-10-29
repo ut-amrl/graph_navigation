@@ -88,6 +88,7 @@ using namespace std::chrono_literals;
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
+DEFINE_string(debug_file, "", "Path to debug log file (.log or .txt). Empty disables logging");
 
 // NavigationParameters
 CONFIG_FLOAT(dt, "NavigationParameters.dt");
@@ -333,6 +334,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void TimerCallback() {
         if (!run_) return;
+        const auto __tcb_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
         visualization::ClearVisualizationMsg(local_viz_msg_);
@@ -363,6 +365,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             // Send commands
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
+
+        const auto __tcb_end = std::chrono::steady_clock::now();
+        const double __tcb_ms = std::chrono::duration<double, std::milli>(__tcb_end - __tcb_start).count();
+        navigation::navigation_debug::DebugLog(std::string("[") +
+                                               std::to_string(static_cast<int>(navigation_.nav_state_)) +
+                                               "] TimerCallback took " + std::to_string(__tcb_ms) + " ms");
     }
 
     // Helper functions
@@ -547,7 +555,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawRobot() {
-        // ?? add visualization for drawing forward predicted carrot and robot
+        // ?? add visualization for drawing forward predicted robot
         const float kRobotLength = navigation_.params_.robot_length;
         const float kRobotWidth = navigation_.params_.robot_width;
         const float kRearAxleOffset = 0.0;
@@ -573,6 +581,26 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             visualization::DrawLine(Eigen::Vector2f(l2, w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
             visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l2, w), 0x000000, local_viz_msg_);
             visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
+        }
+
+        // Draw forward-predicted robot footprint in map frame (blue outline)
+        {
+            const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
+            const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
+            const float w = 0.5 * kRobotWidth;
+
+            const Eigen::Rotation2Df R(navigation_.robot_angle_fp_);
+            const Eigen::Vector2f t = navigation_.robot_loc_fp_;
+
+            const Eigen::Vector2f p1 = t + R * Eigen::Vector2f(l1, w);
+            const Eigen::Vector2f p2 = t + R * Eigen::Vector2f(l1, -w);
+            const Eigen::Vector2f p3 = t + R * Eigen::Vector2f(l2, -w);
+            const Eigen::Vector2f p4 = t + R * Eigen::Vector2f(l2, w);
+
+            visualization::DrawLine(p1, p2, 0x66CCFF, global_viz_msg_);
+            visualization::DrawLine(p2, p3, 0x66CCFF, global_viz_msg_);
+            visualization::DrawLine(p3, p4, 0x66CCFF, global_viz_msg_);
+            visualization::DrawLine(p4, p1, 0x66CCFF, global_viz_msg_);
         }
     }
 
