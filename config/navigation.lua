@@ -44,7 +44,6 @@ ROSTopics = {
   laser_frame = "base_link";
   odom_topic = "/odom";
   localization_topic = "localization";
-  enable_topic = "autonomy_arbiter/enabled";
   goto_topic = "/move_base_simple/goal";
   goto_amrl_topic = "/move_base_simple/goal_amrl";
   reset_nav_goals_topic = "/reset_nav_goals";

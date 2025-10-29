@@ -190,8 +190,6 @@ class Navigation {
     GraphDomain planning_domain_;
     // History of commands sent, to perform latency compensation.
     std::deque<Twist> command_history_;
-    // Whether to enable autonomous navigation or not.
-    bool enabled_;
     // Whether or not things have been initialized.
     bool initialized_;
     // Motion primitive sampler for local planning (generates path options).

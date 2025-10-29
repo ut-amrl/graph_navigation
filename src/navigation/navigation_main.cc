@@ -88,7 +88,6 @@ using namespace std::chrono_literals;
 DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
 DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
-DEFINE_bool(no_joystick, true, "Whether to use a joystick or not");
 
 // NavigationParameters
 CONFIG_FLOAT(dt, "NavigationParameters.dt");
@@ -123,7 +122,6 @@ CONFIG_STRINGLIST(laser_topics, "ROSTopics.laser_topics");
 CONFIG_STRING(laser_frame, "ROSTopics.laser_frame");
 CONFIG_STRING(odom_topic, "ROSTopics.odom_topic");
 CONFIG_STRING(localization_topic, "ROSTopics.localization_topic");
-CONFIG_STRING(enable_topic, "ROSTopics.enable_topic");
 CONFIG_STRING(ackermann_drive_topic, "ROSTopics.ackermann_drive_topic");
 CONFIG_STRING(nav_status_topic, "ROSTopics.nav_status_topic");
 CONFIG_STRING(visualization_topic, "ROSTopics.visualization_topic");
@@ -143,7 +141,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
           tf_buffer_(this->get_clock()),
           tf_listener_(tf_buffer_),
           run_(true),
-          enabled_(false),
           received_odom_(false),
           received_laser_(false) {
         // Initialize maps directory
@@ -209,8 +206,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         reset_nav_goals_sub_ = this->create_subscription<std_msgs::msg::Empty>(
             CONFIG_reset_nav_goals_topic, 1,
             std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
-        enabler_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-            CONFIG_enable_topic, 1, std::bind(&NavigationNode::EnablerCallback, this, std::placeholders::_1));
         halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
 
@@ -244,7 +239,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goto_sub_;
     rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr goto_amrl_sub_;
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_nav_goals_sub_;
-    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr enabler_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr halt_sub_;
 
     // Service
@@ -259,7 +253,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     // State variables
     bool run_;
-    bool enabled_;
     bool received_odom_;
     bool received_laser_;
     navigation::Odom odom_;
@@ -280,8 +273,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     std::unordered_map<std::string, LaserCache> laser_caches_;
 
     // Callback functions
-    void EnablerCallback(const std_msgs::msg::Bool::SharedPtr msg) { enabled_ = msg->data; }
-
     void OdometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
         received_odom_ = true;
         odom_ = OdomHandler(*msg);
@@ -446,12 +437,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         double cmd_lin_x = 0.0;
         double cmd_lin_y = 0.0;
         double cmd_ang_z = 0.0;
-        printf("no_joystick: %d, enabled: %d\n", FLAGS_no_joystick, enabled_);  // ?? who's setting enabled_?
-        if (FLAGS_no_joystick || enabled_) {
-            cmd_lin_x = vel.x();
-            cmd_lin_y = vel.y();
-            cmd_ang_z = ang_vel;
-        }
+        cmd_lin_x = vel.x();
+        cmd_lin_y = vel.y();
+        cmd_ang_z = ang_vel;
 
         auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
         twist_msg->linear.x = cmd_lin_x;

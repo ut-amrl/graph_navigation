@@ -160,7 +160,6 @@ Navigation::Navigation()
       loc_initialized_(false),
       t_point_cloud_(std::numeric_limits<double>::quiet_NaN()),
       t_odometry_(std::numeric_limits<double>::quiet_NaN()),
-      enabled_(false),
       initialized_(false),
       sampler_(nullptr),
       evaluator_(nullptr) {}
