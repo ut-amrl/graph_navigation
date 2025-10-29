@@ -74,7 +74,11 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArcPath* path_ptr) {
 }
 
 vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
+    // Generate n path samples by varying curvature values across a range.
+    // Each sample represents a constant curvature arc that the robot could follow.
     vector<shared_ptr<PathRolloutBase>> samples;
+    
+    // Debug/test mode: return fixed curvature samples
     if (false) {
         samples = {
             shared_ptr<PathRolloutBase>(new ConstantCurvatureArcPath(-0.1)),
@@ -83,9 +87,16 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
         };
         return samples;
     }
+    
+    // Calculate dynamic constraints based on current robot state:
+    // - robot_vel_ (vel.x()) determines current speed for curvature limits
+    // - robot_omega_ (ang_vel) provides current angular velocity for smooth transitions
     const float max_domega = nav_params.dt * nav_params.angular_limits.max_acceleration;
     const float max_dv = nav_params.dt * nav_params.linear_limits.max_acceleration;
     const float robot_speed = fabs(vel.x());
+    
+    // Constrain curvature range based on current velocity and angular velocity
+    // to ensure dynamically feasible transitions from current state
     float c_min = -CONFIG_max_curvature;
     float c_max = CONFIG_max_curvature;
     if (robot_speed > max_dv + kEpsilon) {
@@ -93,21 +104,25 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
         c_max = min<float>(c_max, (ang_vel + max_domega) / (robot_speed - max_dv));
     }
     const float dc = (c_max - c_min) / static_cast<float>(n - 1);
-    // printf("Options: %6.2f : %6.2f : %6.2f\n", c_min, dc, c_max);
+    
+    // Generate samples: currently uses simple uniform sampling over full curvature range
+    // (ignoring the dynamically constrained range above - this appears to be a bug)
     if (false) {
+        // This would use the dynamically constrained range
         for (float c = c_min; c <= c_max; c += dc) {
             auto sample = new ConstantCurvatureArcPath(c);
-            SetMaxPathLength(sample);
-            CheckObstacles(sample);
+            SetMaxPathLength(sample);  // Uses local_target to limit path length
+            CheckObstacles(sample);    // Uses fp_point_cloud_ for collision checking
             sample->angular_length = fabs(sample->length * c);
             samples.push_back(shared_ptr<PathRolloutBase>(sample));
         }
     } else {
+        // Current implementation: uniform sampling over full curvature range
         const float dc = (2.0f * CONFIG_max_curvature) / static_cast<float>(n - 1);
         for (float c = -CONFIG_max_curvature; c <= CONFIG_max_curvature; c += dc) {
             auto sample = new ConstantCurvatureArcPath(c);
-            SetMaxPathLength(sample);
-            CheckObstacles(sample);
+            SetMaxPathLength(sample);  // Uses local_target to limit path length toward goal
+            CheckObstacles(sample);    // Uses fp_point_cloud_ for collision detection
             sample->angular_length = fabs(sample->length * c);
             samples.push_back(shared_ptr<PathRolloutBase>(sample));
         }

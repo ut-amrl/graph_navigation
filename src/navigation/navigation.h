@@ -112,8 +112,6 @@ class Navigation {
     void ObservePointCloud(const std::vector<Eigen::Vector2f>& cloud, double time);
     // Main navigation control loop
     bool Run(const double& time, Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-    // Get free path length in straight line direction.
-    void GetStraightFreePathLength(float* free_path_length, float* clearance);
     // Set navigation goal (map frame).
     void SetNavGoal(const Eigen::Vector2f& loc, float angle);
     // Reset navigation goals by setting goal to current robot position (map frame).
@@ -126,15 +124,13 @@ class Navigation {
     bool GetCarrot(Eigen::Vector2f& carrot, float carrot_dist = -1.0f);
     // Initialize navigation system with parameters and map.
     void Initialize(const NavigationParameters& params, const std::string& map_file);
-    // Set path evaluator clearance weight.
-    void SetEvaluatorClearanceWeight(const float weight);
     // Point cloud in robot frame from last laser scan observed, forward predicted for latency compensation.
     std::vector<Eigen::Vector2f> fp_point_cloud_;
     // Global path plan computed by A* planner on the navigation graph (map frame).
     std::vector<GraphDomain::State> plan_path_;
     // Navigation parameters.
     NavigationParameters params_;
-    // Global carrot transformed to robot's reference frame for local navigation.
+    // Global carrot transformed to robot's reference frame for local navigation (robot frame).
     Eigen::Vector2f local_target_;
     // Last set of sampled path options from local planner (robot frame).
     std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> sampled_paths_;
@@ -144,16 +140,6 @@ class Navigation {
     NavigationState nav_state_;
 
    private:
-    // Test 1D time-optimal control motion in a straight line.
-    void TrapezoidTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-    // Test driving straight up to the next obstacle.
-    void ObstacleTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-    // Test local obstacle avoidance planner.
-    void ObstAvTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
-    // Test global path planner.
-    void PlannerTest();
-    // Latency testing routine.
-    void LatencyTest(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
     // Run local obstacle avoidance planner (robot frame).
     void RunObstacleAvoidance(Eigen::Vector2f& cmd_vel, float& cmd_angle_vel);
     // Remove commands older than latest real robot updates (odometry and LIDAR), for latency compensation.
@@ -172,13 +158,13 @@ class Navigation {
     Eigen::Vector2f robot_loc_;
     // Current robot orientation in map frame (from localization system).
     float robot_angle_;
-    // Latest robot linear velocity (forward predicted).
+    // Penultimate-to-forward-predicted-time robot linear velocity command
     Eigen::Vector2f robot_vel_;
-    // Latest robot angular velocity (forward predicted).
+    // Penultimate-to-forward-predicted-time robot angular velocity command
     float robot_omega_;
-    // Current robot location in odometry frame (from odom topic).
+    // Forward-predicted odometry location (odometry frame)
     Eigen::Vector2f odom_loc_;
-    // Current robot orientation in odometry frame (from odom topic).
+    // Forward-predicted odometry orientation (odometry frame)
     float odom_angle_;
     // Latest odometry message received (odometry frame).
     Odom latest_odom_msg_;

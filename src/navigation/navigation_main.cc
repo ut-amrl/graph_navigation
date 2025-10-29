@@ -214,9 +214,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
 
-        // Initialize visualization markers
-        InitSimulatorVizMarkers();
-
         // Create timer for main loop
         timer_ = this->create_wall_timer(std::chrono::duration<double>(params_.dt),
                                          std::bind(&NavigationNode::TimerCallback, this));
@@ -271,9 +268,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     // Visualization
     amrl_msgs::msg::VisualizationMsg local_viz_msg_;
     amrl_msgs::msg::VisualizationMsg global_viz_msg_;
-    visualization_msgs::msg::Marker line_list_marker_;
-    visualization_msgs::msg::Marker pose_marker_;
-    visualization_msgs::msg::Marker target_marker_;
 
     // Laser processing
     struct LaserCache {
@@ -352,37 +346,26 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Clear visualization messages
         visualization::ClearVisualizationMsg(local_viz_msg_);
         visualization::ClearVisualizationMsg(global_viz_msg_);
-        received_laser_ = false;
+        received_laser_ = false;  // ?? why is this here? why happening at each callback?
 
         // Run navigation
         Eigen::Vector2f cmd_vel(0, 0);
         float cmd_angle_vel(0);
-
         const double cmd_plan_start_time = this->get_clock()->now().seconds();
         bool nav_succeeded = navigation_.Run(cmd_plan_start_time, cmd_vel, cmd_angle_vel);
-
-        // Publish status
         PublishNavStatus();
-
         if (nav_succeeded) {
-            // Publish visualizations and commands
+            // Publish visualizations
             PublishForwardPredictedPCL(navigation_.fp_point_cloud_);
             DrawRobot();
-
             if (static_cast<uint8_t>(navigation_.nav_state_) !=
                 static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
                 DrawTarget();
                 DrawPathOptions();
             }
-
-            PublishVisualizationMarkers();
             PublishPath();
-
-            // Update timestamps
             local_viz_msg_.header.stamp = this->get_clock()->now();
             global_viz_msg_.header.stamp = this->get_clock()->now();
-
-            // Publish visualization messages
             viz_pub_->publish(local_viz_msg_);
             viz_pub_->publish(global_viz_msg_);
 
@@ -463,6 +446,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         double cmd_lin_x = 0.0;
         double cmd_lin_y = 0.0;
         double cmd_ang_z = 0.0;
+        printf("no_joystick: %d, enabled: %d\n", FLAGS_no_joystick, enabled_);  // ?? who's setting enabled_?
         if (FLAGS_no_joystick || enabled_) {
             cmd_lin_x = vel.x();
             cmd_lin_y = vel.y();
@@ -501,7 +485,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         for (size_t i = 0; i < pcl.size(); ++i) {
             fp_pcl_msg->points[i].x = pcl[i].x();
             fp_pcl_msg->points[i].y = pcl[i].y();
-            fp_pcl_msg->points[i].z = 0.324;
+            fp_pcl_msg->points[i].z =
+                0.324;  // ?? is this laser height above ground? if so, should be a config parameter
         }
         fp_pcl_msg->header.stamp = this->get_clock()->now();
         fp_pcl_pub_->publish(std::move(fp_pcl_msg));
@@ -509,38 +494,41 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void PublishPath() {
         const auto path = navigation_.plan_path_;
-        if (path.size() >= 2) {
+        if (path.size() >= 2) {  // ?? is it due to (start, end) atleast
+            // Publish full planned path as nav_msgs::Path
             auto path_msg = std::make_unique<nav_msgs::msg::Path>();
             path_msg->header.stamp = this->get_clock()->now();
             path_msg->header.frame_id = "map";
 
+            // Convert each waypoint to a pose in the path
             for (size_t i = 0; i < path.size(); i++) {
                 geometry_msgs::msg::PoseStamped pose_plan;
                 pose_plan.pose.position.x = path[i].loc.x();
                 pose_plan.pose.position.y = path[i].loc.y();
-                pose_plan.pose.orientation.w = 1.0;
+                pose_plan.pose.orientation.w = 1.0;  // Default orientation (no rotation)
                 pose_plan.header.stamp = this->get_clock()->now();
                 pose_plan.header.frame_id = "map";
                 path_msg->poses.push_back(pose_plan);
             }
             path_pub_->publish(std::move(path_msg));
 
-            // Draw path visualization
+            // Draw green lines connecting consecutive waypoints for visualization
             for (size_t i = 1; i < path.size(); i++) {
                 visualization::DrawLine(path[i - 1].loc, path[i].loc, 0x007F00, global_viz_msg_);
             }
 
-            // Draw carrot
+            // Publish current carrot (intermediate target) point
             Eigen::Vector2f carrot;
             if (navigation_.GetCarrot(carrot)) {
                 auto carrot_msg = std::make_unique<nav_msgs::msg::Path>();
                 carrot_msg->header.stamp = this->get_clock()->now();
                 carrot_msg->header.frame_id = "map";
 
+                // Single pose representing the carrot point
                 geometry_msgs::msg::PoseStamped carrot_pose;
                 carrot_pose.pose.position.x = carrot.x();
                 carrot_pose.pose.position.y = carrot.y();
-                carrot_pose.pose.orientation.w = 1.0;
+                carrot_pose.pose.orientation.w = 1.0;  // Default orientation
                 carrot_pose.header.stamp = this->get_clock()->now();
                 carrot_pose.header.frame_id = "map";
                 carrot_msg->poses.push_back(carrot_pose);
@@ -551,13 +539,17 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawTarget() {
+        // ?? add visualization for drawing forward predicted carrot and robot
         const float carrot_dist = navigation_.params_.carrot_dist;
         const Eigen::Vector2f target = navigation_.local_target_;
 
+        // Draw carrot distance circle (light gray)
         visualization::DrawArc(Eigen::Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
+
+        // Draw local target point (magenta cross)
         visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 
-        // Draw FOV cone (dark yellow 0xFFCC00)
+        // Draw FOV cone boundaries (dark yellow)
         const float fov_length = 2.0f;  // Length of FOV lines in meters
         const float fov_angle = CONFIG_local_fov;
         Eigen::Vector2f fov_left(fov_length * cos(fov_angle), fov_length * sin(fov_angle));
@@ -567,12 +559,13 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawRobot() {
+        // ?? add visualization for drawing forward predicted carrot and robot
         const float kRobotLength = navigation_.params_.robot_length;
         const float kRobotWidth = navigation_.params_.robot_width;
         const float kRearAxleOffset = 0.0;
         const float kObstacleMargin = navigation_.params_.obstacle_margin;
 
-        // Draw robot with margin
+        // Draw robot with margin (light gray outline showing safety buffer)
         {
             const float l1 = -0.5 * kRobotLength - kRearAxleOffset - kObstacleMargin;
             const float l2 = 0.5 * kRobotLength - kRearAxleOffset + kObstacleMargin;
@@ -583,7 +576,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
         }
 
-        // Draw actual robot
+        // Draw actual robot footprint (black outline)
         {
             const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
             const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
@@ -599,51 +592,50 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.sampled_paths_;
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
 
+        // Draw all sampled path options in blue
         for (const auto& rollout : path_rollouts) {
+            // Handle constant curvature arc paths
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(rollout.get());
             if (arc) {
+                // Draw arc path (blue: 0x0000FF)
                 visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(), 0x0000FF, false,
                                               local_viz_msg_);
             }
+            // Handle omnidirectional straight-line paths
             const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(rollout.get());
             if (omni) {
-                // For omni, draw straight line in the direction of motion
+                // Draw straight line from origin to endpoint (blue: 0x0000FF)
                 Eigen::Vector2f endpoint = omni->EndPoint().translation;
                 visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0x0000FF, local_viz_msg_);
             }
         }
 
+        // Highlight the selected best path option in red
         if (best_option != nullptr) {
+            // Handle best arc path
             const auto* best_arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(best_option.get());
             if (best_arc) {
+                // Draw selected arc (red: 0xFF0000)
                 visualization::DrawPathOption(best_arc->curvature, best_arc->Length(), best_arc->Clearance(), 0xFF0000,
                                               true, local_viz_msg_);
             }
+            // Handle best omnidirectional path
             const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_option.get());
             if (best_omni) {
+                // Draw selected straight path (red: 0xFF0000)
                 Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
                 visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
 
-                // Draw clearance corridor along the chosen direction
+                // Draw clearance boundaries showing minimum distance to obstacles (red: 0xFF0000)
                 const float clearance = best_omni->Clearance();
-                // Perpendicular vector to the direction (rotated 90 degrees)
+                // Calculate perpendicular vector for clearance boundaries
                 Eigen::Vector2f perp(-best_omni->direction.y(), best_omni->direction.x());
                 Eigen::Vector2f clearance_offset = clearance * perp;
-                // Draw clearance lines on both sides of the path
+                // Draw parallel lines showing clearance boundaries
                 visualization::DrawLine(clearance_offset, endpoint + clearance_offset, 0xFF0000, local_viz_msg_);
                 visualization::DrawLine(-clearance_offset, endpoint - clearance_offset, 0xFF0000, local_viz_msg_);
             }
         }
-    }
-
-    void PublishVisualizationMarkers() {
-        // This would publish the visualization markers - implementation depends on visualization system
-        // For now, we'll skip this as it requires the full visualization marker setup
-    }
-
-    void InitSimulatorVizMarkers() {
-        // Initialize visualization markers - simplified for now
-        RCLCPP_INFO(this->get_logger(), "Visualization markers initialized");
     }
 
     void LoadConfig(navigation::NavigationParameters* params) {

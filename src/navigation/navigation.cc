@@ -83,19 +83,10 @@ using namespace motion_primitives;
 #include <cfloat>
 #include <glog/logging.h>
 
-DEFINE_bool(test_toc, false, "Run 1D time-optimal controller test");
-DEFINE_bool(test_obstacle, false, "Run obstacle detection test");
-DEFINE_bool(test_avoidance, false, "Run obstacle avoidance test");
-DEFINE_bool(test_planner, false, "Run navigation planner test");
-DEFINE_bool(test_latency, false, "Run Latency test");
-DEFINE_double(test_dist, 0.5, "Test distance");
-DEFINE_string(test_log_file, "", "Log test results to file");
-DEFINE_double(max_curvature, 2.0, "Maximum curvature of turning");
-DEFINE_bool(no_local, false, "can be used to turn off local planner");
-DEFINE_int32(num_options, 41, "Number of options to consider");
+// Utility macro for vector component access in printf statements
+#define V2COMP(v) v.x(), v.y()
+
 DEFINE_double(max_plan_deviation, 0.5, "Maximum premissible deviation from the plan");
-DEFINE_double(tx, 0.4, "Test obstacle point - X");
-DEFINE_double(ty, -0.38, "Test obstacle point - Y");
 
 namespace {
 // Epsilon value for handling limited numerical precision.
@@ -270,30 +261,34 @@ void Navigation::UpdateCommandHistory(Twist twist) {
 
 void Navigation::ForwardPredict(double t) {
     const double dt_seg = params_.dt;
-    // (A) Predicted velocity just BEFORE time t (Pattern A)
+    // Predicted velocity just BEFORE time t, which we are computing now
     if (command_history_.empty()) {
         robot_vel_ = Vector2f(0.f, 0.f);
         robot_omega_ = 0.f;
     } else {
-        // last command with start time <= t (active on [t-dt, t) if present)
+        // Find the last command with start time <= t (active on [t-dt, t) if present)
+        // Loop iterates from front to back of the queue (earliest to latest commands)
+        // Since command_history_ is sorted by cmd_exec_start_time in ascending order,
+        // we iterate through commands chronologically to find the last command
+        // whose execution start time is <= t (i.e., the command active at time t)
         const Twist* active = nullptr;
         for (const Twist& c : command_history_) {
             if (c.cmd_exec_start_time <= t)
-                active = &c;
+                active = &c;  // Keep updating to find the latest valid command
             else
-                break;  // relies on sorted history
+                break;  // Since sorted, no later commands will have start_time <= t
         }
         if (!active) active = &command_history_.front();
         robot_vel_ = Vector2f(active->linear.x(), active->linear.y());
         robot_omega_ = static_cast<float>(active->angular.z());
     }
-    // (B) Initialize pose at the odometry stamp
+    // Set the latest odometry location and angle
     odom_loc_ = Vector2f(latest_odom_msg_.position.x(), latest_odom_msg_.position.y());
     {
         const auto& q = latest_odom_msg_.orientation;
         odom_angle_ = YawFromQuat(q.x(), q.y(), q.z(), q.w());
     }
-    // (C) Accumulate forward pose and inverse LiDAR motion
+    // Forward predict the robot's pose and accumulate inverse LiDAR transform
     Affine2f lidar_tf = Affine2f::Identity();
     for (const Twist& c : command_history_) {
         const double seg0 = c.cmd_exec_start_time;
@@ -322,95 +317,11 @@ void Navigation::ForwardPredict(double t) {
             }
         }
     }
-    // (D) Warp the cloud from t_point_cloud_ to t
+    // Transform the cloud from t_point_cloud_ to t
     fp_point_cloud_.resize(point_cloud_.size());
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
         fp_point_cloud_[i] = lidar_tf * point_cloud_[i];
     }
-}
-
-void Navigation::TrapezoidTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-    if (!odom_initialized_) return;
-    const float x = (odom_loc_ - starting_loc_).norm();
-    const float speed = robot_vel_.norm();
-    const float velocity_cmd =
-        motion_primitives::Run1DTimeOptimalControl(params_.linear_limits, x, speed, FLAGS_test_dist, 0, params_.dt);
-    cmd_vel = {velocity_cmd, 0};
-    cmd_angle_vel = 0;
-    printf("x: %.3f d:%.3f v: %.3f cmd:%.3f\n", x, FLAGS_test_dist, speed, velocity_cmd);
-}
-
-void Navigation::LatencyTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-    static FILE* fid = nullptr;
-    if (!FLAGS_test_log_file.empty() && fid == nullptr) {
-        fid = fopen(FLAGS_test_log_file.c_str(), "w");
-    }
-    const float kMaxSpeed = 0.75;
-    const float kFrequency = 0.4;
-
-    static double t_start_ = GetMonotonicTime();
-    const double t = GetMonotonicTime() - t_start_;
-    // float v_current = robot_vel_.x();
-    float v_cmd = kMaxSpeed * sin(2.0 * M_PI * kFrequency * t);
-    cmd_vel = {v_cmd, 0};
-    cmd_angle_vel = 0.0;
-}
-
-void Navigation::ObstAvTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-    const Vector2f kTarget(4, 0);
-    local_target_ = kTarget;
-    RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
-}
-
-void Navigation::ObstacleTest(Vector2f& cmd_vel, float& cmd_angle_vel) {
-    const float speed = robot_vel_.norm();
-    float free_path_length = 30.0;
-    float clearance = 10;
-    GetStraightFreePathLength(&free_path_length, &clearance);
-    const float dist_left = max<float>(0.0f, free_path_length - params_.obstacle_margin);
-    printf("%f\n", free_path_length);
-    const float velocity_cmd =
-        motion_primitives::Run1DTimeOptimalControl(params_.linear_limits, 0, speed, dist_left, 0, params_.dt);
-    cmd_vel = {velocity_cmd, 0};
-    cmd_angle_vel = 0;
-}
-
-Vector2f GetClosestApproach(const PathOption& o, const Vector2f& target) {
-    if (fabs(o.curvature) < kEpsilon) {
-        // Straight line path
-        if (target.x() > o.free_path_length) {
-            return Vector2f(o.free_path_length, 0);
-        } else if (target.x() < 0.0) {
-            return Vector2f(0, 0);
-        } else {
-            return Vector2f(target.x(), 0);
-        }
-    }
-    const float end_angle = fabs(o.curvature * o.free_path_length);
-    const float turn_radius = 1.0f / o.curvature;
-    const Vector2f turn_center(0, turn_radius);
-    const Vector2f target_radial = target - turn_center;
-
-    const Vector2f start(0, 0);
-    const Vector2f middle_radial = fabs(turn_radius) * target_radial.normalized();
-    const Vector2f middle = turn_center + middle_radial;
-    const float middle_angle = atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
-
-    const Vector2f end(fabs(turn_radius) * sin(end_angle), turn_radius * (1.0f - cos(end_angle)));
-
-    Vector2f closest_point = start;
-    if (middle_angle < end_angle && (closest_point - target).squaredNorm() > (middle - target).squaredNorm()) {
-        closest_point = middle;
-    }
-    if ((closest_point - target).squaredNorm() > (end - target).squaredNorm()) {
-        closest_point = end;
-    }
-    return closest_point;
-}
-
-float GetClosestDistance(const PathOption& o, const Vector2f& target) {
-    const Vector2f closest_point = GetClosestApproach(o, target);
-    return (target - closest_point).norm();
 }
 
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
@@ -431,22 +342,20 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vecto
     Domain::State start = planning_domain_.states[start_id];
     Domain::State goal = planning_domain_.states[goal_id];
     GraphVisualizer graph_viz(kVisualize);
+    // ?? figure out whats the planning domain and graph for empty map, and is there a default grid that it fallbacks to
+    // when no nodes?
     const bool found_path = AStar(start, goal, planning_domain_, &graph_viz, &path);
     if (!found_path) {
         printf("No path found!\n");
     }
-
     return path;
 }
 
-void Navigation::PlannerTest() {
-    if (!loc_initialized_) return;
-    Plan(robot_loc_, nav_goal_loc_);
-}
-
-bool Navigation::PlanStillValid() {  // ??, why max_plan_deviation is needed? it should just go to the closest point on
-                                     // path right howsoever far?
-    if (plan_path_.size() < 2) return false;
+bool Navigation::PlanStillValid() {
+    // ??, why max_plan_deviation is needed? it should just go to the closest point on path right howsoever far?
+    if (plan_path_.size() < 2)
+        return false;  // ?? is it due to (start, end) atleast. In that case, why would the distance check be false
+                       // ever?
     for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
         const float dist_from_segment =
             geometry::DistanceFromLineSegment(robot_loc_, plan_path_[i].loc, plan_path_[i + 1].loc);
@@ -458,21 +367,20 @@ bool Navigation::PlanStillValid() {  // ??, why max_plan_deviation is needed? it
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
+    // ?? Get the carrot in map frame, based on current robot location and the plan path in map frame.
     if (carrot_dist < 0) {
         carrot_dist = params_.carrot_dist;
     }
     vector<GraphDomain::State> plan_path = plan_path_;
     const float kSqCarrotDist = Sq(carrot_dist);
 
-    // CHECK_GE(plan_path.size(), 2u);
-
+    // If goal (map frame) is within the carrot dist, set the carrot (map frame) to the goal
     if ((plan_path[0].loc - robot_loc_).squaredNorm() < kSqCarrotDist) {
-        // Goal is within the carrot dist.
         carrot = plan_path[0].loc;
         return true;
     }
 
-    // Find closest line segment in plan to current location
+    // Find closest line segment in plan to current robot location (all in map frame)
     float closest_dist = FLT_MAX;
     int i0 = 0, i1 = 1;
     for (size_t i = 0; i + 1 < plan_path.size(); ++i) {
@@ -485,38 +393,37 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
             i1 = i + 1;
         }
     }
-    // printf("closest: %d %d %f\n", i0, i1, closest_dist);
 
+    // Fallback: if robot is too far from path, project robot position onto closest path segment (all in map frame).
     if (closest_dist > carrot_dist) {
-        // Closest edge on the plan is farther than carrot dist to the robot.
-        // The carrot will be the projection of the robot loc on to the edge.
         const Vector2f v0 = plan_path[i0].loc;
         const Vector2f v1 = plan_path[i1].loc;
         carrot = geometry::ProjectPointOntoLineSegment(robot_loc_, v0, v1);
         return true;
     }
 
-    // Iterate from current line segment to goal until the segment intersects
-    // the circle centered at the robot, of radius kCarrotDist.
+    // Find path segment that crosses carrot circle boundary (one vertex inside, one outside)
+    // Iterate backward along the path toward the goal (index 0) to find a line segment
+    // that spans the carrot circle boundary. All calculations are in map frame.
     // The goal is not within carrot dist of the robot, and the robot is within
     // carrot dist of some line segment. Hence, there must exist at least one
-    // vertex along the plan towards the goal that is out of the carrot dist.
+    // vertex along the plan towards the goal that is outside the carrot dist.
+    // This ensures we find a segment where one endpoint is inside carrot distance
+    // and one is outside, allowing proper circle-line intersection calculation.
     for (int i = i1; i - 1 >= 0; --i) {
         i0 = i;
         // const Vector2f v0 = plan_path_[i].loc;
-        const Vector2f v1 = plan_path[i - 1].loc;
+        const Vector2f v1 = plan_path[i - 1].loc;  // vertex closer to goal (map frame)
         if ((v1 - robot_loc_).squaredNorm() > kSqCarrotDist) {
-            break;
+            break;  // Found first vertex outside carrot distance - this defines our target segment
         }
     }
     i1 = i0 - 1;
-    // printf("i0:%d i1:%d\n", i0, i1);
+
     const Vector2f v0 = plan_path[i0].loc;
     const Vector2f v1 = plan_path[i1].loc;
     Vector2f r0, r1;
-#define V2COMP(v) v.x(), v.y()
-    // printf("%f,%f %f,%f %f,%f %f\n",
-    //     V2COMP(robot_loc_), V2COMP(v0), V2COMP(v1), (v0 - v1).norm());
+    // Calculate where carrot circle intersects the target path segment
     const int num_intersections = geometry::CircleLineIntersection<float>(robot_loc_, carrot_dist, v0, v1, &r0, &r1);
     if (num_intersections == 0) {
         fprintf(stderr,
@@ -526,6 +433,7 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
         return false;
     }
 
+    // Choose intersection point closer to goal (v1 is goal-ward from v0)
     if (num_intersections == 1 || (r0 - v1).squaredNorm() < (r1 - v1).squaredNorm()) {
         carrot = r0;
     } else {
@@ -534,61 +442,38 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
     return true;
 }
 
-void Navigation::GetStraightFreePathLength(float* free_path_length, float* clearance) {
-    // How much the robot's body extends in front of its base link frame.
-    const float l = 0.5 * params_.robot_length - params_.base_link_offset + params_.obstacle_margin;
-    // The robot's half-width.
-    const float w = 0.5 * params_.robot_width + params_.obstacle_margin;
-    for (const Vector2f& p : fp_point_cloud_) {
-        if (fabs(p.y()) > w || p.x() < 0.0f) continue;
-        *free_path_length = min(*free_path_length, p.x() - l);
-    }
-    *clearance = params_.max_clearance;
-    for (const Vector2f& p : point_cloud_) {
-        if (p.x() - l > *free_path_length || p.x() < 0.0) continue;
-        *clearance = min<float>(*clearance, fabs(fabs(p.y() - w)));
-    }
-    *clearance = max(0.0f, *clearance);
-    *free_path_length = max(0.0f, *free_path_length);
-}
-
-Vector2f GetFinalPoint(const PathOption& o) {
-    if (fabs(o.curvature) < 0.01) {
-        return Vector2f(o.free_path_length, 0);
-    } else {
-        const float r = 1.0f / o.curvature;
-        const float a = o.free_path_length / fabs(r);
-        return Vector2f(fabs(r) * sin(a), r * (1.0 - cos(a)));
-    }
-}
-
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     static CumulativeFunctionTimer function_timer_(__FUNCTION__);
     CumulativeFunctionTimer::Invocation invoke(&function_timer_);
     Vector2f local_target = local_target_;
-
+    // Update planner components with current state and obstacles
+    // ?? everything looks correct (fp), except local_target, which is in map frame and based on robot_loc, and
+    // robot_loc
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
     evaluator_->Update(robot_loc_, robot_angle_, robot_vel_, robot_omega_, local_target, fp_point_cloud_);
+    // Generate path options
     auto paths = sampler_->GetSamples(params_.num_options);
     if (paths.size() == 0) {
-        // No options, just stop.
+        // Fallback: no path options available
         Halt(vel_cmd, ang_vel_cmd);
         return;
     }
+    // Select best path from options
     auto best_path = evaluator_->FindBest(paths);
     if (best_path == nullptr) {
-        // No valid path found - just turn in place toward target
+        // Fallback: no valid path found
         TurnInPlace(vel_cmd, ang_vel_cmd);
         return;
     }
 
-    ang_vel_cmd = 0;
-    vel_cmd = {0, 0};
-
     float max_map_speed = params_.linear_limits.max_speed;
+    // ?? again robot_loc is in map frame and not fp
     planning_domain_.GetClearanceAndSpeedFromLoc(robot_loc_, nullptr, &max_map_speed);
     auto linear_limits = params_.linear_limits;
     linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
+
+    ang_vel_cmd = 0;   // ?? this is most likely not needed
+    vel_cmd = {0, 0};  // ?? this is most likely not needed
     best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd,
                            ang_vel_cmd);
     sampled_paths_ = paths;
@@ -596,106 +481,112 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
-    const float kEpsSpeed = 0.01;
-    const float velocity = robot_vel_.x();
-    float velocity_cmd = 0;
-    if (fabs(velocity) > kEpsSpeed) {
+    const float kEpsSpeed = 0.01f;
+    const float kEpsOmega = 0.01f;
+
+    // Decelerate linear velocity vector toward zero without assuming 1D motion
+    const Vector2f current_v = robot_vel_;
+    const float current_speed = current_v.norm();
+    Vector2f next_v(0.f, 0.f);
+    if (current_speed > kEpsSpeed) {
         const float dv = params_.linear_limits.max_deceleration * params_.dt;
-        if (velocity < -dv) {
-            velocity_cmd = velocity + dv;
-        } else if (velocity > dv) {
-            velocity_cmd = velocity - dv;
+        if (current_speed > dv) {
+            next_v = current_v * ((current_speed - dv) / current_speed);
         } else {
-            velocity_cmd = 0;
+            next_v.setZero();
         }
     }
-    cmd_vel = {velocity_cmd, 0};
-    // TODO: motion profiling for omega
-    angular_vel_cmd = 0;
+    cmd_vel = next_v;
+
+    // Decelerate angular velocity toward zero
+    const float omega = robot_omega_;
+    float next_omega = 0.f;
+    if (fabs(omega) > kEpsOmega) {
+        const float d_omega = params_.angular_limits.max_deceleration * params_.dt;
+        if (fabs(omega) > d_omega) {
+            next_omega = omega - Sign(omega) * d_omega;
+        } else {
+            next_omega = 0.f;
+        }
+    }
+    angular_vel_cmd = next_omega;
 }
 
 void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
-    const float kMaxLinearSpeed = 0.1;
-    const float velocity = robot_vel_.x();
-    cmd_angle_vel = 0;
-
-    if (fabs(velocity) > kMaxLinearSpeed) {
+    // If we're moving too fast linearly, slow down first (use full 2D speed)
+    const float kMaxLinearSpeedDuringTurn = 0.1f;
+    const float lin_speed = robot_vel_.norm();
+    if (lin_speed > kMaxLinearSpeedDuringTurn) {
+        // Decelerate linear velocity; don't spin and drive at once when too fast
         Halt(cmd_vel, cmd_angle_vel);
         return;
     }
-    float dTheta = 0;
+
+    // Desired heading error
+    float dTheta = 0.0f;
     if (nav_state_ == NavigationState::kGoto) {
+        // ?? local_target is in map frame and not fp, same for robot_angle_
+        // Turn towards local_target (robot frame)
         dTheta = atan2(local_target_.y(), local_target_.x());
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
+        // Turn towards nav_goal_angle_ in map frame
         dTheta = AngleDiff(nav_goal_angle_, robot_angle_);
     }
 
+    // If already close enough, stop
+    if (fabs(dTheta) < 1e-3f) {
+        cmd_vel = Vector2f(0.f, 0.f);
+        cmd_angle_vel = 0.f;
+        return;
+    }
+
+    // Angular motion profiling: if rotating the wrong way, bleed off omega first
     const float s = Sign(dTheta);
     if (robot_omega_ * dTheta < 0.0f) {
-        const float dv = params_.dt * params_.angular_limits.max_acceleration;
-        // Turning the wrong way!
-        if (fabs(robot_omega_) < dv) {
-            cmd_angle_vel = 0;
-        } else {
-            cmd_angle_vel = robot_omega_ - Sign(robot_omega_) * dv;
-        }
+        const float domega = params_.angular_limits.max_acceleration * params_.dt;
+        cmd_angle_vel = (fabs(robot_omega_) < domega) ? 0.f : (robot_omega_ - Sign(robot_omega_) * domega);
     } else {
-        cmd_angle_vel = s * motion_primitives::Run1DTimeOptimalControl(params_.angular_limits, 0, s * robot_omega_,
-                                                                       s * dTheta, 0, params_.dt);
+        cmd_angle_vel = s * motion_primitives::Run1DTimeOptimalControl(params_.angular_limits, 0.f, s * robot_omega_,
+                                                                       s * dTheta, 0.f, params_.dt);
     }
-    cmd_vel = {0, 0};
-}
 
-void Navigation::SetEvaluatorClearanceWeight(const float weight) {
-    LinearEvaluator* evaluator = dynamic_cast<LinearEvaluator*>(evaluator_.get());
-    evaluator->SetClearanceWeight(weight);
-    return;
+    // No linear motion while turning in place
+    cmd_vel = Vector2f(0.f, 0.f);
 }
 
 bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel) {
+    // Early exit checks
     if (!initialized_) {
         return false;
     }
     if (!odom_initialized_) {
         return false;
     }
-    // ?? should we check if t_point_cloud_ and t_odometry_ are finite? or update the initialized variables logic?
+    // Ensure sensor data is available before proceeding
     if (!std::isfinite(t_point_cloud_) || !std::isfinite(t_odometry_)) {
         return false;
     }
 
-    ForwardPredict(time + params_.actuation_latency);
-    if (FLAGS_test_toc) {
-        TrapezoidTest(cmd_vel, cmd_angle_vel);
-        return true;
-    } else if (FLAGS_test_obstacle) {
-        ObstacleTest(cmd_vel, cmd_angle_vel);
-        return true;
-    } else if (FLAGS_test_avoidance) {
-        ObstAvTest(cmd_vel, cmd_angle_vel);
-        return true;
-    } else if (FLAGS_test_planner) {
-        PlannerTest();
-        return true;
-    } else if (FLAGS_test_latency) {
-        LatencyTest(cmd_vel, cmd_angle_vel);
-        return true;
-    }
+    printf("command_history_ length: %zu\n", command_history_.size());
 
-    // Before switching states we need to update the local target.
+    // Forward predict robot state to account for actuation latency
+    ForwardPredict(time + params_.actuation_latency);
+
+    // Update local target for kGoto state
     if (nav_state_ == NavigationState::kGoto) {
-        // Recompute global plan as necessary.
+        // Recompute global plan if current plan is invalid
         if (!PlanStillValid()) {
             plan_path_ = Plan(robot_loc_, nav_goal_loc_);
         }
-        // Get Carrot and check if done
+        // Get carrot point from global plan
         Vector2f carrot(0, 0);
         bool foundCarrot = GetCarrot(carrot);
         if (!foundCarrot) {
+            // No valid carrot found, halt and fail
             Halt(cmd_vel, cmd_angle_vel);
             return false;
         }
-        // Local Navigation
+        // Transform carrot from map frame to robot frame for local planning
         local_target_ = Rotation2Df(-robot_angle_) * (carrot - robot_loc_);
     }
 
@@ -703,13 +594,17 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
     NavigationState prev_state = nav_state_;
     do {
         prev_state = nav_state_;
+        // Transition from kGoto to kTurnInPlace when close to target and slow enough
         if (nav_state_ == NavigationState::kGoto && local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
             robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
             nav_state_ = NavigationState::kTurnInPlace;
+            // Transition from kTurnInPlace to kStopped when final orientation is reached
         } else if (nav_state_ == NavigationState::kTurnInPlace &&
                    AngleDist(robot_angle_, nav_goal_angle_) < params_.target_angle_tolerance) {
             nav_state_ = NavigationState::kStopped;
         }
+        // continue until no more state changes can happen
+        // loop allows for multiple state changes in the same control loop iteration
     } while (prev_state != nav_state_);
 
     switch (nav_state_) {
@@ -728,24 +623,24 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
+        // Local target processing for obstacle avoidance
         Vector2f local_target = local_target_;
         const float theta = atan2(local_target.y(), local_target.x());
+        // Clamp local target to carrot distance if too far
         if (local_target.squaredNorm() > Sq(params_.carrot_dist)) {
             local_target = params_.carrot_dist * local_target.normalized();
         }
-        if (!FLAGS_no_local) {
-            if (fabs(theta) > params_.local_fov) {
-                TurnInPlace(cmd_vel, cmd_angle_vel);
-            } else {
-                RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
-            }
+        // Choose between turning in place or obstacle avoidance based on FOV
+        if (fabs(theta) > params_.local_fov) {
+            // Target outside FOV: turn in place first
+            TurnInPlace(cmd_vel, cmd_angle_vel);
+        } else {
+            // Target within FOV: run obstacle avoidance
+            RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
         }
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
         TurnInPlace(cmd_vel, cmd_angle_vel);
     }
-
-    // viz_pub_.publish(local_viz_msg_);
-    // viz_pub_.publish(global_viz_msg_);
 
     return true;
 }
