@@ -135,6 +135,10 @@ class Navigation {
     std::vector<GraphDomain::State> plan_path_;
     // Navigation parameters.
     NavigationParameters params_;
+    // Current robot location in map frame (from localization).
+    Eigen::Vector2f robot_loc_;
+    // Current robot orientation in map frame (from localization system).
+    float robot_angle_;
     // Forward-predicted robot location in map frame at actuation time.
     Eigen::Vector2f robot_loc_fp_;
     // Forward-predicted robot yaw in map frame at actuation time.
@@ -163,10 +167,6 @@ class Navigation {
     void DrawRobot();
     // Publish a status message.
     void PublishNavStatus(const Eigen::Vector2f& carrot);
-    // Current robot location in map frame (from localization).
-    Eigen::Vector2f robot_loc_;
-    // Current robot orientation in map frame (from localization system).
-    float robot_angle_;
     // Penultimate-to-forward-predicted-time robot linear velocity command
     Eigen::Vector2f robot_vel_;
     // Penultimate-to-forward-predicted-time robot angular velocity command

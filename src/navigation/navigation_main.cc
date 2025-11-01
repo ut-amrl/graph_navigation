@@ -583,25 +583,60 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
         }
 
-        // Draw forward-predicted robot footprint in map frame (blue outline)
+        // Draw forward-predicted robot footprint (fp) in local (base) frame (blue outline)
         {
-            const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
-            const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
-            const float w = 0.5 * kRobotWidth;
+            const float l1 = -0.5f * kRobotLength - kRearAxleOffset;
+            const float l2 =  0.5f * kRobotLength - kRearAxleOffset;
+            const float w  =  0.5f * kRobotWidth;
 
-            const Eigen::Rotation2Df R(navigation_.robot_angle_fp_);
-            const Eigen::Vector2f t = navigation_.robot_loc_fp_;
+            // Predicted pose in MAP: (t_fp, R_fp)
+            const Eigen::Rotation2Df R_fp(navigation_.robot_angle_fp_);
+            const Eigen::Vector2f    t_fp = navigation_.robot_loc_fp_;
 
-            const Eigen::Vector2f p1 = t + R * Eigen::Vector2f(l1, w);
-            const Eigen::Vector2f p2 = t + R * Eigen::Vector2f(l1, -w);
-            const Eigen::Vector2f p3 = t + R * Eigen::Vector2f(l2, -w);
-            const Eigen::Vector2f p4 = t + R * Eigen::Vector2f(l2, w);
+            // Corners in MAP
+            const Eigen::Vector2f p1m = t_fp + R_fp * Eigen::Vector2f(l1,  w);
+            const Eigen::Vector2f p2m = t_fp + R_fp * Eigen::Vector2f(l1, -w);
+            const Eigen::Vector2f p3m = t_fp + R_fp * Eigen::Vector2f(l2, -w);
+            const Eigen::Vector2f p4m = t_fp + R_fp * Eigen::Vector2f(l2,  w);
 
-            visualization::DrawLine(p1, p2, 0x66CCFF, global_viz_msg_);
-            visualization::DrawLine(p2, p3, 0x66CCFF, global_viz_msg_);
-            visualization::DrawLine(p3, p4, 0x66CCFF, global_viz_msg_);
-            visualization::DrawLine(p4, p1, 0x66CCFF, global_viz_msg_);
+            // Transform MAP -> current BASE frame (local)
+            const Eigen::Rotation2Df R_now_inv(-navigation_.robot_angle_);
+            const Eigen::Vector2f    t_now     = navigation_.robot_loc_;
+            auto ToLocal = [&](const Eigen::Vector2f& pm) {
+                return R_now_inv * (pm - t_now);
+            };
+
+            const Eigen::Vector2f p1 = ToLocal(p1m);
+            const Eigen::Vector2f p2 = ToLocal(p2m);
+            const Eigen::Vector2f p3 = ToLocal(p3m);
+            const Eigen::Vector2f p4 = ToLocal(p4m);
+
+            // Draw FP robot in LOCAL (base_link) frame
+            visualization::DrawLine(p1, p2, 0x66CCFF, local_viz_msg_);
+            visualization::DrawLine(p2, p3, 0x66CCFF, local_viz_msg_);
+            visualization::DrawLine(p3, p4, 0x66CCFF, local_viz_msg_);
+            visualization::DrawLine(p4, p1, 0x66CCFF, local_viz_msg_);
         }
+
+        // // Draw forward-predicted robot footprint in map frame (blue outline)
+        // {
+        //     const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
+        //     const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
+        //     const float w = 0.5 * kRobotWidth;
+
+        //     const Eigen::Rotation2Df R(navigation_.robot_angle_fp_);
+        //     const Eigen::Vector2f t = navigation_.robot_loc_fp_;
+
+        //     const Eigen::Vector2f p1 = t + R * Eigen::Vector2f(l1, w);
+        //     const Eigen::Vector2f p2 = t + R * Eigen::Vector2f(l1, -w);
+        //     const Eigen::Vector2f p3 = t + R * Eigen::Vector2f(l2, -w);
+        //     const Eigen::Vector2f p4 = t + R * Eigen::Vector2f(l2, w);
+
+        //     visualization::DrawLine(p1, p2, 0x66CCFF, global_viz_msg_);
+        //     visualization::DrawLine(p2, p3, 0x66CCFF, global_viz_msg_);
+        //     visualization::DrawLine(p3, p4, 0x66CCFF, global_viz_msg_);
+        //     visualization::DrawLine(p4, p1, 0x66CCFF, global_viz_msg_);
+        // }
     }
 
     void DrawPathOptions() {
