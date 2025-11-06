@@ -256,7 +256,6 @@ void Navigation::PruneLatencyQueue() {
 void Navigation::UpdateOdometry(const Odom& msg) {
     latest_odom_msg_ = msg;
     t_odometry_ = msg.time;
-    // PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
     if (!odom_initialized_) {
         starting_loc_ = Vector2f(msg.position.x(), msg.position.y());
         odom_initialized_ = true;
@@ -358,7 +357,6 @@ void Navigation::ForwardPredict(double t) {
 void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
     point_cloud_ = cloud;
     t_point_cloud_ = time;
-    // PruneLatencyQueue();  // ?? why here, is it needed here? or just move it to main Run() at the top?
 }
 
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vector2f& end) {
@@ -399,7 +397,6 @@ bool Navigation::PlanStillValid() {
 }
 
 bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
-    // ?? Get the carrot in map frame, based on current robot location and the plan path in map frame.
     if (carrot_dist < 0) {
         carrot_dist = params_.carrot_dist;
     }
@@ -488,8 +485,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     Vector2f local_target = local_target_;
 
     // Update planner components with current state and obstacles
-    // ?? everything looks correct (fp), except local_target, which is in map frame and based on robot_loc, and
-    // robot_loc
     // Reconstruct predicted map pose at actuation time
     const Vector2f map_loc_pred = robot_loc_fp_;
     const float yaw_map_pred = robot_angle_fp_;
@@ -520,13 +515,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     }
 
     float max_map_speed = params_.linear_limits.max_speed;
-    // ?? again robot_loc is in map frame and not fp
     planning_domain_.GetClearanceAndSpeedFromLoc(map_loc_pred, nullptr, &max_map_speed);
     auto linear_limits = params_.linear_limits;
     linear_limits.max_speed = min(max_map_speed, params_.linear_limits.max_speed);
 
-    ang_vel_cmd = 0;   // ?? this is most likely not needed
-    vel_cmd = {0, 0};  // ?? this is most likely not needed
     best_path->GetControls(linear_limits, params_.angular_limits, params_.dt, robot_vel_, robot_omega_, vel_cmd,
                            ang_vel_cmd);
     sampled_paths_ = paths;
@@ -581,7 +573,6 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     // Desired heading error
     float dTheta = 0.0f;
     if (nav_state_ == NavigationState::kGoto) {
-        // ?? local_target is in map frame and not fp, same for robot_angle_
         // Turn towards local_target (robot frame)
         dTheta = atan2(local_target_.y(), local_target_.x());
     } else if (nav_state_ == NavigationState::kTurnInPlace) {

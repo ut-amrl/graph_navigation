@@ -87,7 +87,7 @@ struct PathRolloutSamplerBase {
         vel = new_vel;
         ang_vel = new_ang_vel;
         local_target = new_local_target;
-        point_cloud = new_point_cloud;
+        point_cloud = &new_point_cloud;  // zero-copy view
     }
 
     void SetNavParams(const navigation::NavigationParameters& new_params) { nav_params = new_params; }
@@ -98,8 +98,8 @@ struct PathRolloutSamplerBase {
     float ang_vel;
     // Local navigation target.
     Eigen::Vector2f local_target;
-    // Obstacle point cloud.
-    std::vector<Eigen::Vector2f> point_cloud;
+    // Non-owning view of obstacle point cloud.
+    const std::vector<Eigen::Vector2f>* point_cloud = nullptr;
     // Navigation parameters.
     navigation::NavigationParameters nav_params;
 };
@@ -122,7 +122,7 @@ struct PathEvaluatorBase {
         vel = new_vel;
         ang_vel = new_ang_vel;
         local_target = new_local_target;
-        point_cloud = new_point_cloud;
+        point_cloud = &new_point_cloud;  // zero-copy view
     }
 
     // Return the best path rollout from the provided set of paths.
@@ -138,8 +138,8 @@ struct PathEvaluatorBase {
     float ang_vel;
     // Local navigation target.
     Eigen::Vector2f local_target;
-    // Obstacle point cloud.
-    std::vector<Eigen::Vector2f> point_cloud;
+    // Non-owning view of obstacle point cloud.
+    const std::vector<Eigen::Vector2f>* point_cloud = nullptr;
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits, const float x_init, const float v_init,

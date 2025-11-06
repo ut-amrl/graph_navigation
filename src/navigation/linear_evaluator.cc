@@ -65,7 +65,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
     bool path_to_goal_exists = false;
     for (size_t i = 0; i < paths.size(); ++i) {
         const auto endpoint = paths[i]->EndPoint().translation;
-        clearance_to_goal[i] = StraightLineClearance(Line2f(endpoint, local_target), point_cloud);
+        clearance_to_goal[i] = StraightLineClearance(Line2f(endpoint, local_target), *point_cloud);
         if (clearance_to_goal[i] > 0.0) {
             dist_to_goal[i] = (endpoint - local_target).norm();
             path_to_goal_exists = true;

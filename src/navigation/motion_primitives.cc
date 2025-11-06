@@ -100,15 +100,23 @@ float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, con
 }
 
 float StraightLineClearance(const Line2f& l, const vector<Vector2f>& points) {
-    const Vector2f d = l.Dir();
-    const float len = l.Length();
-    float clearance = FLT_MAX;
+    const Vector2f seg = l.p1 - l.p0;
+    const float len = seg.norm();
+    if (len <= 0.0f) return 0.0f;
+    const Vector2f dir = seg / len;
+
+    float min_r2 = FLT_MAX;  // track squared lateral distance; sqrt at end
     for (const Vector2f& p : points) {
-        const float x = d.dot(p - l.p0);
-        if (x < 0.0f || x > len) continue;
-        clearance = min<float>(clearance, l.Distance(p));
+        const Vector2f r = p - l.p0;
+        const float x = dir.dot(r);
+        if (x < 0.0f || x > len) continue;         // projection outside segment
+        const float r2 = r.squaredNorm() - x * x;  // lateral distance^2
+        if (r2 < min_r2) {
+            min_r2 = r2;
+            if (min_r2 == 0.0f) return 0.0f;  // exact hit
+        }
     }
-    return clearance;
+    return (min_r2 == FLT_MAX) ? FLT_MAX : std::sqrt(std::max(0.0f, min_r2));
 }
 
 }  // namespace motion_primitives

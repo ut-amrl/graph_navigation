@@ -544,7 +544,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawTarget() {
-        // ?? add visualization for drawing forward predicted carrot and robot
+        // ?? add visualization for drawing forward predicted carrot and robot, BUG: i think for viz we do NOT need fp
         const float carrot_dist = navigation_.params_.carrot_dist;
         const Eigen::Vector2f target = navigation_.local_target_;
 
@@ -564,7 +564,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawRobot() {
-        // ?? add visualization for drawing forward predicted robot
         const float kRobotLength = navigation_.params_.robot_length;
         const float kRobotWidth = navigation_.params_.robot_width;
         const float kRearAxleOffset = 0.0;
@@ -624,26 +623,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             visualization::DrawLine(p3, p4, 0x66CCFF, local_viz_msg_);
             visualization::DrawLine(p4, p1, 0x66CCFF, local_viz_msg_);
         }
-
-        // // Draw forward-predicted robot footprint in map frame (blue outline)
-        // {
-        //     const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
-        //     const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
-        //     const float w = 0.5 * kRobotWidth;
-
-        //     const Eigen::Rotation2Df R(navigation_.robot_angle_fp_);
-        //     const Eigen::Vector2f t = navigation_.robot_loc_fp_;
-
-        //     const Eigen::Vector2f p1 = t + R * Eigen::Vector2f(l1, w);
-        //     const Eigen::Vector2f p2 = t + R * Eigen::Vector2f(l1, -w);
-        //     const Eigen::Vector2f p3 = t + R * Eigen::Vector2f(l2, -w);
-        //     const Eigen::Vector2f p4 = t + R * Eigen::Vector2f(l2, w);
-
-        //     visualization::DrawLine(p1, p2, 0x66CCFF, global_viz_msg_);
-        //     visualization::DrawLine(p2, p3, 0x66CCFF, global_viz_msg_);
-        //     visualization::DrawLine(p3, p4, 0x66CCFF, global_viz_msg_);
-        //     visualization::DrawLine(p4, p1, 0x66CCFF, global_viz_msg_);
-        // }
     }
 
     void DrawPathOptions() {

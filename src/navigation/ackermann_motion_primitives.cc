@@ -77,7 +77,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     // Generate n path samples by varying curvature values across a range.
     // Each sample represents a constant curvature arc that the robot could follow.
     vector<shared_ptr<PathRolloutBase>> samples;
-    
+
     // Debug/test mode: return fixed curvature samples
     if (false) {
         samples = {
@@ -87,14 +87,14 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
         };
         return samples;
     }
-    
+
     // Calculate dynamic constraints based on current robot state:
     // - robot_vel_ (vel.x()) determines current speed for curvature limits
     // - robot_omega_ (ang_vel) provides current angular velocity for smooth transitions
     const float max_domega = nav_params.dt * nav_params.angular_limits.max_acceleration;
     const float max_dv = nav_params.dt * nav_params.linear_limits.max_acceleration;
     const float robot_speed = fabs(vel.x());
-    
+
     // Constrain curvature range based on current velocity and angular velocity
     // to ensure dynamically feasible transitions from current state
     float c_min = -CONFIG_max_curvature;
@@ -104,7 +104,7 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
         c_max = min<float>(c_max, (ang_vel + max_domega) / (robot_speed - max_dv));
     }
     const float dc = (c_max - c_min) / static_cast<float>(n - 1);
-    
+
     // Generate samples: currently uses simple uniform sampling over full curvature range
     // (ignoring the dynamically constrained range above - this appears to be a bug)
     if (false) {
@@ -144,7 +144,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
     const float x_min_body = -0.5 * nav_params.robot_length + nav_params.base_link_offset;
 
     if (fabs(path.curvature) < kEpsilon) {
-        for (const Vector2f& p : point_cloud) {
+        for (const Vector2f& p : *point_cloud) {
             // Skip points inside robot body (NOT including obstacle margin)
             if (p.x() > x_min_body && p.x() < l_body && fabs(p.y()) < w_body) {
                 continue;
@@ -154,7 +154,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
             path.fpl = min(path.fpl, p.x() - l);
         }
         path.clearance = nav_params.max_clearance;
-        for (const Vector2f& p : point_cloud) {
+        for (const Vector2f& p : *point_cloud) {
             // Skip points inside robot body (NOT including obstacle margin)
             if (p.x() > x_min_body && p.x() < l_body && fabs(p.y()) < w_body) {
                 continue;
@@ -188,7 +188,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
     // printf("%7.3f %7.3f %7.3f %7.3f\n",
     //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
     using std::isfinite;
-    for (const Vector2f& p : point_cloud) {
+    for (const Vector2f& p : *point_cloud) {
         if (!isfinite(p.x()) || !isfinite(p.y()) || p.x() < 0.0f) continue;
 
         // Skip points inside robot body (NOT including obstacle margin)
@@ -245,7 +245,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
     angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
     path.clearance = nav_params.max_clearance;
 
-    for (const Vector2f& p : point_cloud) {
+    for (const Vector2f& p : *point_cloud) {
         const float theta = ((path.curvature > 0.0f) ? atan2<float>(p.x(), path_radius - p.y())
                                                      : atan2<float>(p.x(), p.y() - path_radius));
         if (theta < CONFIG_clearance_clip * angle_min && theta > 0.0) {

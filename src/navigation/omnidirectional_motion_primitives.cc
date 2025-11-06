@@ -109,6 +109,17 @@ Pose2Df OmnidirectionalMovePath::EndPoint() const { return GetIntermediateState(
 // OmniSampler implementation
 OmniSampler::OmniSampler() {}
 
+namespace {
+inline void PrecomputeUnitDirs(int n, std::vector<Eigen::Vector2f>& cache) {
+    cache.resize(n);
+    const float step = 2.0f * static_cast<float>(M_PI) / static_cast<float>(n);
+    for (int i = 0; i < n; ++i) {
+        const float a = step * i;
+        cache[i] = Eigen::Vector2f(cos(a), sin(a));
+    }
+}
+}  // namespace
+
 void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     // Distance to goal along this direction
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
@@ -129,71 +140,77 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
 
 vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
     vector<shared_ptr<PathRolloutBase>> samples;
+    samples.reserve(n);
 
-    // Sample uniformly in full 360° circle, just like Ackermann samples all curvatures
-    // The FOV check in Run() will handle turning in place if target is outside FOV
+    // Cache unit directions per n to avoid trig every cycle.
+    static int cached_n = -1;
+    static std::vector<Eigen::Vector2f> unit_dirs;
+    if (cached_n != n) {
+        PrecomputeUnitDirs(n, unit_dirs);
+        cached_n = n;
+    }
+
+    const bool enable_ang_toc = nav_params.do_ang_toc && enable_angular_toc_runtime_;
     for (int i = 0; i < n; ++i) {
-        const float angle = (2.0f * M_PI * i) / n;
-        const Vector2f direction(cos(angle), sin(angle));
-
-        // Only enable angular TOC if config allows AND we're in obstacle avoidance mode
-        const bool enable_ang_toc = nav_params.do_ang_toc && enable_angular_toc_runtime_;
-        auto move = new OmnidirectionalMovePath(direction, 0, enable_ang_toc);
-        SetMaxPathLength(move);
-        CheckObstacles(move);
-        samples.push_back(shared_ptr<PathRolloutBase>(move));
+        auto move = std::make_shared<OmnidirectionalMovePath>(unit_dirs[i], 0.0f, enable_ang_toc);
+        SetMaxPathLength(move.get());
+        CheckObstacles(move.get());
+        samples.emplace_back(std::static_pointer_cast<PathRolloutBase>(move));
     }
 
     return samples;
 }
 
 void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
-    // Follow exact same logic as Ackermann CheckObstacles for straight lines
-    const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
-    const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;
+    // Same logic, cheaper math.
+    const float l = 0.5f * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
+    const float w = 0.5f * nav_params.robot_width + nav_params.obstacle_margin;
+    const float w2 = w * w;
 
-    // Robot body dimensions WITHOUT margin (for filtering lidar points on robot itself)
-    const float l_body = 0.5 * nav_params.robot_length - nav_params.base_link_offset;
-    const float w_body = 0.5 * nav_params.robot_width;
-    const float x_min_body = -0.5 * nav_params.robot_length + nav_params.base_link_offset;
+    // Body box (for filtering points on the robot itself, no margin).
+    const float l_body = 0.5f * nav_params.robot_length - nav_params.base_link_offset;
+    const float w_body = 0.5f * nav_params.robot_width;
+    const float w_body2 = w_body * w_body;
+    const float x_min_body = -0.5f * nav_params.robot_length + nav_params.base_link_offset;
 
-    // Replicate Ackermann straight-line obstacle checking logic
-    for (const Vector2f& p : point_cloud) {
-        // Transform point to path-aligned coordinate system
-        const float along_path = p.dot(move->direction);  // equivalent to p.x() in Ackermann
-        const Vector2f perpendicular_vec = p - along_path * move->direction;
-        const float lateral_distance = perpendicular_vec.norm();  // equivalent to fabs(p.y()) in Ackermann
+    // Pass 1: determine FPL (no sqrt)
+    for (const Vector2f& p : *point_cloud) {
+        const float along = p.dot(move->direction);        // projection onto unit direction
+        const float r2 = p.squaredNorm() - along * along;  // lateral distance^2
 
-        // Skip points inside robot body (NOT including obstacle margin)
-        if (along_path > x_min_body && along_path < l_body && lateral_distance < w_body) {
-            continue;  // Point is within robot body boundary
-        }
+        // Skip points inside robot body (without obstacle margin)
+        if (along > x_min_body && along < l_body && r2 < w_body2) continue;
 
-        if (lateral_distance > w || along_path < 0.0f) continue;
-        move->fpl = min(move->fpl, along_path - l);
+        if (along < 0.0f || r2 > w2) continue;  // outside swept rect
+        move->fpl = std::min(move->fpl, along - l);
+
+        // NOTE: do not break—must still compute clearance below against the final FPL.
     }
 
+    // Pass 2: clearance within [0, fpl] (sqrt only when needed)
     move->clearance = nav_params.max_clearance;
-    for (const Vector2f& p : point_cloud) {
-        const float along_path = p.dot(move->direction);
-        const Vector2f perpendicular_vec = p - along_path * move->direction;
-        const float lateral_distance = perpendicular_vec.norm();
+    for (const Vector2f& p : *point_cloud) {
+        const float along = p.dot(move->direction);
+        if (along < 0.0f || (along - l) > move->fpl) continue;
 
-        // Skip points inside robot body (NOT including obstacle margin)
-        if (along_path > x_min_body && along_path < l_body && lateral_distance < w_body) {
-            continue;
-        }
+        const float r2 = p.squaredNorm() - along * along;
 
-        if (along_path - l > move->fpl || along_path < 0.0) continue;
-        move->clearance = min<float>(move->clearance, fabs(lateral_distance - w));
+        // Skip points inside robot body (without obstacle margin)
+        if (along > x_min_body && along < l_body && r2 < w_body2) continue;
+
+        if (r2 > w2) continue;
+
+        const float lateral = std::sqrt(std::max(0.0f, r2));
+        move->clearance = std::min<float>(move->clearance, std::fabs(lateral - w));
     }
-    move->clearance = max(0.0f, move->clearance);
-    move->fpl = max(0.0f, move->fpl);
-    move->length = min(move->fpl, move->length);
 
-    const float stopping_dist = vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
+    move->clearance = std::max(0.0f, move->clearance);
+    move->fpl = std::max(0.0f, move->fpl);
+    move->length = std::min(move->fpl, move->length);
+
+    const float stopping_dist = vel.squaredNorm() / (2.0f * nav_params.linear_limits.max_deceleration);
     if (move->fpl < stopping_dist) {
-        move->length = 0;
+        move->length = 0.0f;
     }
 }
 
