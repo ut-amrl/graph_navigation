@@ -23,14 +23,12 @@ NavigationParameters = {
   max_free_path_length = 6.0;
   max_clearance = 1.0;
   local_half_fov = deg2rad(90);
-  use_map_speed = true;
   can_traverse_stairs = false;
   target_dist_tolerance = 0.1;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = deg2rad(5);
   evaluator_type = "linear";
   carrot_dist = 3.5;
-  recovery_carrot_dist = 0.7;
   motion_primitives_mode = "omni";
   do_ang_toc = false;
 };

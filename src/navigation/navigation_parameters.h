@@ -72,7 +72,6 @@ struct NavigationParameters {
     // Full FOV cone is ±local_half_fov. Used to determine when obstacle avoidance can continue.
     float local_half_fov;
 
-    bool use_map_speed;
     bool can_traverse_stairs;
 
     // Distance tolerance to reaching target.
@@ -86,8 +85,6 @@ struct NavigationParameters {
 
     // Distance of carrot along path to compute local planner goal
     float carrot_dist;
-    // Distance of carrot when using turn in place recovery
-    float recovery_carrot_dist;
 
     // Motion primitives mode: "ackermann" or "omni"
     std::string motion_primitives_mode;
@@ -106,14 +103,12 @@ struct NavigationParameters {
           base_link_offset(0),
           max_free_path_length(10.0),
           max_clearance(1.0),
-          use_map_speed(true),
           can_traverse_stairs(false),
           target_dist_tolerance(0.1),
           target_vel_tolerance(0.1),
           target_angle_tolerance(0.05),
           evaluator_type("linear"),
           carrot_dist(2),
-          recovery_carrot_dist(0.5),
           motion_primitives_mode("ackermann"),
           do_ang_toc(false) {}
 };

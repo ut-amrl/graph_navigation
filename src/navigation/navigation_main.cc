@@ -107,14 +107,12 @@ CONFIG_FLOAT(base_link_offset, "NavigationParameters.base_link_offset");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
 CONFIG_FLOAT(local_half_fov, "NavigationParameters.local_half_fov");
-CONFIG_BOOL(use_map_speed, "NavigationParameters.use_map_speed");
 CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
 CONFIG_FLOAT(target_vel_tolerance, "NavigationParameters.target_vel_tolerance");
 CONFIG_FLOAT(target_angle_tolerance, "NavigationParameters.target_angle_tolerance");
 CONFIG_STRING(evaluator_type, "NavigationParameters.evaluator_type");
 CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
-CONFIG_FLOAT(recovery_carrot_dist, "NavigationParameters.recovery_carrot_dist");
 CONFIG_STRING(motion_primitives_mode, "NavigationParameters.motion_primitives_mode");
 CONFIG_BOOL(do_ang_toc, "NavigationParameters.do_ang_toc");
 
@@ -714,14 +712,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
         params->local_half_fov = CONFIG_local_half_fov;
-        params->use_map_speed = CONFIG_use_map_speed;
         params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;
         params->target_vel_tolerance = CONFIG_target_vel_tolerance;
         params->target_angle_tolerance = CONFIG_target_angle_tolerance;
         params->evaluator_type = CONFIG_evaluator_type;
         params->carrot_dist = CONFIG_carrot_dist;
-        params->recovery_carrot_dist = CONFIG_recovery_carrot_dist;
         params->motion_primitives_mode = CONFIG_motion_primitives_mode;
         params->do_ang_toc = CONFIG_do_ang_toc;
     }
