@@ -62,6 +62,8 @@ struct OmniSampler : PathRolloutSamplerBase {
 
     void CheckObstacles(OmnidirectionalMovePath* move);
     void SetMaxPathLength(OmnidirectionalMovePath* move);
+    // Runtime flag to enable angular TOC. Only true when nav_state == kGoto && in_obstacle_avoidance_mode.
+    bool enable_angular_toc_runtime_ = false;
 };
 
 }  // namespace motion_primitives

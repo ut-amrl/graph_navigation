@@ -136,7 +136,9 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
         const float angle = (2.0f * M_PI * i) / n;
         const Vector2f direction(cos(angle), sin(angle));
 
-        auto move = new OmnidirectionalMovePath(direction, 0, nav_params.do_ang_toc);
+        // Only enable angular TOC if config allows AND we're in obstacle avoidance mode
+        const bool enable_ang_toc = nav_params.do_ang_toc && enable_angular_toc_runtime_;
+        auto move = new OmnidirectionalMovePath(direction, 0, enable_ang_toc);
         SetMaxPathLength(move);
         CheckObstacles(move);
         samples.push_back(shared_ptr<PathRolloutBase>(move));

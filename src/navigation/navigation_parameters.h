@@ -68,7 +68,9 @@ struct NavigationParameters {
     float base_link_offset;
     float max_free_path_length;
     float max_clearance;
-    float local_fov;
+    // Half-angle of the local field of view cone (radians).
+    // Full FOV cone is ±local_half_fov. Used to determine when obstacle avoidance can continue.
+    float local_half_fov;
 
     bool use_map_speed;
     bool can_traverse_stairs;

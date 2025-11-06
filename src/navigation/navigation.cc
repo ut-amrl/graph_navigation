@@ -155,6 +155,7 @@ Navigation::Navigation()
       robot_angle_fp_(0),
       robot_vel_(0, 0),
       nav_state_(NavigationState::kStopped),
+      in_obstacle_avoidance_mode_(false),
       robot_omega_(0),
       nav_goal_loc_(0, 0),
       nav_goal_angle_(0),
@@ -200,6 +201,12 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
     nav_goal_angle_ = angle;
     plan_path_.clear();
     nav_state_ = NavigationState::kGoto;
+    in_obstacle_avoidance_mode_ = false;
+    // Disable angular TOC when setting new goal
+    if (params_.motion_primitives_mode == "omni") {
+        auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+        omni_sampler->enable_angular_toc_runtime_ = false;
+    }
 }
 
 void Navigation::ResetNavGoals() {
@@ -208,11 +215,18 @@ void Navigation::ResetNavGoals() {
     nav_goal_angle_ = robot_angle_;
     local_target_.setZero();
     plan_path_.clear();
+    in_obstacle_avoidance_mode_ = false;
+    // Disable angular TOC when resetting goals
+    if (params_.motion_primitives_mode == "omni") {
+        auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+        omni_sampler->enable_angular_toc_runtime_ = false;
+    }
 }
 
 void Navigation::UpdateMap(const string& map_path) {
     planning_domain_.Load(map_path);
     plan_path_.clear();
+    in_obstacle_avoidance_mode_ = false;  // Reset sub-state when plan is cleared
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -480,6 +494,13 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     const Vector2f map_loc_pred = robot_loc_fp_;
     const float yaw_map_pred = robot_angle_fp_;
 
+    // Enable angular TOC in omnidirectional sampler only when in obstacle avoidance mode
+    // (RunObstacleAvoidance is only called when nav_state_ == kGoto && in_obstacle_avoidance_mode_ == true)
+    if (params_.motion_primitives_mode == "omni") {
+        auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+        omni_sampler->enable_angular_toc_runtime_ = true;
+    }
+
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
     evaluator_->Update(map_loc_pred, yaw_map_pred, robot_vel_, robot_omega_, local_target, fp_point_cloud_);
 
@@ -622,6 +643,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         bool foundCarrot = GetCarrot(carrot);
         if (!foundCarrot) {
             // No valid carrot found, halt and fail
+            in_obstacle_avoidance_mode_ = false;  // Reset sub-state when carrot unavailable
             Halt(cmd_vel, cmd_angle_vel);
             return false;
         }
@@ -645,6 +667,12 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         if (nav_state_ == NavigationState::kGoto && local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
             robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
             nav_state_ = NavigationState::kTurnInPlace;
+            in_obstacle_avoidance_mode_ = false;  // Reset sub-state when leaving kGoto
+            // Disable angular TOC when leaving kGoto state
+            if (params_.motion_primitives_mode == "omni") {
+                auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+                omni_sampler->enable_angular_toc_runtime_ = false;
+            }
             // Transition from kTurnInPlace to kStopped when final orientation is reached
         } else if (nav_state_ == NavigationState::kTurnInPlace &&
                    AngleDist(robot_angle_fp_, nav_goal_angle_) < params_.target_angle_tolerance) {
@@ -667,19 +695,58 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
     }
 
     if (nav_state_ == NavigationState::kStopped) {
+        // Disable angular TOC in kStopped state
+        if (params_.motion_primitives_mode == "omni") {
+            auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+            omni_sampler->enable_angular_toc_runtime_ = false;
+        }
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
         const float theta = atan2(local_target_.y(), local_target_.x());
-        // Choose between turning in place or obstacle avoidance based on FOV
-        if (fabs(theta) > params_.local_fov) {
-            // Target outside FOV: turn in place first
-            TurnInPlace(cmd_vel, cmd_angle_vel);
+
+        // Hysteresis-based FOV check to prevent oscillation:
+        // - To START obstacle avoidance: target must be well-centered (±10°)
+        // - To CONTINUE obstacle avoidance: target can be anywhere in FOV (±local_half_fov)
+        const float kCenterThreshold = 0.174f;  // ~10 degrees in radians
+
+        if (in_obstacle_avoidance_mode_) {
+            // Already doing obstacle avoidance: keep going unless target leaves FOV
+            if (fabs(theta) > params_.local_half_fov) {
+                // Target left FOV: switch back to turning
+                in_obstacle_avoidance_mode_ = false;
+                // Disable angular TOC since we're no longer in obstacle avoidance mode
+                if (params_.motion_primitives_mode == "omni") {
+                    auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+                    omni_sampler->enable_angular_toc_runtime_ = false;
+                }
+                TurnInPlace(cmd_vel, cmd_angle_vel);
+            } else {
+                // Target still in FOV: continue obstacle avoidance
+                RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+            }
         } else {
-            // Target within FOV: run obstacle avoidance
-            RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+            // Currently turning: only start obstacle avoidance when target is well-centered
+            // Disable angular TOC when turning (not in obstacle avoidance mode)
+            if (params_.motion_primitives_mode == "omni") {
+                auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+                omni_sampler->enable_angular_toc_runtime_ = false;
+            }
+            if (fabs(theta) <= kCenterThreshold) {
+                // Target is centered: start obstacle avoidance
+                in_obstacle_avoidance_mode_ = true;
+                RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+            } else {
+                // Target not centered: keep turning
+                TurnInPlace(cmd_vel, cmd_angle_vel);
+            }
         }
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
+        // Disable angular TOC in kTurnInPlace state
+        if (params_.motion_primitives_mode == "omni") {
+            auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+            omni_sampler->enable_angular_toc_runtime_ = false;
+        }
         TurnInPlace(cmd_vel, cmd_angle_vel);
     }
 

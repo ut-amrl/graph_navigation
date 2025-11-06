@@ -106,7 +106,7 @@ CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
 CONFIG_FLOAT(base_link_offset, "NavigationParameters.base_link_offset");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
-CONFIG_FLOAT(local_fov, "NavigationParameters.local_fov");
+CONFIG_FLOAT(local_half_fov, "NavigationParameters.local_half_fov");
 CONFIG_BOOL(use_map_speed, "NavigationParameters.use_map_speed");
 CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
@@ -547,9 +547,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
         // Draw FOV cone boundaries (dark yellow)
         const float fov_length = 2.0f;  // Length of FOV lines in meters
-        const float fov_angle = CONFIG_local_fov;
-        Eigen::Vector2f fov_left(fov_length * cos(fov_angle), fov_length * sin(fov_angle));
-        Eigen::Vector2f fov_right(fov_length * cos(-fov_angle), fov_length * sin(-fov_angle));
+        const float fov_half_angle = CONFIG_local_half_fov;
+        Eigen::Vector2f fov_left(fov_length * cos(fov_half_angle), fov_length * sin(fov_half_angle));
+        Eigen::Vector2f fov_right(fov_length * cos(-fov_half_angle), fov_length * sin(-fov_half_angle));
         visualization::DrawLine(Eigen::Vector2f(0, 0), fov_left, 0xFFCC00, local_viz_msg_);
         visualization::DrawLine(Eigen::Vector2f(0, 0), fov_right, 0xFFCC00, local_viz_msg_);
     }
@@ -586,25 +586,23 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Draw forward-predicted robot footprint (fp) in local (base) frame (blue outline)
         {
             const float l1 = -0.5f * kRobotLength - kRearAxleOffset;
-            const float l2 =  0.5f * kRobotLength - kRearAxleOffset;
-            const float w  =  0.5f * kRobotWidth;
+            const float l2 = 0.5f * kRobotLength - kRearAxleOffset;
+            const float w = 0.5f * kRobotWidth;
 
             // Predicted pose in MAP: (t_fp, R_fp)
             const Eigen::Rotation2Df R_fp(navigation_.robot_angle_fp_);
-            const Eigen::Vector2f    t_fp = navigation_.robot_loc_fp_;
+            const Eigen::Vector2f t_fp = navigation_.robot_loc_fp_;
 
             // Corners in MAP
-            const Eigen::Vector2f p1m = t_fp + R_fp * Eigen::Vector2f(l1,  w);
+            const Eigen::Vector2f p1m = t_fp + R_fp * Eigen::Vector2f(l1, w);
             const Eigen::Vector2f p2m = t_fp + R_fp * Eigen::Vector2f(l1, -w);
             const Eigen::Vector2f p3m = t_fp + R_fp * Eigen::Vector2f(l2, -w);
-            const Eigen::Vector2f p4m = t_fp + R_fp * Eigen::Vector2f(l2,  w);
+            const Eigen::Vector2f p4m = t_fp + R_fp * Eigen::Vector2f(l2, w);
 
             // Transform MAP -> current BASE frame (local)
             const Eigen::Rotation2Df R_now_inv(-navigation_.robot_angle_);
-            const Eigen::Vector2f    t_now     = navigation_.robot_loc_;
-            auto ToLocal = [&](const Eigen::Vector2f& pm) {
-                return R_now_inv * (pm - t_now);
-            };
+            const Eigen::Vector2f t_now = navigation_.robot_loc_;
+            auto ToLocal = [&](const Eigen::Vector2f& pm) { return R_now_inv * (pm - t_now); };
 
             const Eigen::Vector2f p1 = ToLocal(p1m);
             const Eigen::Vector2f p2 = ToLocal(p2m);
@@ -704,7 +702,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->base_link_offset = CONFIG_base_link_offset;
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
-        params->local_fov = CONFIG_local_fov;
+        params->local_half_fov = CONFIG_local_half_fov;
         params->use_map_speed = CONFIG_use_map_speed;
         params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;

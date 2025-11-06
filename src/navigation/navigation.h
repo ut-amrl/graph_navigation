@@ -151,6 +151,9 @@ class Navigation {
     std::shared_ptr<motion_primitives::PathRolloutBase> best_option_;
     // Current navigation state.
     NavigationState nav_state_;
+    // Sub-state within kGoto: distinguishes between turning toward carrot (false) vs. actively
+    // driving with obstacle avoidance (true). Used for hysteresis in FOV check to prevent oscillation.
+    bool in_obstacle_avoidance_mode_;
 
    private:
     // Run local obstacle avoidance planner (robot frame).
