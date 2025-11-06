@@ -334,18 +334,22 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void TimerCallback() {
         if (!run_) return;
-        const auto __tcb_start = std::chrono::steady_clock::now();
+        const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
         visualization::ClearVisualizationMsg(local_viz_msg_);
         visualization::ClearVisualizationMsg(global_viz_msg_);
         received_laser_ = false;  // ?? why is this here? why happening at each callback?
 
-        // Run navigation
+        // Measure control loop calculation time (only navigation_.Run(), excluding viz)
         Eigen::Vector2f cmd_vel(0, 0);
         float cmd_angle_vel(0);
         const double cmd_plan_start_time = this->get_clock()->now().seconds();
+        const auto control_start = std::chrono::steady_clock::now();
         bool nav_succeeded = navigation_.Run(cmd_plan_start_time, cmd_vel, cmd_angle_vel);
+        const auto control_end = std::chrono::steady_clock::now();
+        const double control_ms = std::chrono::duration<double, std::milli>(control_end - control_start).count();
+
         PublishNavStatus();
         if (nav_succeeded) {
             // Publish visualizations
@@ -366,11 +370,18 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
 
-        const auto __tcb_end = std::chrono::steady_clock::now();
-        const double __tcb_ms = std::chrono::duration<double, std::milli>(__tcb_end - __tcb_start).count();
-        navigation::navigation_debug::DebugLog(std::string("[") +
-                                               std::to_string(static_cast<int>(navigation_.nav_state_)) +
-                                               "] TimerCallback took " + std::to_string(__tcb_ms) + " ms");
+        // Measure total timer callback time (including viz)
+        const auto timer_end = std::chrono::steady_clock::now();
+        const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
+
+        // Log both times
+        std::string control_time_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
+                                       "] Control loop (excl viz): " + std::to_string(control_ms) + " ms";
+        navigation::navigation_debug::DebugLog(control_time_msg);
+
+        std::string total_time_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
+                                     "] TimerCallback (incl viz): " + std::to_string(total_ms) + " ms";
+        navigation::navigation_debug::DebugLog(total_time_msg);
     }
 
     // Helper functions

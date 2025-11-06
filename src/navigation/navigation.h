@@ -26,6 +26,7 @@
 #include <unordered_set>
 #include <set>
 #include <ctime>
+#include <cstdio>
 #include <fstream>
 
 #include "eigen3/Eigen/Dense"
@@ -213,6 +214,9 @@ class Navigation {
 namespace navigation_debug {
 inline void DebugLog(const std::string& line) {
     if (::FLAGS_debug_file.empty()) return;
+    // Print to console
+    printf("%s\n", line.c_str());
+    // Log to file
     static std::mutex mtx;
     std::lock_guard<std::mutex> lock(mtx);
     std::ofstream ofs(::FLAGS_debug_file, std::ios::out | std::ios::app);
