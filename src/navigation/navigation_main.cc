@@ -103,7 +103,8 @@ CONFIG_FLOAT(obstacle_margin, "NavigationParameters.obstacle_margin");
 CONFIG_INT(num_options, "NavigationParameters.num_options");
 CONFIG_FLOAT(robot_width, "NavigationParameters.robot_width");
 CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
-CONFIG_FLOAT(base_link_offset, "NavigationParameters.base_link_offset");
+CONFIG_FLOAT(base_link_offset_x, "NavigationParameters.base_link_offset_x");
+CONFIG_FLOAT(base_link_offset_y, "NavigationParameters.base_link_offset_y");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
 CONFIG_FLOAT(local_half_fov, "NavigationParameters.local_half_fov");
@@ -563,46 +564,58 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void DrawRobot() {
         const float kRobotLength = navigation_.params_.robot_length;
         const float kRobotWidth = navigation_.params_.robot_width;
-        const float kRearAxleOffset = 0.0;
+        const float kBaseLinkOffsetX = navigation_.params_.base_link_offset_x;
+        const float kBaseLinkOffsetY = navigation_.params_.base_link_offset_y;
         const float kObstacleMargin = navigation_.params_.obstacle_margin;
 
         // Draw robot with margin (light gray outline showing safety buffer)
         {
-            const float l1 = -0.5 * kRobotLength - kRearAxleOffset - kObstacleMargin;
-            const float l2 = 0.5 * kRobotLength - kRearAxleOffset + kObstacleMargin;
-            const float w = 0.5 * kRobotWidth + kObstacleMargin;
-            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l1, -w), 0xC0C0C0, local_viz_msg_);
-            visualization::DrawLine(Eigen::Vector2f(l2, w), Eigen::Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
-            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l2, w), 0xC0C0C0, local_viz_msg_);
-            visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0xC0C0C0, local_viz_msg_);
+            const float x_min = kBaseLinkOffsetX - 0.5f * kRobotLength - kObstacleMargin;
+            const float x_max = kBaseLinkOffsetX + 0.5f * kRobotLength + kObstacleMargin;
+            const float y_min = kBaseLinkOffsetY - 0.5f * kRobotWidth - kObstacleMargin;
+            const float y_max = kBaseLinkOffsetY + 0.5f * kRobotWidth + kObstacleMargin;
+            visualization::DrawLine(Eigen::Vector2f(x_min, y_max), Eigen::Vector2f(x_min, y_min), 0xC0C0C0,
+                                    local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(x_max, y_max), Eigen::Vector2f(x_max, y_min), 0xC0C0C0,
+                                    local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(x_min, y_max), Eigen::Vector2f(x_max, y_max), 0xC0C0C0,
+                                    local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(x_min, y_min), Eigen::Vector2f(x_max, y_min), 0xC0C0C0,
+                                    local_viz_msg_);
         }
 
         // Draw actual robot footprint (black outline)
         {
-            const float l1 = -0.5 * kRobotLength - kRearAxleOffset;
-            const float l2 = 0.5 * kRobotLength - kRearAxleOffset;
-            const float w = 0.5 * kRobotWidth;
-            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l1, -w), 0x000000, local_viz_msg_);
-            visualization::DrawLine(Eigen::Vector2f(l2, w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
-            visualization::DrawLine(Eigen::Vector2f(l1, w), Eigen::Vector2f(l2, w), 0x000000, local_viz_msg_);
-            visualization::DrawLine(Eigen::Vector2f(l1, -w), Eigen::Vector2f(l2, -w), 0x000000, local_viz_msg_);
+            const float x_min = kBaseLinkOffsetX - 0.5f * kRobotLength;
+            const float x_max = kBaseLinkOffsetX + 0.5f * kRobotLength;
+            const float y_min = kBaseLinkOffsetY - 0.5f * kRobotWidth;
+            const float y_max = kBaseLinkOffsetY + 0.5f * kRobotWidth;
+            visualization::DrawLine(Eigen::Vector2f(x_min, y_max), Eigen::Vector2f(x_min, y_min), 0x000000,
+                                    local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(x_max, y_max), Eigen::Vector2f(x_max, y_min), 0x000000,
+                                    local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(x_min, y_max), Eigen::Vector2f(x_max, y_max), 0x000000,
+                                    local_viz_msg_);
+            visualization::DrawLine(Eigen::Vector2f(x_min, y_min), Eigen::Vector2f(x_max, y_min), 0x000000,
+                                    local_viz_msg_);
         }
 
         // Draw forward-predicted robot footprint (fp) in local (base) frame (blue outline)
         {
-            const float l1 = -0.5f * kRobotLength - kRearAxleOffset;
-            const float l2 = 0.5f * kRobotLength - kRearAxleOffset;
-            const float w = 0.5f * kRobotWidth;
+            const float x_min_fp = kBaseLinkOffsetX - 0.5f * kRobotLength;
+            const float x_max_fp = kBaseLinkOffsetX + 0.5f * kRobotLength;
+            const float y_min_fp = kBaseLinkOffsetY - 0.5f * kRobotWidth;
+            const float y_max_fp = kBaseLinkOffsetY + 0.5f * kRobotWidth;
 
             // Predicted pose in MAP: (t_fp, R_fp)
             const Eigen::Rotation2Df R_fp(navigation_.robot_angle_fp_);
             const Eigen::Vector2f t_fp = navigation_.robot_loc_fp_;
 
             // Corners in MAP
-            const Eigen::Vector2f p1m = t_fp + R_fp * Eigen::Vector2f(l1, w);
-            const Eigen::Vector2f p2m = t_fp + R_fp * Eigen::Vector2f(l1, -w);
-            const Eigen::Vector2f p3m = t_fp + R_fp * Eigen::Vector2f(l2, -w);
-            const Eigen::Vector2f p4m = t_fp + R_fp * Eigen::Vector2f(l2, w);
+            const Eigen::Vector2f p1m = t_fp + R_fp * Eigen::Vector2f(x_min_fp, y_max_fp);
+            const Eigen::Vector2f p2m = t_fp + R_fp * Eigen::Vector2f(x_min_fp, y_min_fp);
+            const Eigen::Vector2f p3m = t_fp + R_fp * Eigen::Vector2f(x_max_fp, y_min_fp);
+            const Eigen::Vector2f p4m = t_fp + R_fp * Eigen::Vector2f(x_max_fp, y_max_fp);
 
             // Transform MAP -> current BASE frame (local)
             const Eigen::Rotation2Df R_now_inv(-navigation_.robot_angle_);
@@ -684,7 +697,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->num_options = CONFIG_num_options;
         params->robot_width = CONFIG_robot_width;
         params->robot_length = CONFIG_robot_length;
-        params->base_link_offset = CONFIG_base_link_offset;
+        params->base_link_offset_x = CONFIG_base_link_offset_x;
+        params->base_link_offset_y = CONFIG_base_link_offset_y;
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
         params->local_half_fov = CONFIG_local_half_fov;

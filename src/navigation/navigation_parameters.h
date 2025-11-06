@@ -61,11 +61,11 @@ struct NavigationParameters {
     float robot_width;
     // Length of the robot.
     float robot_length;
-    // Location of the base link w.r.t. the center of the robot.
-    // Negative values indicate that the base link is closer to the rear of the
-    // robot, for example on a car with ackermann steering, with its base link
-    // coincident with its rear axle.
-    float base_link_offset;
+    // Offset of geometric center c_g from base_link frame (in base_link frame).
+    // base_link_offset_x: positive = c_g forward of base_link.
+    // base_link_offset_y: positive = c_g left of base_link.
+    float base_link_offset_x;
+    float base_link_offset_y;
     float max_free_path_length;
     float max_clearance;
     // Half-angle of the local field of view cone (radians).
@@ -100,7 +100,8 @@ struct NavigationParameters {
           num_options(41),
           robot_width(0.44),
           robot_length(0.5),
-          base_link_offset(0),
+          base_link_offset_x(0),
+          base_link_offset_y(0),
           max_free_path_length(10.0),
           max_clearance(1.0),
           can_traverse_stairs(false),

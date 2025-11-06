@@ -133,132 +133,154 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
 
 void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
     ConstantCurvatureArcPath& path = *path_ptr;
-    // How much the robot's body extends in front of its base link frame.
-    const float l = 0.5 * nav_params.robot_length - nav_params.base_link_offset + nav_params.obstacle_margin;
-    // The robot's half-width.
-    const float w = 0.5 * nav_params.robot_width + nav_params.obstacle_margin;
 
-    // Robot body dimensions WITHOUT margin (for filtering lidar points on robot itself)
-    const float l_body = 0.5 * nav_params.robot_length - nav_params.base_link_offset;
-    const float w_body = 0.5 * nav_params.robot_width;
-    const float x_min_body = -0.5 * nav_params.robot_length + nav_params.base_link_offset;
+    // Half-dimensions and offsets.
+    const float hl = 0.5f * nav_params.robot_length;
+    const float hw = 0.5f * nav_params.robot_width;
 
+    // Margin-augmented footprint bounds in base_link frame.
+    const float x_max = nav_params.base_link_offset_x + hl + nav_params.obstacle_margin;
+    const float x_min = nav_params.base_link_offset_x - hl - nav_params.obstacle_margin;
+    const float y_max = nav_params.base_link_offset_y + hw + nav_params.obstacle_margin;
+    const float y_min = nav_params.base_link_offset_y - hw - nav_params.obstacle_margin;
+
+    // Body (no margin) bounds.
+    const float x_max_body = nav_params.base_link_offset_x + hl;
+    const float x_min_body = nav_params.base_link_offset_x - hl;
+    const float y_max_body = nav_params.base_link_offset_y + hw;
+    const float y_min_body = nav_params.base_link_offset_y - hw;
+
+    // Half-width (+margin) and without margin (for formulas below).
+    const float w = hw + nav_params.obstacle_margin;
+    const float w_body = hw;
+
+    // Distance from base_link origin to front face (+margin), for straight-line hit tests.
+    const float l = hl + nav_params.obstacle_margin + nav_params.base_link_offset_x;
+    const float l_body = hl + nav_params.base_link_offset_x;
+
+    // Straight line case (|curvature| ~ 0)
     if (fabs(path.curvature) < kEpsilon) {
         for (const Vector2f& p : *point_cloud) {
-            // Skip points inside robot body (NOT including obstacle margin)
-            if (p.x() > x_min_body && p.x() < l_body && fabs(p.y()) < w_body) {
+            // Skip points inside robot body (NO margin).
+            if (p.x() > x_min_body && p.x() < x_max_body && p.y() > y_min_body && p.y() < y_max_body) {
                 continue;
             }
+            // Outside swept rect laterally or behind.
+            if (p.y() < y_min || p.y() > y_max || p.x() < 0.0f) continue;
 
-            if (fabs(p.y()) > w || p.x() < 0.0f) continue;
-            path.fpl = min(path.fpl, p.x() - l);
+            // Obstacle limits free path length.
+            path.fpl = std::min(path.fpl, p.x() - x_max);
         }
+
+        // Clearance over the executed segment [0, fpl].
         path.clearance = nav_params.max_clearance;
         for (const Vector2f& p : *point_cloud) {
-            // Skip points inside robot body (NOT including obstacle margin)
-            if (p.x() > x_min_body && p.x() < l_body && fabs(p.y()) < w_body) {
+            // Skip body points (NO margin).
+            if (p.x() > x_min_body && p.x() < x_max_body && p.y() > y_min_body && p.y() < y_max_body) {
                 continue;
             }
+            if (p.x() - x_max > path.fpl || p.x() < 0.0f) continue;
 
-            if (p.x() - l > path.fpl || p.x() < 0.0) continue;
-            path.clearance = min<float>(path.clearance, fabs(fabs(p.y() - w)));
+            const float lateral_dist = (p.y() < nav_params.base_link_offset_y) ? (y_min - p.y()) : (p.y() - y_max);
+            path.clearance = std::min<float>(path.clearance, std::fabs(lateral_dist));
         }
-        path.clearance = max(0.0f, path.clearance);
-        path.fpl = max(0.0f, path.fpl);
-        path.length = min(path.fpl, path.length);
+        path.clearance = std::max(0.0f, path.clearance);
+        path.fpl = std::max(0.0f, path.fpl);
+        path.length = std::min(path.fpl, path.length);
 
-        const float stopping_dist = vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
+        // Directional stopping distance (forward-only speed).
+        const float v_fwd = std::max(0.0f, vel.x());
+        const float stopping_dist = (v_fwd * v_fwd) / (2.0f * nav_params.linear_limits.max_deceleration);
         if (path.fpl < stopping_dist) {
-            path.length = 0;
+            path.length = 0.0f;
         }
-
         return;
     }
-    const float path_radius = 1.0 / path.curvature;
+
+    // Curved path case.
+    const float path_radius = 1.0f / path.curvature;
     const Vector2f c(0, path_radius);
-    const float s = ((path_radius > 0.0) ? 1.0 : -1.0);
-    const Vector2f inner_front_corner(l, s * w);
-    const Vector2f outer_front_corner(l, -s * w);
-    const float r1 = max<float>(0.0f, fabs(path_radius) - w);
+    const float s = (path_radius > 0.0f) ? 1.0f : -1.0f;
+
+    // Front corners (margin-inflated) in base_link frame.
+    const Vector2f inner_front_corner(x_max, (s > 0.0f) ? y_max : y_min);
+    const Vector2f outer_front_corner(x_max, (s > 0.0f) ? y_min : y_max);
+
+    // Radial bounds wrt the turn center.
+    const float r1 = std::max<float>(0.0f, std::fabs(path_radius) - w);  // inner side radius
     const float r1_sq = Sq(r1);
     const float r2_sq = (inner_front_corner - c).squaredNorm();
     const float r3_sq = (outer_front_corner - c).squaredNorm();
+
     float angle_min = M_PI;
     path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
-    // printf("%7.3f %7.3f %7.3f %7.3f\n",
-    //     path.curvature, sqrt(r1_sq), sqrt(r2_sq), sqrt(r3_sq));
+
     using std::isfinite;
     for (const Vector2f& p : *point_cloud) {
         if (!isfinite(p.x()) || !isfinite(p.y()) || p.x() < 0.0f) continue;
 
-        // Skip points inside robot body (NOT including obstacle margin)
-        if (p.x() > x_min_body && p.x() < l_body && fabs(p.y()) < w_body) {
+        // Skip points inside robot body (NO margin).
+        if (p.x() > x_min_body && p.x() < x_max_body && p.y() > y_min_body && p.y() < y_max_body) {
             continue;
         }
 
-        if (p.x() > x_min_body && p.x() < l && fabs(p.y()) < w) {
-            // This point is within the robot plus margin boundary.
-            // printf("Obstacle within robot boundary\n");
-            path.length = 0;
+        // If already inside margin-inflated footprint → immediate collision.
+        if (p.x() > x_min && p.x() < x_max && p.y() > y_min && p.y() < y_max) {
+            path.length = 0.0f;
             path.obstruction = p;
-            angle_min = 0;
+            angle_min = 0.0f;
             break;
         }
+
+        // Radial location wrt center.
         const float r_sq = (p - c).squaredNorm();
-        // printf("c:%.2f r:%.3f r1:%.3f r2:%.3f r3:%.3f\n",
-        //        path.curvature, sqrt(r_sq), r1, sqrt(r2_sq), sqrt(r3_sq));
         if (r_sq < r1_sq || r_sq > r3_sq) continue;
-        const float r = sqrt(r_sq);
-        const float theta = ((path.curvature > 0.0f) ? atan2<float>(p.x(), path_radius - p.y())
-                                                     : atan2<float>(p.x(), p.y() - path_radius));
+
+        const float r = std::sqrt(r_sq);
+        const float theta = (path.curvature > 0.0f) ? std::atan2<float>(p.x(), path_radius - p.y())
+                                                    : std::atan2<float>(p.x(), p.y() - path_radius);
+
         float alpha;
         if (r_sq < r2_sq) {
-            // Point will hit the side of the robot first.
-            const float x = fabs(path_radius) - w;
-            if (x > 0) {
-                alpha = acosf(x / r);
-            } else {
-                alpha = M_PI_2 + acosf(-x / r);
-            }
-            if (!isfinite(alpha)) printf("%f %f %f\n", path_radius, w, r);
+            // Hits side first.
+            const float x = std::fabs(path_radius) - w;
+            alpha = (x > 0.0f) ? std::acos(x / r) : (static_cast<float>(M_PI_2) + std::acos(-x / r));
         } else {
-            // Point will hit the front of the robot first.
-            alpha = asinf(l / r);
-            if (!isfinite(alpha)) printf("%f %f\n", l, r);
+            // Hits front first.
+            alpha = std::asin(std::min(1.0f, std::max(0.0f, l / r)));
         }
-        CHECK(isfinite(alpha));
-        // if (theta < 0.0f) continue;
-        CHECK(std::isfinite(r));
-        CHECK(std::isfinite(path_radius));
-        CHECK(std::isfinite(alpha));
-        CHECK(std::isfinite(theta));
-        const float path_length = max<float>(0.0f, fabs(path_radius) * (theta - alpha));
+
+        const float path_length = std::max<float>(0.0f, std::fabs(path_radius) * (theta - alpha));
         if (path.length > path_length) {
             path.length = path_length;
             path.obstruction = p;
             angle_min = theta;
         }
     }
-    const float stopping_dist = vel.squaredNorm() / (2.0 * nav_params.linear_limits.max_deceleration);
-    if (path.length < stopping_dist) path.length = 0;
-    path.length = max(0.0f, path.length);
-    angle_min = min<float>(angle_min, path.length * fabs(path.curvature));
+
+    // Directional stopping distance (forward-only).
+    {
+        const float v_fwd = std::max(0.0f, vel.x());
+        const float stopping_dist = (v_fwd * v_fwd) / (2.0f * nav_params.linear_limits.max_deceleration);
+        if (path.length < stopping_dist) path.length = 0.0f;
+    }
+
+    path.length = std::max(0.0f, path.length);
+    angle_min = std::min<float>(angle_min, path.length * std::fabs(path.curvature));
     path.clearance = nav_params.max_clearance;
 
     for (const Vector2f& p : *point_cloud) {
-        const float theta = ((path.curvature > 0.0f) ? atan2<float>(p.x(), path_radius - p.y())
-                                                     : atan2<float>(p.x(), p.y() - path_radius));
-        if (theta < CONFIG_clearance_clip * angle_min && theta > 0.0) {
+        const float theta = (path.curvature > 0.0f) ? std::atan2<float>(p.x(), path_radius - p.y())
+                                                    : std::atan2<float>(p.x(), p.y() - path_radius);
+        if (theta < CONFIG_clearance_clip * angle_min && theta > 0.0f) {
             const float r = (p - c).norm();
-            const float current_clearance = fabs(r - fabs(path_radius));
+            const float current_clearance = std::fabs(r - std::fabs(path_radius));
             if (path.clearance > current_clearance) {
                 path.clearance = current_clearance;
             }
         }
     }
-    path.clearance = max(0.0f, path.clearance);
-    // printf("%7.3f %7.3f %7.3f \n",
-    //     path.curvature, path.length, path.clearance);
+    path.clearance = std::max(0.0f, path.clearance);
 }
 
 }  // namespace motion_primitives
