@@ -339,14 +339,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         visualization::ClearVisualizationMsg(global_viz_msg_);
         received_laser_ = false;  // ?? why is this here? why happening at each callback?
 
-        // Measure control loop calculation time (only navigation_.Run(), excluding viz)
         Eigen::Vector2f cmd_vel(0, 0);
         float cmd_angle_vel(0);
         const double cmd_plan_start_time = this->get_clock()->now().seconds();
-        const auto control_start = std::chrono::steady_clock::now();
         bool nav_succeeded = navigation_.Run(cmd_plan_start_time, cmd_vel, cmd_angle_vel);
-        const auto control_end = std::chrono::steady_clock::now();
-        const double control_ms = std::chrono::duration<double, std::milli>(control_end - control_start).count();
 
         PublishNavStatus();
         if (nav_succeeded) {
@@ -368,18 +364,13 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
 
-        // Measure total timer callback time (including viz)
         const auto timer_end = std::chrono::steady_clock::now();
         const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
 
-        // Log both times
-        std::string control_time_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
-                                       "] Control loop (excl viz): " + std::to_string(control_ms) + " ms";
-        navigation::navigation_debug::DebugLog(control_time_msg);
-
-        std::string total_time_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
-                                     "] TimerCallback (incl viz): " + std::to_string(total_ms) + " ms";
-        navigation::navigation_debug::DebugLog(total_time_msg);
+        // Log end-to-end TimerCallback duration
+        std::string timer_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
+                                "] TimerCallback took " + std::to_string(total_ms) + " ms";
+        navigation::navigation_debug::DebugLog(timer_msg);
     }
 
     // Helper functions
@@ -544,9 +535,15 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawTarget() {
-        // ?? add visualization for drawing forward predicted carrot and robot, BUG: i think for viz we do NOT need fp
+        // ?? BUG: i think for viz we do NOT need fp
         const float carrot_dist = navigation_.params_.carrot_dist;
-        const Eigen::Vector2f target = navigation_.local_target_;
+        // navigation_.local_target_ is in the predicted base frame at actuation time.
+        // For visualization, compute the equivalent local target in the CURRENT base frame.
+        const Eigen::Affine2f T_map_base_pred =
+            Eigen::Translation2f(navigation_.robot_loc_fp_) * Eigen::Rotation2Df(navigation_.robot_angle_fp_);
+        const Eigen::Vector2f target_map = T_map_base_pred * navigation_.local_target_;
+        const Eigen::Rotation2Df R_now_inv(-navigation_.robot_angle_);
+        const Eigen::Vector2f target = R_now_inv * (target_map - navigation_.robot_loc_);
 
         // Draw carrot distance circle (light gray)
         visualization::DrawArc(Eigen::Vector2f(0, 0), carrot_dist, -M_PI, M_PI, 0xE0E0E0, local_viz_msg_);
