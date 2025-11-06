@@ -25,6 +25,9 @@ find_package(image_transport REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 
+# OpenMP (optional) for parallel sampling
+find_package(OpenMP)
+
 # Convert AMENT_PREFIX_PATH to CMAKE_PREFIX_PATH (standard ROS2 pattern)
 if(DEFINED ENV{AMENT_PREFIX_PATH})
   string(REPLACE ":" ";" ament_prefix_path_list "$ENV{AMENT_PREFIX_PATH}")
@@ -150,6 +153,10 @@ target_link_libraries(navigation_lib
     ${OpenCV_LIBS}
     amrl_shared_lib
 )
+
+if (OpenMP_CXX_FOUND)
+  target_link_libraries(navigation_lib OpenMP::OpenMP_CXX)
+endif()
 
 ament_target_dependencies(navigation_lib
     rclcpp

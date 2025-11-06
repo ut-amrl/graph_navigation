@@ -139,8 +139,7 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
 }
 
 vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
-    vector<shared_ptr<PathRolloutBase>> samples;
-    samples.reserve(n);
+    vector<shared_ptr<PathRolloutBase>> samples(n);
 
     // Cache unit directions per n to avoid trig every cycle.
     static int cached_n = -1;
@@ -151,13 +150,14 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
     }
 
     const bool enable_ang_toc = nav_params.do_ang_toc && enable_angular_toc_runtime_;
+
+#pragma omp parallel for schedule(runtime)
     for (int i = 0; i < n; ++i) {
         auto move = std::make_shared<OmnidirectionalMovePath>(unit_dirs[i], 0.0f, enable_ang_toc);
         SetMaxPathLength(move.get());
         CheckObstacles(move.get());
-        samples.emplace_back(std::static_pointer_cast<PathRolloutBase>(move));
+        samples[i] = std::static_pointer_cast<PathRolloutBase>(move);
     }
-
     return samples;
 }
 

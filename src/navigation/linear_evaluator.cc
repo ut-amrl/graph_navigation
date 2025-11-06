@@ -60,15 +60,26 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
 
     // Check if there is any path with an obstacle-free path from the end to the
     // local target.
-    vector<float> clearance_to_goal(paths.size(), 0.0);
-    vector<float> dist_to_goal(paths.size(), FLT_MAX);
+    const size_t N = paths.size();
+    vector<float> clearance_to_goal(N, 0.0f);
+    vector<float> dist_to_goal(N, FLT_MAX);
     bool path_to_goal_exists = false;
-    for (size_t i = 0; i < paths.size(); ++i) {
-        const auto endpoint = paths[i]->EndPoint().translation;
-        clearance_to_goal[i] = StraightLineClearance(Line2f(endpoint, local_target), *point_cloud);
-        if (clearance_to_goal[i] > 0.0) {
-            dist_to_goal[i] = (endpoint - local_target).norm();
-            path_to_goal_exists = true;
+
+#pragma omp parallel
+    {
+        bool local_any = false;
+#pragma omp for schedule(runtime)
+        for (int i = 0; i < static_cast<int>(N); ++i) {
+            const auto endpoint = paths[i]->EndPoint().translation;
+            clearance_to_goal[i] = StraightLineClearance(Line2f(endpoint, local_target), *point_cloud);
+            if (clearance_to_goal[i] > 0.0f) {
+                dist_to_goal[i] = (endpoint - local_target).norm();
+                local_any = true;
+            }
+        }
+#pragma omp critical
+        {
+            path_to_goal_exists = path_to_goal_exists || local_any;
         }
     }
 
