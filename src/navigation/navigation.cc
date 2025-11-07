@@ -590,11 +590,19 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     // Angular motion profiling: if rotating the wrong way, bleed off omega first
     const float s = Sign(dTheta);
     if (robot_omega_ * dTheta < 0.0f) {
-        const float domega = params_.angular_limits.max_acceleration * params_.dt;
+        const float domega = params_.angular_limits.max_deceleration * params_.dt;
         cmd_angle_vel = (fabs(robot_omega_) < domega) ? 0.f : (robot_omega_ - Sign(robot_omega_) * domega);
     } else {
-        cmd_angle_vel = s * motion_primitives::Run1DTimeOptimalControl(params_.angular_limits, 0.f, s * robot_omega_,
-                                                                       s * dTheta, 0.f, params_.dt);
+        // Early-brake guard: if remaining angle is less than stopping distance, brake now
+        const float omega = robot_omega_;
+        const float stop_angle = (omega * omega) / (2.0f * params_.angular_limits.max_deceleration);
+        if (stop_angle >= std::fabs(dTheta)) {
+            const float domega = params_.angular_limits.max_deceleration * params_.dt;
+            cmd_angle_vel = (std::fabs(omega) <= domega) ? 0.0f : (omega - Sign(omega) * domega);
+        } else {
+            cmd_angle_vel = s * motion_primitives::Run1DTimeOptimalControl(params_.angular_limits, 0.f, s * omega,
+                                                                           s * dTheta, 0.f, params_.dt);
+        }
     }
 
     // No linear motion while turning in place
@@ -656,7 +664,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         prev_state = nav_state_;
         // Transition from kGoto to kTurnInPlace when close to target and slow enough
         if (nav_state_ == NavigationState::kGoto && local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
-            robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance)) {
+            robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) &&
+            std::fabs(robot_omega_) < params_.target_omega_tolerance) {
             nav_state_ = NavigationState::kTurnInPlace;
             in_obstacle_avoidance_mode_ = false;  // Reset sub-state when leaving kGoto
             // Disable angular TOC when leaving kGoto state
@@ -666,7 +675,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             }
             // Transition from kTurnInPlace to kStopped when final orientation is reached
         } else if (nav_state_ == NavigationState::kTurnInPlace &&
-                   AngleDist(robot_angle_fp_, nav_goal_angle_) < params_.target_angle_tolerance) {
+                   AngleDist(robot_angle_fp_, nav_goal_angle_) < params_.target_angle_tolerance &&
+                   std::fabs(robot_omega_) < params_.target_omega_tolerance) {
             nav_state_ = NavigationState::kStopped;
         }
         // continue until no more state changes can happen
@@ -697,9 +707,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         const float theta = atan2(local_target_.y(), local_target_.x());
 
         // Hysteresis-based FOV check to prevent oscillation:
-        // - To START obstacle avoidance: target must be well-centered (±10°)
+        // - To START obstacle avoidance: target must be well-centered (±center_threshold)
         // - To CONTINUE obstacle avoidance: target can be anywhere in FOV (±local_half_fov)
-        const float kCenterThreshold = 0.174f;  // ~10 degrees in radians
 
         if (in_obstacle_avoidance_mode_) {
             // Already doing obstacle avoidance: keep going unless target leaves FOV
@@ -723,7 +732,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
                 auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
                 omni_sampler->enable_angular_toc_runtime_ = false;
             }
-            if (fabs(theta) <= kCenterThreshold) {
+            if (fabs(theta) <= params_.center_threshold) {
                 // Target is centered: start obstacle avoidance
                 in_obstacle_avoidance_mode_ = true;
                 RunObstacleAvoidance(cmd_vel, cmd_angle_vel);

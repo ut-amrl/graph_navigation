@@ -71,6 +71,9 @@ struct NavigationParameters {
     // Half-angle of the local field of view cone (radians).
     // Full FOV cone is ±local_half_fov. Used to determine when obstacle avoidance can continue.
     float local_half_fov;
+    // Angle threshold (radians) for starting obstacle avoidance in hysteresis logic.
+    // Target must be within ±center_threshold to start obstacle avoidance.
+    float center_threshold;
 
     bool can_traverse_stairs;
 
@@ -80,6 +83,9 @@ struct NavigationParameters {
     float target_vel_tolerance;
     // angle tolerance to reaching target
     float target_angle_tolerance;
+    // Angular velocity tolerance (rad/s) for state transitions.
+    // Robot must have |omega| < target_omega_tolerance to transition states.
+    float target_omega_tolerance;
 
     std::string evaluator_type;
 
@@ -104,10 +110,13 @@ struct NavigationParameters {
           base_link_offset_y(0),
           max_free_path_length(10.0),
           max_clearance(1.0),
+          local_half_fov(1.57),
+          center_threshold(0.174),
           can_traverse_stairs(false),
           target_dist_tolerance(0.1),
           target_vel_tolerance(0.1),
           target_angle_tolerance(0.05),
+          target_omega_tolerance(0.15),
           evaluator_type("linear"),
           carrot_dist(2),
           motion_primitives_mode("ackermann"),

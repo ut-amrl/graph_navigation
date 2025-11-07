@@ -91,17 +91,20 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     // Calculate dynamic constraints based on current robot state:
     // - robot_vel_ (vel.x()) determines current speed for curvature limits
     // - robot_omega_ (ang_vel) provides current angular velocity for smooth transitions
-    const float max_domega = nav_params.dt * nav_params.angular_limits.max_acceleration;
-    const float max_dv = nav_params.dt * nav_params.linear_limits.max_acceleration;
+    const float max_domega_accel = nav_params.dt * nav_params.angular_limits.max_acceleration;
+    const float max_domega_decel = nav_params.dt * nav_params.angular_limits.max_deceleration;
+    const float max_dv_accel = nav_params.dt * nav_params.linear_limits.max_acceleration;
+    const float max_dv_decel = nav_params.dt * nav_params.linear_limits.max_deceleration;
     const float robot_speed = fabs(vel.x());
 
     // Constrain curvature range based on current velocity and angular velocity
     // to ensure dynamically feasible transitions from current state
     float c_min = -CONFIG_max_curvature;
     float c_max = CONFIG_max_curvature;
-    if (robot_speed > max_dv + kEpsilon) {
-        c_min = max<float>(c_min, (ang_vel - max_domega) / (robot_speed - max_dv));
-        c_max = min<float>(c_max, (ang_vel + max_domega) / (robot_speed - max_dv));
+    if (robot_speed > max_dv_decel + kEpsilon) {
+        // (ang_vel - max_domega_decel) is deceleration, (ang_vel + max_domega_accel) is acceleration
+        c_min = max<float>(c_min, (ang_vel - max_domega_decel) / (robot_speed - max_dv_decel));
+        c_max = min<float>(c_max, (ang_vel + max_domega_accel) / (robot_speed - max_dv_decel));
     }
     const float dc = (c_max - c_min) / static_cast<float>(n - 1);
 

@@ -76,7 +76,7 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
         const float s = Sign(dTheta);
         if (ang_vel * dTheta < 0.0f) {
             // Turning the wrong way - decelerate first
-            const float dv = dt * angular_limits.max_acceleration;
+            const float dv = dt * angular_limits.max_deceleration;
             if (fabs(ang_vel) < dv) {
                 ang_vel_cmd = 0;
             } else {
