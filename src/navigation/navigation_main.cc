@@ -335,6 +335,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void TimerCallback() {
         if (!run_) return;
+        const double timer_callback_start_time = this->get_clock()->now().seconds();
+        std::string start_msg = "TimerCallback started at timestamp: " + std::to_string(timer_callback_start_time);
+        navigation::navigation_debug::DebugLog(start_msg);
         const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
