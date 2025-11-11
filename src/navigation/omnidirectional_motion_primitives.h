@@ -41,18 +41,25 @@ struct OmnidirectionalMovePath : PathRolloutBase {
                      Eigen::Vector2f& vel_cmd, float& ang_vel_cmd) const override;
 
     // Default constructor
-    OmnidirectionalMovePath() : direction(0, 0), length(0), fpl(0), clearance(0), do_ang_toc(false) {}
+    OmnidirectionalMovePath()
+        : direction(0, 0), length(0), fpl(0), clearance(0), do_ang_toc(false), target_angle_tolerance(0.05f) {}
 
     // Constructor for straight line movement
-    OmnidirectionalMovePath(const Eigen::Vector2f& dir, float len, bool ang_toc = false)
-        : direction(dir.normalized()), length(len), fpl(len), clearance(0), do_ang_toc(ang_toc) {}
+    OmnidirectionalMovePath(const Eigen::Vector2f& dir, float len, bool ang_toc = false, float target_angle_tol = 0.05f)
+        : direction(dir.normalized()),
+          length(len),
+          fpl(len),
+          clearance(0),
+          do_ang_toc(ang_toc),
+          target_angle_tolerance(target_angle_tol) {}
 
-    Eigen::Vector2f direction;    // Unit vector for movement direction
-    float length;                 // Distance to travel
-    float fpl;                    // Free path length
-    float clearance;              // Minimum clearance to obstacles
-    Eigen::Vector2f obstruction;  // Location of closest obstacle
-    bool do_ang_toc;              // Whether to use 1D TOC for angular motion
+    Eigen::Vector2f direction;     // Unit vector for movement direction
+    float length;                  // Distance to travel
+    float fpl;                     // Free path length
+    float clearance;               // Minimum clearance to obstacles
+    Eigen::Vector2f obstruction;   // Location of closest obstacle
+    bool do_ang_toc;               // Whether to use 1D TOC for angular motion
+    float target_angle_tolerance;  // Angle tolerance for stopping (radians)
 };
 
 // Omnidirectional path rollout sampler

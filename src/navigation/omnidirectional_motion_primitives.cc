@@ -76,7 +76,7 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
         const float s = Sign(dTheta);
 
         // If already close enough in angle, stop rotating
-        if (fabs(dTheta) < 1e-3f) {
+        if (fabs(dTheta) < target_angle_tolerance) {
             ang_vel_cmd = 0;
         } else if (ang_vel * dTheta < 0.0f) {
             // Turning the wrong way - decelerate first using max_deceleration
@@ -166,7 +166,8 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
 
 #pragma omp parallel for schedule(runtime)
     for (int i = 0; i < n; ++i) {
-        auto move = std::make_shared<OmnidirectionalMovePath>(unit_dirs[i], 0.0f, enable_ang_toc);
+        auto move = std::make_shared<OmnidirectionalMovePath>(unit_dirs[i], 0.0f, enable_ang_toc,
+                                                              nav_params.target_angle_tolerance);
         SetMaxPathLength(move.get());
         CheckObstacles(move.get());
         samples[i] = std::static_pointer_cast<PathRolloutBase>(move);
