@@ -148,6 +148,57 @@ struct CompareCost {
 
 namespace navigation {
 
+namespace {
+inline int VelocityToMotorCounts(float vel, float slope_pos, float intercept_pos, float slope_neg,
+                                 float intercept_neg) {
+    if (vel > 0.0f) {
+        double counts = static_cast<double>(slope_pos) * static_cast<double>(vel) + static_cast<double>(intercept_pos);
+        return static_cast<int>(std::ceil(counts));
+    } else if (vel < 0.0f) {
+        double counts = static_cast<double>(slope_neg) * static_cast<double>(vel) + static_cast<double>(intercept_neg);
+        return static_cast<int>(std::floor(counts));
+    }
+    return 0;
+}
+
+inline float MotorCountsToVelocity(int counts, float slope_pos, float intercept_pos, float slope_neg,
+                                   float intercept_neg) {
+    if (counts == 0) {
+        return 0.0f;
+    }
+    if (counts > 0) {
+        return static_cast<float>((static_cast<double>(counts) - static_cast<double>(intercept_pos)) /
+                                  static_cast<double>(slope_pos));
+    } else {
+        return static_cast<float>((static_cast<double>(counts) - static_cast<double>(intercept_neg)) /
+                                  static_cast<double>(slope_neg));
+    }
+}
+}  // namespace
+
+void ApplyCommandMapping(const NavigationParameters& params, Eigen::Vector2f& vel_cmd, float& ang_vel_cmd) {
+    if (!params.apply_custom_cmd_map) {
+        return;
+    }
+
+    // Convert velocity commands to motor counts (as driver does), then back to effective velocity
+    // to get the actual velocity that will be executed, accounting for quantization
+    int counts_x = VelocityToMotorCounts(vel_cmd.x(), params.cmd_map_x_slope_pos, params.cmd_map_x_intercept_pos,
+                                         params.cmd_map_x_slope_neg, params.cmd_map_x_intercept_neg);
+    int counts_y = VelocityToMotorCounts(vel_cmd.y(), params.cmd_map_y_slope_pos, params.cmd_map_y_intercept_pos,
+                                         params.cmd_map_y_slope_neg, params.cmd_map_y_intercept_neg);
+    float vx = MotorCountsToVelocity(counts_x, params.cmd_map_x_slope_pos, params.cmd_map_x_intercept_pos,
+                                     params.cmd_map_x_slope_neg, params.cmd_map_x_intercept_neg);
+    float vy = MotorCountsToVelocity(counts_y, params.cmd_map_y_slope_pos, params.cmd_map_y_intercept_pos,
+                                     params.cmd_map_y_slope_neg, params.cmd_map_y_intercept_neg);
+    vel_cmd = Eigen::Vector2f(vx, vy);
+
+    int counts_r = VelocityToMotorCounts(ang_vel_cmd, params.cmd_map_r_slope_pos, params.cmd_map_r_intercept_pos,
+                                         params.cmd_map_r_slope_neg, params.cmd_map_r_intercept_neg);
+    ang_vel_cmd = MotorCountsToVelocity(counts_r, params.cmd_map_r_slope_pos, params.cmd_map_r_intercept_pos,
+                                        params.cmd_map_r_slope_neg, params.cmd_map_r_intercept_neg);
+}
+
 Navigation::Navigation()
     : robot_loc_(0, 0),
       robot_angle_(0),
@@ -523,6 +574,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                            ang_vel_cmd);
     sampled_paths_ = paths;
     best_option_ = best_path;
+
+    // Apply command mapping before returning
+    ApplyCommandMapping(params_, vel_cmd, ang_vel_cmd);
 }
 
 void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
@@ -555,6 +609,9 @@ void Navigation::Halt(Vector2f& cmd_vel, float& angular_vel_cmd) {
         }
     }
     angular_vel_cmd = next_omega;
+
+    // Apply command mapping before returning
+    ApplyCommandMapping(params_, cmd_vel, angular_vel_cmd);
 }
 
 void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
@@ -584,6 +641,8 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
     if (fabs(dTheta) < 1e-3f) {
         cmd_vel = Vector2f(0.f, 0.f);
         cmd_angle_vel = 0.f;
+        // Apply command mapping before returning
+        ApplyCommandMapping(params_, cmd_vel, cmd_angle_vel);
         return;
     }
 
@@ -607,6 +666,9 @@ void Navigation::TurnInPlace(Vector2f& cmd_vel, float& cmd_angle_vel) {
 
     // No linear motion while turning in place
     cmd_vel = Vector2f(0.f, 0.f);
+
+    // Apply command mapping before returning
+    ApplyCommandMapping(params_, cmd_vel, cmd_angle_vel);
 }
 
 bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel) {

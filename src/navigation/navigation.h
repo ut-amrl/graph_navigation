@@ -73,6 +73,9 @@ static inline float YawFromQuat(float x, float y, float z, float w) {
     return std::atan2(siny_cosp, cosy_cosp);
 }
 
+// Apply command mapping using linear models (matches driver's velocityToCounts behavior)
+void ApplyCommandMapping(const NavigationParameters& params, Eigen::Vector2f& vel_cmd, float& ang_vel_cmd);
+
 struct PathOption {
     float curvature;
     float clearance;

@@ -96,6 +96,24 @@ struct NavigationParameters {
     std::string motion_primitives_mode;
     bool do_ang_toc;
 
+    // Command mapping parameters
+    bool apply_custom_cmd_map;
+    // Linear model for x-axis velocity mapping: v_mapped = slope * v + intercept
+    float cmd_map_x_slope_pos;
+    float cmd_map_x_intercept_pos;
+    float cmd_map_x_slope_neg;
+    float cmd_map_x_intercept_neg;
+    // Linear model for y-axis velocity mapping
+    float cmd_map_y_slope_pos;
+    float cmd_map_y_intercept_pos;
+    float cmd_map_y_slope_neg;
+    float cmd_map_y_intercept_neg;
+    // Linear model for angular velocity mapping
+    float cmd_map_r_slope_pos;
+    float cmd_map_r_intercept_pos;
+    float cmd_map_r_slope_neg;
+    float cmd_map_r_intercept_neg;
+
     // Default constructor, just set defaults.
     NavigationParameters()
         : dt(0.025),
@@ -120,7 +138,20 @@ struct NavigationParameters {
           evaluator_type("linear"),
           carrot_dist(2),
           motion_primitives_mode("ackermann"),
-          do_ang_toc(false) {}
+          do_ang_toc(false),
+          apply_custom_cmd_map(false),
+          cmd_map_x_slope_pos(1.0f),
+          cmd_map_x_intercept_pos(0.0f),
+          cmd_map_x_slope_neg(1.0f),
+          cmd_map_x_intercept_neg(0.0f),
+          cmd_map_y_slope_pos(1.0f),
+          cmd_map_y_intercept_pos(0.0f),
+          cmd_map_y_slope_neg(1.0f),
+          cmd_map_y_intercept_neg(0.0f),
+          cmd_map_r_slope_pos(1.0f),
+          cmd_map_r_intercept_pos(0.0f),
+          cmd_map_r_slope_neg(1.0f),
+          cmd_map_r_intercept_neg(0.0f) {}
 };
 }  // namespace navigation
 

@@ -62,3 +62,28 @@ AckermannSampler = {
   max_curvature = 2.5;
   clearance_path_clip_fraction = 0.8;
 };
+
+-- Command mapping parameters for Cobot driver
+CommandMapping = {
+  apply_custom_cmd_map = false;
+  linear_models = {
+    x = {
+      slope_pos = 16.8038;
+      intercept_pos = 0.975299;
+      slope_neg = 16.4849;
+      intercept_neg = -0.0220109;
+    };
+    y = {
+      slope_pos = 16.6057;
+      intercept_pos = 0.967648;
+      slope_neg = 16.6521;
+      intercept_neg = 0.055238;
+    };
+    r = {
+      slope_pos = 3.42393;
+      intercept_pos = 0.98112;
+      slope_neg = 3.39072;
+      intercept_neg = -0.0108195;
+    };
+  };
+};

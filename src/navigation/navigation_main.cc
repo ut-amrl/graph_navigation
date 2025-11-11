@@ -119,6 +119,21 @@ CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
 CONFIG_STRING(motion_primitives_mode, "NavigationParameters.motion_primitives_mode");
 CONFIG_BOOL(do_ang_toc, "NavigationParameters.do_ang_toc");
 
+// Command Mapping
+CONFIG_BOOL(apply_custom_cmd_map, "CommandMapping.apply_custom_cmd_map");
+CONFIG_FLOAT(cmd_map_x_slope_pos, "CommandMapping.linear_models.x.slope_pos");
+CONFIG_FLOAT(cmd_map_x_intercept_pos, "CommandMapping.linear_models.x.intercept_pos");
+CONFIG_FLOAT(cmd_map_x_slope_neg, "CommandMapping.linear_models.x.slope_neg");
+CONFIG_FLOAT(cmd_map_x_intercept_neg, "CommandMapping.linear_models.x.intercept_neg");
+CONFIG_FLOAT(cmd_map_y_slope_pos, "CommandMapping.linear_models.y.slope_pos");
+CONFIG_FLOAT(cmd_map_y_intercept_pos, "CommandMapping.linear_models.y.intercept_pos");
+CONFIG_FLOAT(cmd_map_y_slope_neg, "CommandMapping.linear_models.y.slope_neg");
+CONFIG_FLOAT(cmd_map_y_intercept_neg, "CommandMapping.linear_models.y.intercept_neg");
+CONFIG_FLOAT(cmd_map_r_slope_pos, "CommandMapping.linear_models.r.slope_pos");
+CONFIG_FLOAT(cmd_map_r_intercept_pos, "CommandMapping.linear_models.r.intercept_pos");
+CONFIG_FLOAT(cmd_map_r_slope_neg, "CommandMapping.linear_models.r.slope_neg");
+CONFIG_FLOAT(cmd_map_r_intercept_neg, "CommandMapping.linear_models.r.intercept_neg");
+
 // ROS Topics and Frames
 CONFIG_STRINGLIST(laser_topics, "ROSTopics.laser_topics");
 CONFIG_STRING(laser_frame, "ROSTopics.laser_frame");
@@ -717,6 +732,19 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->carrot_dist = CONFIG_carrot_dist;
         params->motion_primitives_mode = CONFIG_motion_primitives_mode;
         params->do_ang_toc = CONFIG_do_ang_toc;
+        params->apply_custom_cmd_map = CONFIG_apply_custom_cmd_map;
+        params->cmd_map_x_slope_pos = CONFIG_cmd_map_x_slope_pos;
+        params->cmd_map_x_intercept_pos = CONFIG_cmd_map_x_intercept_pos;
+        params->cmd_map_x_slope_neg = CONFIG_cmd_map_x_slope_neg;
+        params->cmd_map_x_intercept_neg = CONFIG_cmd_map_x_intercept_neg;
+        params->cmd_map_y_slope_pos = CONFIG_cmd_map_y_slope_pos;
+        params->cmd_map_y_intercept_pos = CONFIG_cmd_map_y_intercept_pos;
+        params->cmd_map_y_slope_neg = CONFIG_cmd_map_y_slope_neg;
+        params->cmd_map_y_intercept_neg = CONFIG_cmd_map_y_intercept_neg;
+        params->cmd_map_r_slope_pos = CONFIG_cmd_map_r_slope_pos;
+        params->cmd_map_r_intercept_pos = CONFIG_cmd_map_r_intercept_pos;
+        params->cmd_map_r_slope_neg = CONFIG_cmd_map_r_slope_neg;
+        params->cmd_map_r_intercept_neg = CONFIG_cmd_map_r_intercept_neg;
     }
 };
 
