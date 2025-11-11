@@ -74,8 +74,12 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
 
         // Use 1D TOC with sign handling
         const float s = Sign(dTheta);
-        if (ang_vel * dTheta < 0.0f) {
-            // Turning the wrong way - decelerate first
+
+        // If already close enough in angle, stop rotating
+        if (fabs(dTheta) < 1e-3f) {
+            ang_vel_cmd = 0;
+        } else if (ang_vel * dTheta < 0.0f) {
+            // Turning the wrong way - decelerate first using max_deceleration
             const float dv = dt * angular_limits.max_deceleration;
             if (fabs(ang_vel) < dv) {
                 ang_vel_cmd = 0;
@@ -83,8 +87,16 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
                 ang_vel_cmd = ang_vel - Sign(ang_vel) * dv;
             }
         } else {
-            // Apply 1D TOC to reach target orientation
-            ang_vel_cmd = s * Run1DTimeOptimalControl(angular_limits, 0, s * ang_vel, s * dTheta, 0, dt);
+            // Early-brake guard: if remaining angle is less than stopping angle, brake now
+            const float omega = ang_vel;
+            const float stop_angle = (omega * omega) / (2.0f * angular_limits.max_deceleration);
+            if (stop_angle >= fabs(dTheta)) {
+                const float dv = dt * angular_limits.max_deceleration;
+                ang_vel_cmd = (fabs(omega) <= dv) ? 0.0f : (omega - Sign(omega) * dv);
+            } else {
+                // Apply 1D TOC to reach target orientation
+                ang_vel_cmd = s * Run1DTimeOptimalControl(angular_limits, 0, s * omega, s * dTheta, 0, dt);
+            }
         }
     } else {
         // No rotation during straight-line motion
