@@ -260,6 +260,10 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
         auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
         omni_sampler->enable_angular_toc_runtime_ = false;
     }
+    yaw_align_sp_init_ = false;
+    // Reset debug logging variables
+    omni_best_path_valid_ = false;
+    nav_ang_toc_active_ = false;
 }
 
 void Navigation::ResetNavGoals() {
@@ -274,12 +278,20 @@ void Navigation::ResetNavGoals() {
         auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
         omni_sampler->enable_angular_toc_runtime_ = false;
     }
+    yaw_align_sp_init_ = false;
+    // Reset debug logging variables
+    omni_best_path_valid_ = false;
+    nav_ang_toc_active_ = false;
 }
 
 void Navigation::UpdateMap(const string& map_path) {
     planning_domain_.Load(map_path);
     plan_path_.clear();
     in_obstacle_avoidance_mode_ = false;  // Reset sub-state when plan is cleared
+    yaw_align_sp_init_ = false;           // Reset yaw alignment setpoint when map is updated
+    // Reset debug logging variables
+    omni_best_path_valid_ = false;
+    nav_ang_toc_active_ = false;
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -612,11 +624,11 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     const Vector2f map_loc_pred = robot_loc_fp_;
     const float yaw_map_pred = robot_angle_fp_;
 
-    // Enable angular TOC in omnidirectional sampler only when in obstacle avoidance mode
-    // (RunObstacleAvoidance is only called when nav_state_ == kGoto && in_obstacle_avoidance_mode_ == true)
+    // Disable angular TOC in omnidirectional sampler - Navigation owns yaw alignment
     if (params_.motion_primitives_mode == "omni") {
         auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
-        omni_sampler->enable_angular_toc_runtime_ = true;
+        omni_sampler->enable_angular_toc_runtime_ =
+            false;  // Navigation owns yaw alignment, ?? all these blocks can be removed since its legacy now
     }
 
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
@@ -637,17 +649,12 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
         return;
     }
 
-    // Log best path heading for omnidirectional paths
+    // Store best path heading for omnidirectional paths (for debug logging)
     if (params_.motion_primitives_mode == "omni") {
         const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_path.get());
         if (best_omni) {
-            const float path_heading = atan2(best_omni->direction.y(), best_omni->direction.x());
-            const double wall_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-            std::ostringstream oss;
-            oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] OmniBestPath heading: " << std::setw(8)
-                << std::setprecision(4) << path_heading;
-            navigation_debug::DebugLog(oss.str());
+            omni_best_path_heading_ = atan2(best_omni->direction.y(), best_omni->direction.x());
+            omni_best_path_valid_ = true;
         }
     }
 
@@ -660,6 +667,61 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                            ang_vel_cmd);
     sampled_paths_ = paths;
     best_option_ = best_path;
+
+    // === Smooth "look-where-you-go" yaw alignment (Navigation-level) ===
+    if (params_.do_ang_toc) {
+        const float speed = vel_cmd.norm();
+        const float vmin = 0.05f;  // don't try to align while essentially stopped
+        if (speed > vmin) {
+            // Heading of the commanded linear velocity in MAP frame at actuation time
+            const Eigen::Rotation2Df R_map_base(yaw_map_pred);
+            const Eigen::Vector2f v_map_cmd = R_map_base * vel_cmd;
+            const float heading_map_target = std::atan2(v_map_cmd.y(), v_map_cmd.x());
+            nav_ang_toc_target_angle_ = heading_map_target;  // Store for debug logging
+
+            // Initialize persistent setpoint once
+            if (!yaw_align_sp_init_) {
+                yaw_align_sp_map_ = heading_map_target;
+                yaw_align_sp_init_ = true;
+            }
+
+            // Rate-limit how fast the setpoint can move (prevents wiggle)
+            float err = AngleMod(heading_map_target - yaw_align_sp_map_);
+            const float max_step = params_.angular_limits.max_speed * params_.dt;  // rad per control tick
+            if (err > max_step) err = max_step;
+            if (err < -max_step) err = -max_step;
+            yaw_align_sp_map_ = AngleMod(yaw_align_sp_map_ + err);
+
+            // 1D TOC to the filtered setpoint using predicted yaw
+            const float dTheta = AngleDiff(yaw_align_sp_map_, yaw_map_pred);
+            const float s = Sign(dTheta);
+
+            if (robot_omega_ * dTheta < 0.0f) {
+                // Wrong-way: brake using decel
+                const float domega = params_.angular_limits.max_deceleration * params_.dt;
+                ang_vel_cmd = (std::fabs(robot_omega_) <= domega) ? 0.0f : (robot_omega_ - Sign(robot_omega_) * domega);
+            } else {
+                // Small deadband to avoid dithering near alignment
+                const float kDeadband = 0.02f;  // ~1.1 deg
+                if (std::fabs(dTheta) < kDeadband) {
+                    const float domega = params_.angular_limits.max_deceleration * params_.dt;
+                    ang_vel_cmd =
+                        (std::fabs(robot_omega_) <= domega) ? 0.0f : (robot_omega_ - Sign(robot_omega_) * domega);
+                } else {
+                    ang_vel_cmd = s * motion_primitives::Run1DTimeOptimalControl(
+                                          params_.angular_limits, 0.0f, s * robot_omega_, s * dTheta, 0.0f, params_.dt);
+                }
+            }
+            nav_ang_toc_control_ = ang_vel_cmd;  // Store for debug logging
+            nav_ang_toc_active_ = true;
+        } else {
+            // Essentially stopped → only brake omega (not actively aligning)
+            const float domega = params_.angular_limits.max_deceleration * params_.dt;
+            ang_vel_cmd = (std::fabs(robot_omega_) <= domega) ? 0.0f : (robot_omega_ - Sign(robot_omega_) * domega);
+            // Note: nav_ang_toc_active_ remains false when speed <= vmin (not actively aligning, just braking)
+            // nav_ang_toc_target_angle_ is not set here because we're not actively aligning
+        }
+    }
 
     // Apply command mapping before returning
     ApplyCommandMapping(params_, vel_cmd, ang_vel_cmd);
@@ -770,31 +832,16 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
-    // Log nav state at start of Run()
-    {
-        const double wall_time =
-            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] NavState: " << static_cast<int>(nav_state_);
-        navigation_debug::DebugLog(oss.str());
-    }
+    // navigation_debug::DebugLog(std::string("[") + std::to_string(static_cast<int>(nav_state_)) +
+    //                            "] command_history_ length: " + std::to_string(command_history_.size()));
 
-    navigation_debug::DebugLog(std::string("[") + std::to_string(static_cast<int>(nav_state_)) +
-                               "] command_history_ length: " + std::to_string(command_history_.size()));
+    // Reset debug logging flags at start of each Run() cycle
+    omni_best_path_valid_ = false;
+    nav_ang_toc_active_ = false;
 
     PruneLatencyQueue();
     // Forward predict robot state to account for actuation latency
     ForwardPredict(time + params_.actuation_latency);
-
-    // Log forward predicted heading/yaw
-    {
-        const double wall_time =
-            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] FwdPredYaw: " << std::setw(8)
-            << std::setprecision(4) << robot_angle_fp_;
-        navigation_debug::DebugLog(oss.str());
-    }
 
     // Local target in predicted base frame at actuation time
     const Affine2f T_map_base_pred = Translation2f(robot_loc_fp_) * Rotation2Df(robot_angle_fp_);
@@ -810,6 +857,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         if (!foundCarrot) {
             // No valid carrot found, halt and fail
             in_obstacle_avoidance_mode_ = false;  // Reset sub-state when carrot unavailable
+            yaw_align_sp_init_ = false;           // Reset yaw alignment setpoint when carrot unavailable
             Halt(cmd_vel, cmd_angle_vel);
             return false;
         }
@@ -840,6 +888,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
                 auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
                 omni_sampler->enable_angular_toc_runtime_ = false;
             }
+            yaw_align_sp_init_ = false;
             // Transition from kTurnInPlace to kStopped when final orientation is reached
         } else if (nav_state_ == NavigationState::kTurnInPlace &&
                    AngleDist(robot_angle_fp_, nav_goal_angle_) < params_.target_angle_tolerance &&
@@ -868,28 +917,35 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
             omni_sampler->enable_angular_toc_runtime_ = false;
         }
+        yaw_align_sp_init_ = false;
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
         const float theta = atan2(local_target_.y(), local_target_.x());
+
+        // "Nudge" window: when close to goal, prefer continuing OA over FOV-based turning
+        const float goal_dist2 = (nav_goal_loc_ - robot_loc_fp_).squaredNorm();  // MAP-frame distance^2
+        const bool near_goal_nudge = (goal_dist2 <= Sq(2.f * params_.target_dist_tolerance));
 
         // Hysteresis-based FOV check to prevent oscillation:
         // - To START obstacle avoidance: target must be well-centered (±center_threshold)
         // - To CONTINUE obstacle avoidance: target can be anywhere in FOV (±local_half_fov)
 
         if (in_obstacle_avoidance_mode_) {
-            // Already doing obstacle avoidance: keep going unless target leaves FOV
-            if (fabs(theta) > params_.local_half_fov) {
-                // Target left FOV: switch back to turning
+            // Already doing obstacle avoidance: keep going unless target leaves FOV AND we're not nudging
+            const bool fov_ok = (std::fabs(theta) <= params_.local_half_fov);
+            if (!fov_ok && !near_goal_nudge) {
+                // Target left FOV and we're not in the nudge window: switch back to turning
                 in_obstacle_avoidance_mode_ = false;
                 // Disable angular TOC since we're no longer in obstacle avoidance mode
                 if (params_.motion_primitives_mode == "omni") {
                     auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
                     omni_sampler->enable_angular_toc_runtime_ = false;
                 }
+                yaw_align_sp_init_ = false;
                 TurnInPlace(cmd_vel, cmd_angle_vel);
             } else {
-                // Target still in FOV: continue obstacle avoidance
+                // Either still in FOV or near-goal nudge active: continue obstacle avoidance
                 RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
             }
         } else {
@@ -899,12 +955,17 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
                 auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
                 omni_sampler->enable_angular_toc_runtime_ = false;
             }
-            if (fabs(theta) <= params_.center_threshold) {
+            yaw_align_sp_init_ = false;
+            if (near_goal_nudge) {
+                // Near the goal: start/continue obstacle avoidance even if target not centered
+                in_obstacle_avoidance_mode_ = true;
+                RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+            } else if (fabs(theta) <= params_.center_threshold) {
                 // Target is centered: start obstacle avoidance
                 in_obstacle_avoidance_mode_ = true;
                 RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
             } else {
-                // Target not centered: keep turning
+                // Target not centered and not nudging: keep turning
                 TurnInPlace(cmd_vel, cmd_angle_vel);
             }
         }
@@ -915,6 +976,39 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             omni_sampler->enable_angular_toc_runtime_ = false;
         }
         TurnInPlace(cmd_vel, cmd_angle_vel);
+    }
+
+    // === Consolidated [TEST] debug logs ===
+    {
+        const double wall_time =
+            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(6) << wall_time;
+
+        // NavState
+        oss << " [TEST] NavState: " << static_cast<int>(nav_state_);
+
+        // Obstacle avoidance mode
+        oss << " InOAMode: " << (in_obstacle_avoidance_mode_ ? 1 : 0);
+
+        // Current robot heading (not forward predicted)
+        oss << " CurrYaw: " << std::setw(8) << std::setprecision(4) << robot_angle_;
+
+        // Forward predicted yaw
+        oss << " FwdPredYaw: " << std::setw(8) << std::setprecision(4) << robot_angle_fp_;
+
+        // OmniBestPath heading (if available)
+        if (omni_best_path_valid_) {
+            oss << " OmniBestPath: " << std::setw(8) << std::setprecision(4) << omni_best_path_heading_;
+        }
+
+        // Navigation-level AngularTOC (if active)
+        if (nav_ang_toc_active_) {
+            oss << " AngTOC_target: " << std::setw(8) << std::setprecision(4) << nav_ang_toc_target_angle_;
+            oss << " AngTOC_control: " << std::setw(8) << std::setprecision(4) << nav_ang_toc_control_;
+        }
+
+        navigation_debug::DebugLog(oss.str());
     }
 
     return true;

@@ -350,9 +350,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void TimerCallback() {
         if (!run_) return;
-        const double timer_callback_start_time = this->get_clock()->now().seconds();
-        std::string start_msg = "TimerCallback started at timestamp: " + std::to_string(timer_callback_start_time);
-        navigation::navigation_debug::DebugLog(start_msg);
+        // const double timer_callback_start_time = this->get_clock()->now().seconds();
+        // std::string start_msg = "TimerCallback started at timestamp: " + std::to_string(timer_callback_start_time);
+        // navigation::navigation_debug::DebugLog(start_msg);
         const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
@@ -373,6 +373,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             if (static_cast<uint8_t>(navigation_.nav_state_) !=
                 static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
                 DrawTarget();
+                if (navigation_.in_obstacle_avoidance_mode_) {
+                    DrawYawTarget();
+                }
                 DrawPathOptions();
             }
             PublishPath();
@@ -389,9 +392,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
 
         // Log end-to-end TimerCallback duration
-        std::string timer_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
-                                "] TimerCallback took " + std::to_string(total_ms) + " ms";
-        navigation::navigation_debug::DebugLog(timer_msg);
+        // std::string timer_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
+        //                         "] TimerCallback took " + std::to_string(total_ms) + " ms";
+        // navigation::navigation_debug::DebugLog(timer_msg);
     }
 
     // Helper functions
@@ -556,7 +559,6 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void DrawTarget() {
-        // ?? BUG: i think for viz we do NOT need fp
         const float carrot_dist = navigation_.params_.carrot_dist;
         // navigation_.local_target_ is in the predicted base frame at actuation time.
         // For visualization, compute the equivalent local target in the CURRENT base frame.
@@ -653,6 +655,32 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             visualization::DrawLine(p3, p4, 0x66CCFF, local_viz_msg_);
             visualization::DrawLine(p4, p1, 0x66CCFF, local_viz_msg_);
         }
+    }
+
+    void DrawYawTarget() {
+        // Only draw if the Navigation has initialized the setpoint
+        if (!navigation_.yaw_align_sp_init_) return;
+
+        // Arrow in current BASE frame that points along the MAP-frame yaw setpoint
+        const float L = 0.9f;  // arrow length in meters
+        const Eigen::Rotation2Df R_now_inv(-navigation_.robot_angle_);
+        const Eigen::Rotation2Df R_sp(navigation_.yaw_align_sp_map_);
+
+        const Eigen::Vector2f tip_local = R_now_inv * (R_sp * Eigen::Vector2f(L, 0.0f));
+
+        // Shaft
+        visualization::DrawLine(Eigen::Vector2f(0, 0), tip_local, 0x00A0FF, local_viz_msg_);
+
+        // Arrowhead
+        const float theta = std::atan2(tip_local.y(), tip_local.x());
+        const float head_back = 0.18f * L;
+        const float head_side = 0.10f * L;
+        const Eigen::Vector2f back = tip_local - head_back * Eigen::Vector2f(std::cos(theta), std::sin(theta));
+        const Eigen::Vector2f left = back + head_side * Eigen::Vector2f(std::cos(theta + 0.8f), std::sin(theta + 0.8f));
+        const Eigen::Vector2f right =
+            back + head_side * Eigen::Vector2f(std::cos(theta - 0.8f), std::sin(theta - 0.8f));
+        visualization::DrawLine(tip_local, left, 0x00A0FF, local_viz_msg_);
+        visualization::DrawLine(tip_local, right, 0x00A0FF, local_viz_msg_);
     }
 
     void DrawPathOptions() {

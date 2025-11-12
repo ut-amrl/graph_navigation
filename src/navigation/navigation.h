@@ -158,6 +158,16 @@ class Navigation {
     // Sub-state within kGoto: distinguishes between turning toward carrot (false) vs. actively
     // driving with obstacle avoidance (true). Used for hysteresis in FOV check to prevent oscillation.
     bool in_obstacle_avoidance_mode_;
+    // Yaw alignment setpoint in map frame (for visualization).
+    float yaw_align_sp_map_ = 0.0f;
+    // Whether yaw alignment setpoint has been initialized (for visualization).
+    bool yaw_align_sp_init_ = false;
+    // Debug logging values (temporary storage).
+    float omni_best_path_heading_ = 0.0f;
+    bool omni_best_path_valid_ = false;
+    float nav_ang_toc_target_angle_ = 0.0f;
+    float nav_ang_toc_control_ = 0.0f;
+    bool nav_ang_toc_active_ = false;
 
    private:
     // Run local obstacle avoidance planner (robot frame).
