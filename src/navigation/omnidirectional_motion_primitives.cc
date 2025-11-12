@@ -23,6 +23,9 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
+#include <iomanip>
+#include <sstream>
+#include <chrono>
 
 #include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
@@ -30,6 +33,7 @@
 #include "config_reader/config_reader.h"
 #include "omnidirectional_motion_primitives.h"
 #include "motion_primitives.h"
+#include "navigation.h"
 
 using Eigen::Vector2f;
 using pose_2d::Pose2Df;
@@ -69,6 +73,14 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
         // Simultaneously apply 1D TOC for angular rotation to face the direction of motion
         // Target angle: direction of motion
         const float target_angle = atan2(direction.y(), direction.x());
+        {
+            const double wall_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6) << wall_time
+                << " [TEST] AngularTOC target_angle: " << std::setw(8) << std::setprecision(4) << target_angle;
+            navigation::navigation_debug::DebugLog(oss.str());
+        }
         // Current angle is 0 in robot frame, so angle difference = target_angle
         const float dTheta = AngleMod(target_angle);
 
@@ -97,6 +109,15 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
                 // Apply 1D TOC to reach target orientation
                 ang_vel_cmd = s * Run1DTimeOptimalControl(angular_limits, 0, s * omega, s * dTheta, 0, dt);
             }
+        }
+        // Log angular TOC control action
+        {
+            const double wall_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] AngularTOC control: " << std::setw(8)
+                << std::setprecision(4) << ang_vel_cmd;
+            navigation::navigation_debug::DebugLog(oss.str());
         }
     } else {
         // No rotation during straight-line motion

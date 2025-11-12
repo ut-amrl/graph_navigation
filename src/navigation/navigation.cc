@@ -28,6 +28,8 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <queue>
 #include <limits>
 
@@ -635,6 +637,20 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
         return;
     }
 
+    // Log best path heading for omnidirectional paths
+    if (params_.motion_primitives_mode == "omni") {
+        const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_path.get());
+        if (best_omni) {
+            const float path_heading = atan2(best_omni->direction.y(), best_omni->direction.x());
+            const double wall_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] OmniBestPath heading: " << std::setw(8)
+                << std::setprecision(4) << path_heading;
+            navigation_debug::DebugLog(oss.str());
+        }
+    }
+
     float max_map_speed = params_.linear_limits.max_speed;
     planning_domain_.GetClearanceAndSpeedFromLoc(map_loc_pred, nullptr, &max_map_speed);
     auto linear_limits = params_.linear_limits;
@@ -754,12 +770,31 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
+    // Log nav state at start of Run()
+    {
+        const double wall_time =
+            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] NavState: " << static_cast<int>(nav_state_);
+        navigation_debug::DebugLog(oss.str());
+    }
+
     navigation_debug::DebugLog(std::string("[") + std::to_string(static_cast<int>(nav_state_)) +
                                "] command_history_ length: " + std::to_string(command_history_.size()));
 
     PruneLatencyQueue();
     // Forward predict robot state to account for actuation latency
     ForwardPredict(time + params_.actuation_latency);
+
+    // Log forward predicted heading/yaw
+    {
+        const double wall_time =
+            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(6) << wall_time << " [TEST] FwdPredYaw: " << std::setw(8)
+            << std::setprecision(4) << robot_angle_fp_;
+        navigation_debug::DebugLog(oss.str());
+    }
 
     // Local target in predicted base frame at actuation time
     const Affine2f T_map_base_pred = Translation2f(robot_loc_fp_) * Rotation2Df(robot_angle_fp_);
