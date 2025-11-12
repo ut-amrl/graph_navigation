@@ -326,35 +326,80 @@ void Navigation::UpdateCommandHistory(Twist twist) {
 
 void Navigation::ForwardPredict(double t) {
     const double dt_seg = params_.dt;
-    // Predicted velocity just BEFORE time t, which we are computing now
-    if (command_history_.empty()) {
-        robot_vel_ = Vector2f(0.f, 0.f);
-        robot_omega_ = 0.f;
-    } else {
-        // Find the last command with start time <= t (active on [t-dt, t) if present)
-        // Loop iterates from front to back of the queue (earliest to latest commands)
-        // Since command_history_ is sorted by cmd_exec_start_time in ascending order,
-        // we iterate through commands chronologically to find the last command
-        // whose execution start time is <= t (i.e., the command active at time t)
-        const Twist* active = nullptr;
+    const bool use_omni = (params_.motion_primitives_mode == "omni");
+    // Find the last command with start time <= t (active on [t-dt, t) if present)
+    // Loop iterates from front to back of the queue (earliest to latest commands)
+    // Since command_history_ is sorted by cmd_exec_start_time in ascending order,
+    // we iterate through commands chronologically to find the last command
+    // whose execution start time is <= t (i.e., the command active at time t)
+    const Twist* active = nullptr;
+    if (!command_history_.empty()) {
         for (const Twist& c : command_history_) {
             if (c.cmd_exec_start_time <= t)
                 active = &c;  // Keep updating to find the latest valid command
             else
                 break;  // Since sorted, no later commands will have start_time <= t
         }
-        if (!active) active = &command_history_.front();
-        robot_vel_ = Vector2f(active->linear.x(), active->linear.y());
-        robot_omega_ = static_cast<float>(active->angular.z());
     }
+
     // Set the latest odometry location and angle
     odom_loc_ = Vector2f(latest_odom_msg_.position.x(), latest_odom_msg_.position.y());
     {
         const auto& q = latest_odom_msg_.orientation;
         odom_angle_ = YawFromQuat(q.x(), q.y(), q.z(), q.w());
     }
+    // Anchor yaw at t_odometry_ (do not mutate this variable)
+    const float yaw_anchor_at_t_odom = odom_angle_;
+
+    // Returns yaw at arbitrary time s by integrating ω relative to t_odometry_.
+    auto YawAt = [&](double s) -> float {
+        float yaw = yaw_anchor_at_t_odom;
+        if (s < t_odometry_) {
+            // integrate backward
+            for (const Twist& c : command_history_) {
+                const double seg0 = c.cmd_exec_start_time;
+                const double seg1 = seg0 + dt_seg;
+                const double dt_back = overlap(seg0, seg1, s, t_odometry_);
+                if (dt_back > 0.0) {
+                    yaw -= static_cast<float>(c.angular.z()) * static_cast<float>(dt_back);
+                }
+            }
+        } else if (s > t_odometry_) {
+            // integrate forward
+            for (const Twist& c : command_history_) {
+                const double seg0 = c.cmd_exec_start_time;
+                const double seg1 = seg0 + dt_seg;
+                const double dt_fwd = overlap(seg0, seg1, t_odometry_, s);
+                if (dt_fwd > 0.0) {
+                    yaw += static_cast<float>(c.angular.z()) * static_cast<float>(dt_fwd);
+                }
+            }
+        }
+        return AngleMod(yaw);
+    };
+
+    // Predicted velocity just BEFORE time t (using selected motion primitive semantics)
+    if (!active) {
+        // Before the first command: zero twist
+        robot_vel_ = Vector2f::Zero();
+        robot_omega_ = 0.f;
+    } else if (use_omni) {
+        // STRAIGHT+SPIN: v^b(t) = R(-theta(t)) * ( R(theta(t_k)) * v^b_cmd )
+        const Vector2f v_b_cmd(active->linear.x(), active->linear.y());
+        const float theta_cmd = YawAt(active->cmd_exec_start_time);  // θ(t_k)
+        const Vector2f u_w = Rotation2Df(theta_cmd) * v_b_cmd;       // latched world vector
+        const float theta_now = YawAt(t);                            // θ(t^-)
+        robot_vel_ = Rotation2Df(-theta_now) * u_w;                  // executed base-frame linear vel at t^-
+        robot_omega_ = static_cast<float>(active->angular.z());
+    } else {
+        // ARC (old) semantics: commanded body twist is the executed twist
+        robot_vel_ = Vector2f(active->linear.x(), active->linear.y());
+        robot_omega_ = static_cast<float>(active->angular.z());
+    }
+
     // Forward predict the robot's pose and accumulate inverse LiDAR transform
     Affine2f lidar_tf = Affine2f::Identity();
+    float lidar_angle = YawAt(t_point_cloud_);  // yaw at LiDAR timestamp
     for (const Twist& c : command_history_) {
         const double seg0 = c.cmd_exec_start_time;
         const double seg1 = c.cmd_exec_start_time + dt_seg;
@@ -365,7 +410,18 @@ void Navigation::ForwardPredict(double t) {
             if (dto > 0.0) {
                 const float fdto = static_cast<float>(dto);
                 const Vector2f v_b(c.linear.x(), c.linear.y());
-                odom_loc_ += fdto * (Rotation2Df(odom_angle_) * v_b);
+
+                if (use_omni) {
+                    // STRAIGHT+SPIN: u^W is latched at command start
+                    const float theta_cmd = YawAt(seg0);
+                    const Vector2f u_w = Rotation2Df(theta_cmd) * v_b;
+                    odom_loc_ += fdto * u_w;  // world-frame linear vel is constant
+                } else {
+                    // ARC (old): body-frame linear vel, coupled with heading
+                    odom_loc_ += fdto * (Rotation2Df(odom_angle_) * v_b);
+                }
+
+                // yaw always integrates independently
                 odom_angle_ = AngleMod(odom_angle_ + fdto * static_cast<float>(c.angular.z()));
             }
         }
@@ -374,10 +430,24 @@ void Navigation::ForwardPredict(double t) {
             const double dtl = overlap(seg0, seg1, t_point_cloud_, t);
             if (dtl > 0.0) {
                 const float fdtl = static_cast<float>(dtl);
-                const float dth = -static_cast<float>(c.angular.z()) * fdtl;  // inverse rotation
-                Rotation2Df Rstep(dth);
+                const float dth = static_cast<float>(c.angular.z()) * fdtl;
+                Rotation2Df Rstep(-dth);  // inverse rotation for the small step
                 const Vector2f v_b(c.linear.x(), c.linear.y());
-                const Vector2f tstep = -(Rstep * v_b) * fdtl;  // rotate translation for inverse step
+
+                Vector2f tstep;
+                if (use_omni) {
+                    // STRAIGHT+SPIN: t = -R(theta_end)^T * u^W * dt
+                    const float theta_cmd = YawAt(seg0);
+                    const Vector2f u_w = Rotation2Df(theta_cmd) * v_b;
+                    const float theta_end = AngleMod(lidar_angle + dth);
+                    tstep = -(Rotation2Df(-theta_end) * u_w) * fdtl;  // -R(theta_end)^T * u^W * dt
+                    lidar_angle = theta_end;                          // advance LiDAR-side yaw
+                } else {
+                    // ARC (old): t = -R(-dth) * v_b * dt  (i.e., -(Rstep * v_b) * dt)
+                    tstep = -(Rstep * v_b) * fdtl;
+                    // optional: lidar_angle += dth; // not needed by ARC math, safe either way
+                }
+
                 lidar_tf = Translation2f(tstep) * Rstep * lidar_tf;
             }
         }
