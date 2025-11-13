@@ -575,12 +575,21 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Draw local target point (magenta cross)
         visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 
-        // Draw nudge circle around carrot: red if robot within nudge distance, light gray otherwise
+        // Compute final goal position in current base frame for visualization
+        const Eigen::Vector2f goal_in_local = R_now_inv * (navigation_.nav_goal_loc_ - navigation_.robot_loc_);
+
+        // Draw target distance tolerance circle around final goal: red if robot within target distance, light gray otherwise
         const float goal_dist2 = (navigation_.nav_goal_loc_ - navigation_.robot_loc_fp_).squaredNorm();
+        const float target_dist_tolerance = navigation_.params_.target_dist_tolerance;
+        const bool within_target_dist = (goal_dist2 <= target_dist_tolerance * target_dist_tolerance);
+        const uint32_t target_dist_color = within_target_dist ? 0xFF0000 : 0xE0E0E0;  // red if within, light gray otherwise
+        visualization::DrawArc(goal_in_local, target_dist_tolerance, -M_PI, M_PI, target_dist_color, local_viz_msg_);
+
+        // Draw nudge circle around final goal: red if robot within nudge distance, light gray otherwise
         const float nudge_dist_tolerance = navigation_.params_.nudge_dist_tolerance;
         const bool within_nudge = (goal_dist2 <= nudge_dist_tolerance * nudge_dist_tolerance);
         const uint32_t nudge_color = within_nudge ? 0xFF0000 : 0xE0E0E0;  // red if within, light gray otherwise
-        visualization::DrawArc(target, nudge_dist_tolerance, -M_PI, M_PI, nudge_color, local_viz_msg_);
+        visualization::DrawArc(goal_in_local, nudge_dist_tolerance, -M_PI, M_PI, nudge_color, local_viz_msg_);
 
         // Draw FOV cone boundaries (dark yellow)
         const float fov_length = 2.0f;  // Length of FOV lines in meters
@@ -663,6 +672,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             visualization::DrawLine(p3, p4, 0x66CCFF, local_viz_msg_);
             visualization::DrawLine(p4, p1, 0x66CCFF, local_viz_msg_);
         }
+
+        // Draw base_link marker at origin (small cross)
+        visualization::DrawCross(Eigen::Vector2f(0, 0), 0.05, 0x000000, local_viz_msg_);
     }
 
     void DrawYawTarget() {
