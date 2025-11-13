@@ -155,10 +155,10 @@ inline int VelocityToMotorCounts(float vel, float slope_pos, float intercept_pos
                                  float intercept_neg) {
     if (vel > 0.0f) {
         double counts = static_cast<double>(slope_pos) * static_cast<double>(vel) + static_cast<double>(intercept_pos);
-        return static_cast<int>(std::ceil(counts));
+        return static_cast<int>(std::floor(counts));   // ?? flipped, make sure to match driver
     } else if (vel < 0.0f) {
         double counts = static_cast<double>(slope_neg) * static_cast<double>(vel) + static_cast<double>(intercept_neg);
-        return static_cast<int>(std::floor(counts));
+        return static_cast<int>(std::ceil(counts));   // ?? flipped, make sure to match driver
     }
     return 0;
 }
@@ -880,7 +880,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         // Transition from kGoto to kTurnInPlace when close to target and slow enough
         if (nav_state_ == NavigationState::kGoto && local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
             robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) &&
-            std::fabs(robot_omega_) < params_.target_omega_tolerance) {
+            std::fabs(robot_omega_) < params_.target_omega_tolerance / 2.0f) {  // stricter omega tol for transition to turninplace, than to stopped
             nav_state_ = NavigationState::kTurnInPlace;
             in_obstacle_avoidance_mode_ = false;  // Reset sub-state when leaving kGoto
             // Disable angular TOC when leaving kGoto state
@@ -925,7 +925,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
 
         // "Nudge" window: when close to goal, prefer continuing OA over FOV-based turning
         const float goal_dist2 = (nav_goal_loc_ - robot_loc_fp_).squaredNorm();  // MAP-frame distance^2
-        const bool near_goal_nudge = (goal_dist2 <= Sq(2.f * params_.target_dist_tolerance));
+        const bool near_goal_nudge = (goal_dist2 <= Sq(3.f * params_.target_dist_tolerance));
 
         // Hysteresis-based FOV check to prevent oscillation:
         // - To START obstacle avoidance: target must be well-centered (±center_threshold)
@@ -933,19 +933,23 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
 
         if (in_obstacle_avoidance_mode_) {
             // Already doing obstacle avoidance: keep going unless target leaves FOV AND we're not nudging
-            const bool fov_ok = (std::fabs(theta) <= params_.local_half_fov);
-            if (!fov_ok && !near_goal_nudge) {
-                // Target left FOV and we're not in the nudge window: switch back to turning
-                in_obstacle_avoidance_mode_ = false;
-                // Disable angular TOC since we're no longer in obstacle avoidance mode
-                if (params_.motion_primitives_mode == "omni") {
-                    auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
-                    omni_sampler->enable_angular_toc_runtime_ = false;
+            const bool fov_ok = (fabs(theta) <= params_.local_half_fov);
+            if (!fov_ok) {
+                if (near_goal_nudge) {
+                    fprintf(stderr, "DEBUG: Not in FOV but goal nudge is active\n");
+                    RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
+                } else {
+                    // Target left FOV: switch back to turning
+                    in_obstacle_avoidance_mode_ = false;
+                    // Disable angular TOC since we're no longer in obstacle avoidance mode
+                    if (params_.motion_primitives_mode == "omni") {
+                        auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
+                        omni_sampler->enable_angular_toc_runtime_ = false;
+                    }
+                    TurnInPlace(cmd_vel, cmd_angle_vel);
                 }
-                yaw_align_sp_init_ = false;
-                TurnInPlace(cmd_vel, cmd_angle_vel);
             } else {
-                // Either still in FOV or near-goal nudge active: continue obstacle avoidance
+                // Target still in FOV: continue obstacle avoidance
                 RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
             }
         } else {
@@ -956,16 +960,12 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
                 omni_sampler->enable_angular_toc_runtime_ = false;
             }
             yaw_align_sp_init_ = false;
-            if (near_goal_nudge) {
-                // Near the goal: start/continue obstacle avoidance even if target not centered
-                in_obstacle_avoidance_mode_ = true;
-                RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
-            } else if (fabs(theta) <= params_.center_threshold) {
+            if (fabs(theta) <= params_.center_threshold) {
                 // Target is centered: start obstacle avoidance
                 in_obstacle_avoidance_mode_ = true;
                 RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
             } else {
-                // Target not centered and not nudging: keep turning
+                // Target not centered: keep turning
                 TurnInPlace(cmd_vel, cmd_angle_vel);
             }
         }
