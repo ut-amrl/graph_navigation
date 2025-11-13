@@ -69,55 +69,13 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
     // Command velocity in the direction of motion (2D velocity vector)
     vel_cmd = speed * direction;
 
-    if (do_ang_toc) {
-        // Simultaneously apply 1D TOC for angular rotation to face the direction of motion
-        // Target angle: direction of motion
-        const float target_angle = atan2(direction.y(), direction.x());
-        // Current angle is 0 in robot frame, so angle difference = target_angle
-        const float dTheta = AngleMod(target_angle);
-
-        // Use 1D TOC with sign handling
-        const float s = Sign(dTheta);
-
-        // If already close enough in angle, stop rotating
-        if (fabs(dTheta) < target_angle_tolerance) {
-            ang_vel_cmd = 0;
-        } else if (ang_vel * dTheta < 0.0f) {
-            // Turning the wrong way - decelerate first using max_deceleration
-            const float dv = dt * angular_limits.max_deceleration;
-            if (fabs(ang_vel) < dv) {
-                ang_vel_cmd = 0;
-            } else {
-                ang_vel_cmd = ang_vel - Sign(ang_vel) * dv;
-            }
-        } else {
-            // Early-brake guard: if remaining angle is less than stopping angle, brake now
-            const float omega = ang_vel;
-            const float stop_angle = (omega * omega) / (2.0f * angular_limits.max_deceleration);
-            if (stop_angle >= fabs(dTheta)) {
-                const float dv = dt * angular_limits.max_deceleration;
-                ang_vel_cmd = (fabs(omega) <= dv) ? 0.0f : (omega - Sign(omega) * dv);
-            } else {
-                // Apply 1D TOC to reach target orientation
-                ang_vel_cmd = s * Run1DTimeOptimalControl(angular_limits, 0, s * omega, s * dTheta, 0, dt);
-            }
-        }
-    } else {
-        // No rotation during straight-line motion
-        ang_vel_cmd = 0;
-    }
+    // // No rotation during straight-line motion; navigation owns yaw alignment
+    ang_vel_cmd = 0;
 }
 
 Pose2Df OmnidirectionalMovePath::GetIntermediateState(float f) const {
-    if (do_ang_toc) {
-        // Position: straight line movement
-        // Orientation: gradually rotate to face the direction of motion
-        const float target_angle = atan2(direction.y(), direction.x());
-        return Pose2Df(f * target_angle, f * length * direction);
-    } else {
-        // Straight line movement only
-        return Pose2Df(0, f * length * direction);
-    }
+    // Straight line movement only
+    return Pose2Df(0, f * length * direction);
 }
 
 Pose2Df OmnidirectionalMovePath::EndPoint() const { return GetIntermediateState(1.0); }
@@ -140,20 +98,15 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     // Distance to goal along this direction
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
 
-    if (allow_full_360_runtime_) {
-        // NUDGE: permit moving in any direction; cap by max free-path length.
-        move->length = nav_params.max_free_path_length;
+    // Only move if the step reduces distance to the local target
+    if (distance_to_goal_along_direction > 0.0f) {
+        move->length = min(nav_params.max_free_path_length, distance_to_goal_along_direction);
     } else {
-        // Default: only move if the step reduces distance to the local target.
-        if (distance_to_goal_along_direction > 0.0f) {
-            move->length = min(nav_params.max_free_path_length, distance_to_goal_along_direction);
-        } else {
-            move->length = 0.0f;  // Don't move backward
-        }
+        move->length = 0.0f;  // Don't move backward
     }
     move->fpl = move->length;
 
-    // Ensure we can stop safely (use forward component of current vel along this sample)
+    // Ensure we can stop safely
     const float v_along = std::max(0.0f, vel.dot(move->direction));
     const float stopping_dist = (v_along * v_along) / (2.0f * nav_params.linear_limits.max_deceleration);
     move->length = std::max(move->length, stopping_dist);
@@ -170,12 +123,9 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
         cached_n = n;
     }
 
-    const bool enable_ang_toc = nav_params.do_ang_toc && enable_angular_toc_runtime_;
-
 #pragma omp parallel for schedule(runtime)
     for (int i = 0; i < n; ++i) {
-        auto move = std::make_shared<OmnidirectionalMovePath>(unit_dirs[i], 0.0f, enable_ang_toc,
-                                                              nav_params.target_angle_tolerance);
+        auto move = std::make_shared<OmnidirectionalMovePath>(unit_dirs[i], 0.0f);
         SetMaxPathLength(move.get());
         CheckObstacles(move.get());
         samples[i] = std::static_pointer_cast<PathRolloutBase>(move);

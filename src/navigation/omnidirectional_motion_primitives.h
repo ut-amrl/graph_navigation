@@ -41,25 +41,17 @@ struct OmnidirectionalMovePath : PathRolloutBase {
                      Eigen::Vector2f& vel_cmd, float& ang_vel_cmd) const override;
 
     // Default constructor
-    OmnidirectionalMovePath()
-        : direction(0, 0), length(0), fpl(0), clearance(0), do_ang_toc(false), target_angle_tolerance(0.05f) {}
+    OmnidirectionalMovePath() : direction(0, 0), length(0), fpl(0), clearance(0) {}
 
     // Constructor for straight line movement
-    OmnidirectionalMovePath(const Eigen::Vector2f& dir, float len, bool ang_toc = false, float target_angle_tol = 0.05f)
-        : direction(dir.normalized()),
-          length(len),
-          fpl(len),
-          clearance(0),
-          do_ang_toc(ang_toc),
-          target_angle_tolerance(target_angle_tol) {}
+    OmnidirectionalMovePath(const Eigen::Vector2f& dir, float len)
+        : direction(dir.normalized()), length(len), fpl(len), clearance(0) {}
 
-    Eigen::Vector2f direction;     // Unit vector for movement direction
-    float length;                  // Distance to travel
-    float fpl;                     // Free path length
-    float clearance;               // Minimum clearance to obstacles
-    Eigen::Vector2f obstruction;   // Location of closest obstacle
-    bool do_ang_toc;               // Whether to use 1D TOC for angular motion
-    float target_angle_tolerance;  // Angle tolerance for stopping (radians)
+    Eigen::Vector2f direction;    // Unit vector for movement direction
+    float length;                 // Distance to travel
+    float fpl;                    // Free path length
+    float clearance;              // Minimum clearance to obstacles
+    Eigen::Vector2f obstruction;  // Location of closest obstacle
 };
 
 // Omnidirectional path rollout sampler
@@ -69,11 +61,6 @@ struct OmniSampler : PathRolloutSamplerBase {
 
     void CheckObstacles(OmnidirectionalMovePath* move);
     void SetMaxPathLength(OmnidirectionalMovePath* move);
-    // Runtime flag to enable angular TOC. Only true when nav_state == kGoto && in_obstacle_avoidance_mode.
-    bool enable_angular_toc_runtime_ = false;
-    // Allow sampling in all directions even if it initially moves away from the local_target.
-    // Set at runtime by Navigation when "nudge" is active.
-    bool allow_full_360_runtime_ = false;
 };
 
 }  // namespace motion_primitives
