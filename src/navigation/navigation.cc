@@ -155,10 +155,10 @@ inline int VelocityToMotorCounts(float vel, float slope_pos, float intercept_pos
                                  float intercept_neg) {
     if (vel > 0.0f) {
         double counts = static_cast<double>(slope_pos) * static_cast<double>(vel) + static_cast<double>(intercept_pos);
-        return static_cast<int>(std::floor(counts));   // ?? flipped, make sure to match driver
+        return static_cast<int>(std::floor(counts));  // ?? flipped, make sure to match driver
     } else if (vel < 0.0f) {
         double counts = static_cast<double>(slope_neg) * static_cast<double>(vel) + static_cast<double>(intercept_neg);
-        return static_cast<int>(std::ceil(counts));   // ?? flipped, make sure to match driver
+        return static_cast<int>(std::ceil(counts));  // ?? flipped, make sure to match driver
     }
     return 0;
 }
@@ -624,11 +624,15 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     const Vector2f map_loc_pred = robot_loc_fp_;
     const float yaw_map_pred = robot_angle_fp_;
 
-    // Disable angular TOC in omnidirectional sampler - Navigation owns yaw alignment
+    // NUDGE window: within nudge distance tolerance of final goal (MAP frame)
+    const bool near_goal_nudge = (nav_goal_loc_ - map_loc_pred).squaredNorm() <= Sq(params_.nudge_dist_tolerance);
+
+    // Disable angular TOC in sampler; Navigation owns yaw alignment
     if (params_.motion_primitives_mode == "omni") {
         auto* omni_sampler = static_cast<motion_primitives::OmniSampler*>(sampler_.get());
         omni_sampler->enable_angular_toc_runtime_ =
             false;  // Navigation owns yaw alignment, ?? all these blocks can be removed since its legacy now
+        omni_sampler->allow_full_360_runtime_ = near_goal_nudge;  // Enable full 360° sampling during nudge
     }
 
     sampler_->Update(robot_vel_, robot_omega_, local_target, fp_point_cloud_);
@@ -880,7 +884,8 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         // Transition from kGoto to kTurnInPlace when close to target and slow enough
         if (nav_state_ == NavigationState::kGoto && local_target_.squaredNorm() < Sq(params_.target_dist_tolerance) &&
             robot_vel_.squaredNorm() < Sq(params_.target_vel_tolerance) &&
-            std::fabs(robot_omega_) < params_.target_omega_tolerance / 2.0f) {  // stricter omega tol for transition to turninplace, than to stopped
+            std::fabs(robot_omega_) < params_.target_omega_tolerance /
+                                          2.0f) {  // stricter omega tol for transition to turninplace, than to stopped
             nav_state_ = NavigationState::kTurnInPlace;
             in_obstacle_avoidance_mode_ = false;  // Reset sub-state when leaving kGoto
             // Disable angular TOC when leaving kGoto state
@@ -925,7 +930,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
 
         // "Nudge" window: when close to goal, prefer continuing OA over FOV-based turning
         const float goal_dist2 = (nav_goal_loc_ - robot_loc_fp_).squaredNorm();  // MAP-frame distance^2
-        const bool near_goal_nudge = (goal_dist2 <= Sq(3.f * params_.target_dist_tolerance));
+        const bool near_goal_nudge = (goal_dist2 <= Sq(params_.nudge_dist_tolerance));
 
         // Hysteresis-based FOV check to prevent oscillation:
         // - To START obstacle avoidance: target must be well-centered (±center_threshold)

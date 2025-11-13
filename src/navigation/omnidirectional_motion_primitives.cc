@@ -140,16 +140,20 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     // Distance to goal along this direction
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
 
-    // Limit by max free path length and distance to goal
-    // Only go forward (positive direction)
-    if (distance_to_goal_along_direction > 0.0f) {
-        move->length = min(nav_params.max_free_path_length, distance_to_goal_along_direction);
+    if (allow_full_360_runtime_) {
+        // NUDGE: permit moving in any direction; cap by max free-path length.
+        move->length = nav_params.max_free_path_length;
     } else {
-        move->length = 0.0f;  // Don't move backward
+        // Default: only move if the step reduces distance to the local target.
+        if (distance_to_goal_along_direction > 0.0f) {
+            move->length = min(nav_params.max_free_path_length, distance_to_goal_along_direction);
+        } else {
+            move->length = 0.0f;  // Don't move backward
+        }
     }
     move->fpl = move->length;
 
-    // Ensure we can stop safely
+    // Ensure we can stop safely (use forward component of current vel along this sample)
     const float v_along = std::max(0.0f, vel.dot(move->direction));
     const float stopping_dist = (v_along * v_along) / (2.0f * nav_params.linear_limits.max_deceleration);
     move->length = std::max(move->length, stopping_dist);

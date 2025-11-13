@@ -79,6 +79,8 @@ struct NavigationParameters {
 
     // Distance tolerance to reaching target.
     float target_dist_tolerance;
+    // Distance tolerance for near-goal nudge behavior (allows OA even when target not centered).
+    float nudge_dist_tolerance;
     // Velocity tolerance to reaching target.
     float target_vel_tolerance;
     // angle tolerance to reaching target
@@ -132,6 +134,7 @@ struct NavigationParameters {
           center_threshold(0.174),
           can_traverse_stairs(false),
           target_dist_tolerance(0.1),
+          nudge_dist_tolerance(0.3),
           target_vel_tolerance(0.1),
           target_angle_tolerance(0.05),
           target_omega_tolerance(0.15),

@@ -168,6 +168,10 @@ class Navigation {
     float nav_ang_toc_target_angle_ = 0.0f;
     float nav_ang_toc_control_ = 0.0f;
     bool nav_ang_toc_active_ = false;
+    // Final navigation goal location in map frame.
+    Eigen::Vector2f nav_goal_loc_;
+    // Final navigation goal orientation in map frame.
+    float nav_goal_angle_;
 
    private:
     // Run local obstacle avoidance planner (robot frame).
@@ -194,10 +198,6 @@ class Navigation {
     float odom_angle_;
     // Latest odometry message received (odometry frame).
     Odom latest_odom_msg_;
-    // Final navigation goal location in map frame.
-    Eigen::Vector2f nav_goal_loc_;
-    // Final navigation goal orientation in map frame.
-    float nav_goal_angle_;
     // Indicates whether an odometry message has been received.
     bool odom_initialized_;
     // Indicates whether localization system has been initialized.

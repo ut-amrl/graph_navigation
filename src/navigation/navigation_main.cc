@@ -111,6 +111,7 @@ CONFIG_FLOAT(local_half_fov, "NavigationParameters.local_half_fov");
 CONFIG_FLOAT(center_threshold, "NavigationParameters.center_threshold");
 CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
+CONFIG_FLOAT(nudge_dist_tolerance, "NavigationParameters.nudge_dist_tolerance");
 CONFIG_FLOAT(target_vel_tolerance, "NavigationParameters.target_vel_tolerance");
 CONFIG_FLOAT(target_angle_tolerance, "NavigationParameters.target_angle_tolerance");
 CONFIG_FLOAT(target_omega_tolerance, "NavigationParameters.target_omega_tolerance");
@@ -574,6 +575,13 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Draw local target point (magenta cross)
         visualization::DrawCross(target, 0.2, 0xFF0080, local_viz_msg_);
 
+        // Draw nudge circle around carrot: red if robot within nudge distance, light gray otherwise
+        const float goal_dist2 = (navigation_.nav_goal_loc_ - navigation_.robot_loc_fp_).squaredNorm();
+        const float nudge_dist_tolerance = navigation_.params_.nudge_dist_tolerance;
+        const bool within_nudge = (goal_dist2 <= nudge_dist_tolerance * nudge_dist_tolerance);
+        const uint32_t nudge_color = within_nudge ? 0xFF0000 : 0xE0E0E0;  // red if within, light gray otherwise
+        visualization::DrawArc(target, nudge_dist_tolerance, -M_PI, M_PI, nudge_color, local_viz_msg_);
+
         // Draw FOV cone boundaries (dark yellow)
         const float fov_length = 2.0f;  // Length of FOV lines in meters
         const float fov_half_angle = CONFIG_local_half_fov;
@@ -753,6 +761,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->center_threshold = CONFIG_center_threshold;
         params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;
+        params->nudge_dist_tolerance = CONFIG_nudge_dist_tolerance;
         params->target_vel_tolerance = CONFIG_target_vel_tolerance;
         params->target_angle_tolerance = CONFIG_target_angle_tolerance;
         params->target_omega_tolerance = CONFIG_target_omega_tolerance;

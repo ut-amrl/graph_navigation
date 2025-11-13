@@ -88,7 +88,9 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
     float best_path_length = FLT_MAX;
     for (size_t i = 0; i < paths.size(); ++i) {
         if (paths[i]->Length() <= 0.0f) continue;
-        const float path_length = (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+        // ?? what is correct?? dist_to_goal[i] or paths[i]->Length()?
+        // const float path_length = (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+        const float path_length = path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
         if (path_length < best_path_length) {
             best_path_length = path_length;
             best = paths[i];
@@ -106,7 +108,9 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
         FLAGS_dw * (FLAGS_subopt * best_path_length) + FLAGS_fw * best->Length() + FLAGS_cw * best->Clearance();
     for (size_t i = 0; i < paths.size(); ++i) {
         if (paths[i]->Length() <= 0.0f) continue;
-        const float path_length = (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+        // ?? what is correct?? dist_to_goal[i] or paths[i]->Length()?
+        // const float path_length = (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
+        const float path_length = path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
         const float cost = FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length() + FLAGS_cw * paths[i]->Clearance();
         if (cost < best_cost) {
             best = paths[i];

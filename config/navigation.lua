@@ -27,6 +27,7 @@ NavigationParameters = {
   center_threshold = deg2rad(10);
   can_traverse_stairs = false;
   target_dist_tolerance = 0.1;
+  nudge_dist_tolerance = 0.3;
   target_vel_tolerance = 0.1;
   target_angle_tolerance = deg2rad(5);
   target_omega_tolerance = 0.15;
