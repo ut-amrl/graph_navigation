@@ -43,7 +43,6 @@ ROSTopics = {
     -- "/velodyne_2dscan",
     "/kinect_laserscan",
   };
-  laser_frame = "base_link";
   odom_topic = "/odom";
   localization_topic = "localization";
   goto_topic = "/move_base_simple/goal";
@@ -57,6 +56,11 @@ ROSTopics = {
   fp_pcl_topic = "forward_predicted_pcl";
   path_topic = "trajectory";
   carrot_topic = "carrot";
+};
+
+ROSFrames = {
+  map_frame = "map";
+  robot_frame = "base_link";
 };
 
 AckermannSampler = {

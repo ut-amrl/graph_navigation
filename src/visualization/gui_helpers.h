@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include <stdio.h>
+#include <string>
 #include <vector>
 #include "eigen3/Eigen/Dense"
 
@@ -60,7 +61,8 @@ void InitializeMarker(int marker_type,
                       float scale_x,
                       float scale_y,
                       float scale_z,
-                      visualization_msgs::msg::Marker* msg);
+                      visualization_msgs::msg::Marker* msg,
+                      const std::string& frame_id = "map");
 
 template <class Vector3>
 geometry_msgs::msg::Point StdPoint(const Vector3& v) {

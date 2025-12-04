@@ -47,7 +47,8 @@ void InitializeMarker(
     float scale_x,
     float scale_y,
     float scale_z,
-    visualization_msgs::msg::Marker* msg) {
+    visualization_msgs::msg::Marker* msg,
+    const std::string& frame_id) {
     msg->id = marker_id_;
     ++marker_id_;
     msg->type = marker_type;
@@ -62,7 +63,7 @@ void InitializeMarker(
     msg->scale.x = scale_x;
     msg->scale.y = scale_y;
     msg->scale.z = scale_z;
-    msg->header.frame_id = "map";
+    msg->header.frame_id = frame_id;
 }
 
 }  // namespace gui_helpers

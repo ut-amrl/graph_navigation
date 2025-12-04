@@ -135,9 +135,8 @@ CONFIG_FLOAT(cmd_map_r_intercept_pos, "CommandMapping.linear_models.r.intercept_
 CONFIG_FLOAT(cmd_map_r_slope_neg, "CommandMapping.linear_models.r.slope_neg");
 CONFIG_FLOAT(cmd_map_r_intercept_neg, "CommandMapping.linear_models.r.intercept_neg");
 
-// ROS Topics and Frames
+// ROS Topics
 CONFIG_STRINGLIST(laser_topics, "ROSTopics.laser_topics");
-CONFIG_STRING(laser_frame, "ROSTopics.laser_frame");
 CONFIG_STRING(odom_topic, "ROSTopics.odom_topic");
 CONFIG_STRING(localization_topic, "ROSTopics.localization_topic");
 CONFIG_STRING(ackermann_drive_topic, "ROSTopics.ackermann_drive_topic");
@@ -151,6 +150,10 @@ CONFIG_STRING(goto_amrl_topic, "ROSTopics.goto_amrl_topic");
 CONFIG_STRING(reset_nav_goals_topic, "ROSTopics.reset_nav_goals_topic");
 CONFIG_STRING(halt_topic, "ROSTopics.halt_topic");
 CONFIG_STRING(twist_drive_topic, "ROSTopics.twist_drive_topic");
+
+// ROS Frames
+CONFIG_STRING(map_frame, "ROSFrames.map_frame");
+CONFIG_STRING(robot_frame, "ROSFrames.robot_frame");
 
 class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<NavigationNode> {
    public:
@@ -186,8 +189,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         navigation_.Initialize(params_, map_path);
 
         // Initialize visualization messages
-        local_viz_msg_ = visualization::NewVisualizationMessage(CONFIG_laser_frame, "navigation_local");
-        global_viz_msg_ = visualization::NewVisualizationMessage("map", "navigation_global");
+        local_viz_msg_ = visualization::NewVisualizationMessage(CONFIG_robot_frame, "navigation_local");
+        global_viz_msg_ = visualization::NewVisualizationMessage(CONFIG_map_frame, "navigation_global");
 
         // Create publishers
         ackermann_drive_pub_ =
@@ -440,7 +443,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void RetrieveTransform(const std_msgs::msg::Header& msg, Eigen::Affine3f& frame_tf) {
         try {
             geometry_msgs::msg::TransformStamped transform_stamped =
-                tf_buffer_.lookupTransform(CONFIG_laser_frame, msg.frame_id, tf2::TimePointZero);
+                tf_buffer_.lookupTransform(CONFIG_robot_frame, msg.frame_id, tf2::TimePointZero);
 
             tf2::Transform tf_transform;
             tf2::fromMsg(transform_stamped.transform, tf_transform);
@@ -519,7 +522,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             // Publish full planned path as nav_msgs::Path
             auto path_msg = std::make_unique<nav_msgs::msg::Path>();
             path_msg->header.stamp = this->get_clock()->now();
-            path_msg->header.frame_id = "map";
+            path_msg->header.frame_id = CONFIG_map_frame;
 
             // Convert each waypoint to a pose in the path
             for (size_t i = 0; i < path.size(); i++) {
@@ -528,7 +531,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 pose_plan.pose.position.y = path[i].loc.y();
                 pose_plan.pose.orientation.w = 1.0;  // Default orientation (no rotation)
                 pose_plan.header.stamp = this->get_clock()->now();
-                pose_plan.header.frame_id = "map";
+                pose_plan.header.frame_id = CONFIG_map_frame;
                 path_msg->poses.push_back(pose_plan);
             }
             path_pub_->publish(std::move(path_msg));
@@ -543,7 +546,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             if (navigation_.GetCarrot(carrot)) {
                 auto carrot_msg = std::make_unique<nav_msgs::msg::Path>();
                 carrot_msg->header.stamp = this->get_clock()->now();
-                carrot_msg->header.frame_id = "map";
+                carrot_msg->header.frame_id = CONFIG_map_frame;
 
                 // Single pose representing the carrot point
                 geometry_msgs::msg::PoseStamped carrot_pose;
@@ -551,7 +554,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 carrot_pose.pose.position.y = carrot.y();
                 carrot_pose.pose.orientation.w = 1.0;  // Default orientation
                 carrot_pose.header.stamp = this->get_clock()->now();
-                carrot_pose.header.frame_id = "map";
+                carrot_pose.header.frame_id = CONFIG_map_frame;
                 carrot_msg->poses.push_back(carrot_pose);
 
                 carrot_pub_->publish(std::move(carrot_msg));
