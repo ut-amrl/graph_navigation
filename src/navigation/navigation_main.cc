@@ -26,6 +26,8 @@
 #include <unordered_map>
 #include <functional>
 #include <chrono>
+#include <sstream>
+#include <iomanip>
 
 // ROS2 includes
 #include <rclcpp/rclcpp.hpp>
@@ -710,8 +712,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.sampled_paths_;
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
 
-        // Draw all sampled path options in blue
+        // Draw path options that participate in optimization (Length > 0) in blue
         for (const auto& rollout : path_rollouts) {
+            if (rollout->Length() <= 0.0f) continue;  // Skip zero-length paths (not in optimization)
+
             // Handle constant curvature arc paths
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(rollout.get());
             if (arc) {

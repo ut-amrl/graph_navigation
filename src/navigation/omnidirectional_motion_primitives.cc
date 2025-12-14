@@ -61,15 +61,27 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
                                           const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
                                           float& ang_vel_cmd) const {
     // Calculate velocity component along the path direction
-    const float velocity_along_path = vel.dot(direction);
+    const float v_along = vel.dot(direction);
 
-    // Use 1D Time Optimal Control: accelerate/decelerate to reach target distance
-    const float speed = Run1DTimeOptimalControl(linear_limits, 0, velocity_along_path, length, 0, dt);
+    if (v_along < 0.0f) {
+        // Wrong-way: robot moving opposite to desired path direction.
+        // Must brake first before accelerating toward goal.
+        const float dv = linear_limits.max_deceleration * dt;
+        const float speed_away = std::fabs(v_along);
+        if (speed_away > dv) {
+            // Still braking - continue in current (wrong) direction but slower
+            vel_cmd = (speed_away - dv) * (-direction);
+        } else {
+            // Braked to near-zero - can now start toward goal
+            vel_cmd = Vector2f::Zero();
+        }
+    } else {
+        // Correct direction or stopped - use 1D TOC
+        const float speed = Run1DTimeOptimalControl(linear_limits, 0, v_along, length, 0, dt);
+        vel_cmd = speed * direction;
+    }
 
-    // Command velocity in the direction of motion (2D velocity vector)
-    vel_cmd = speed * direction;
-
-    // // No rotation during straight-line motion; navigation owns yaw alignment
+    // No rotation during straight-line motion; navigation owns yaw alignment
     ang_vel_cmd = 0;
 }
 
@@ -138,25 +150,33 @@ void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
     const Eigen::Vector2f u = move->direction;  // unit
     const Eigen::Vector2f v(-u.y(), u.x());     // unit (CCW 90°)
 
-    // Robot half-dimensions.
-    const float hl = 0.5f * nav_params.robot_length;
-    const float hw = 0.5f * nav_params.robot_width;
+    // Robot half-dimensions in base_link frame.
+    const float hl = 0.5f * nav_params.robot_length;  // half-length along robot x-axis
+    const float hw = 0.5f * nav_params.robot_width;   // half-width along robot y-axis
 
     // Center of the rectangle (geometric center) in base_link frame.
     const Eigen::Vector2f c(nav_params.base_link_offset_x, nav_params.base_link_offset_y);
     const float cu = c.dot(u);  // center offset along the path direction
     const float cv = c.dot(v);  // center offset lateral to the path direction
 
+    // Direction-dependent extents using support function of rectangle.
+    // For a rectangle with half-dims (hl, hw), the extent along direction u is:
+    //   hl*|u.x| + hw*|u.y|
+    const float abs_ux = std::fabs(u.x());
+    const float abs_uy = std::fabs(u.y());
+    const float extent_along_u = hl * abs_ux + hw * abs_uy;  // half-extent along motion
+    const float extent_along_v = hl * abs_uy + hw * abs_ux;  // half-extent perpendicular
+
     // Front "overhang" from base_link origin to the foremost point (incl. margin) along u.
-    const float l_front = hl + cu + nav_params.obstacle_margin;
+    const float l_front = cu + extent_along_u + nav_params.obstacle_margin;
 
     // Lateral half-extent (incl. margin) around the center line in the path frame.
-    const float w_lat = hw + nav_params.obstacle_margin;
+    const float w_lat = extent_along_v + nav_params.obstacle_margin;
 
     // Body extents for filtering points on the robot itself (no margin).
-    const float x_min_body = cu - hl;
-    const float x_max_body = cu + hl;
-    const float w_body_lat = hw;
+    const float x_min_body = cu - extent_along_u;
+    const float x_max_body = cu + extent_along_u;
+    const float w_body_lat = extent_along_v;
 
     // ---- Pass 1: compute FPL (no sqrt needed) ----
     for (const Eigen::Vector2f& p : *point_cloud) {

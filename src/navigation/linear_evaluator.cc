@@ -84,13 +84,14 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
     }
 
     // First find the shortest path.
+    // When path_to_goal_exists: use rollout length + distance from endpoint to goal.
+    // When no clear path to goal: use rollout length only (fallback to best traversable path).
     shared_ptr<PathRolloutBase> best = nullptr;
     float best_path_length = FLT_MAX;
     for (size_t i = 0; i < paths.size(); ++i) {
         if (paths[i]->Length() <= 0.0f) continue;
-        // ?? what is correct?? dist_to_goal[i] or paths[i]->Length()?
-        const float path_length = (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-        // const float path_length = path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
+        const float path_length =
+            path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
         if (path_length < best_path_length) {
             best_path_length = path_length;
             best = paths[i];
@@ -99,19 +100,19 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
 
     if (best == nullptr) {
         printf("No valid path found\n");
-        // No valid paths!
         return nullptr;
     }
 
-    // Next try to find better paths.
-    float best_cost =
-        FLAGS_dw * (FLAGS_subopt * best_path_length) + FLAGS_fw * best->Length() + FLAGS_cw * best->Clearance();
+    // Pass 2: Among paths within subopt distance tolerance, find best clearance/free-path.
+    // This allows slightly longer paths if they have significantly better clearance.
+    const float max_allowed_length = FLAGS_subopt * best_path_length;
+    float best_cost = FLAGS_fw * best->Length() + FLAGS_cw * best->Clearance();
     for (size_t i = 0; i < paths.size(); ++i) {
         if (paths[i]->Length() <= 0.0f) continue;
-        // ?? what is correct?? dist_to_goal[i] or paths[i]->Length()?
-        const float path_length = (path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : dist_to_goal[i]);
-        // const float path_length = path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
-        const float cost = FLAGS_dw * path_length + FLAGS_fw * paths[i]->Length() + FLAGS_cw * paths[i]->Clearance();
+        const float path_length =
+            path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
+        if (path_length > max_allowed_length) continue;  // Outside distance tolerance
+        const float cost = FLAGS_fw * paths[i]->Length() + FLAGS_cw * paths[i]->Clearance();
         if (cost < best_cost) {
             best = paths[i];
             best_cost = cost;

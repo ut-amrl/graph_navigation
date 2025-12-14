@@ -818,9 +818,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
-    // navigation_debug::DebugLog(std::string("[") + std::to_string(static_cast<int>(nav_state_)) +
-    //                            "] command_history_ length: " + std::to_string(command_history_.size()));
-
     // Reset debug logging flags at start of each Run() cycle
     omni_best_path_valid_ = false;
     nav_ang_toc_active_ = false;
@@ -955,40 +952,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
         TurnInPlace(cmd_vel, cmd_angle_vel);
     }
-
-    // === Consolidated [TEST] debug logs ===
-    {
-        const double wall_time =
-            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(6) << wall_time;
-
-        // NavState
-        oss << " [TEST] NavState: " << static_cast<int>(nav_state_);
-
-        // Obstacle avoidance mode
-        oss << " InOAMode: " << (in_obstacle_avoidance_mode_ ? 1 : 0);
-
-        // Current robot heading (not forward predicted)
-        oss << " CurrYaw: " << std::setw(8) << std::setprecision(4) << robot_angle_;
-
-        // Forward predicted yaw
-        oss << " FwdPredYaw: " << std::setw(8) << std::setprecision(4) << robot_angle_fp_;
-
-        // OmniBestPath heading (if available)
-        if (omni_best_path_valid_) {
-            oss << " OmniBestPath: " << std::setw(8) << std::setprecision(4) << omni_best_path_heading_;
-        }
-
-        // Navigation-level AngularTOC (if active)
-        if (nav_ang_toc_active_) {
-            oss << " AngTOC_target: " << std::setw(8) << std::setprecision(4) << nav_ang_toc_target_angle_;
-            oss << " AngTOC_control: " << std::setw(8) << std::setprecision(4) << nav_ang_toc_control_;
-        }
-
-        navigation_debug::DebugLog(oss.str());
-    }
-
     return true;
 }
 

@@ -172,6 +172,10 @@ class Navigation {
     Eigen::Vector2f nav_goal_loc_;
     // Final navigation goal orientation in map frame.
     float nav_goal_angle_;
+    // Penultimate-to-forward-predicted-time robot linear velocity command
+    Eigen::Vector2f robot_vel_;
+    // Penultimate-to-forward-predicted-time robot angular velocity command
+    float robot_omega_;
 
    private:
     // Run local obstacle avoidance planner (robot frame).
@@ -188,10 +192,6 @@ class Navigation {
     void DrawRobot();
     // Publish a status message.
     void PublishNavStatus(const Eigen::Vector2f& carrot);
-    // Penultimate-to-forward-predicted-time robot linear velocity command
-    Eigen::Vector2f robot_vel_;
-    // Penultimate-to-forward-predicted-time robot angular velocity command
-    float robot_omega_;
     // Forward-predicted odometry location (odometry frame)
     Eigen::Vector2f odom_loc_;
     // Forward-predicted odometry orientation (odometry frame)
