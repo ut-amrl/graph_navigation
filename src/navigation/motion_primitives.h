@@ -145,8 +145,9 @@ struct PathEvaluatorBase {
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits, const float x_init, const float v_init,
                               const float x_final, const float v_final, const float dt);
 
-// Compute the clearance along the line l with respect to the points.
-float StraightLineClearance(const geometry::Line2f& l, const std::vector<Eigen::Vector2f>& points);
+// Compute clearance (min perpendicular distance) from obstacles to a line segment.
+// Treats robot as a point - used for line-of-sight heuristics, not collision checking.
+float LOSClearanceToLine(const geometry::Line2f& l, const std::vector<Eigen::Vector2f>& points);
 
 }  // namespace motion_primitives
 

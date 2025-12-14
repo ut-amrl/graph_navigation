@@ -84,7 +84,7 @@ float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, con
     return velocity_cmd;
 }
 
-float StraightLineClearance(const Line2f& l, const vector<Vector2f>& points) {
+float LOSClearanceToLine(const Line2f& l, const vector<Vector2f>& points) {
     const Vector2f seg = l.p1 - l.p0;
     const float len = seg.norm();
     if (len <= 0.0f) return 0.0f;

@@ -48,52 +48,50 @@ using std::vector;
 using namespace geometry;
 using namespace math_util;
 
-DEFINE_double(dw, 1, "Distance weight");
-DEFINE_double(cw, -0.5, "Clearance weight");
-DEFINE_double(fw, -1, "Free path weight");
-DEFINE_double(subopt, 1.5, "Max path increase for clearance");
+// Cost function weights for path selection
+DEFINE_double(clearance_weight, -0.5, "Weight for obstacle clearance (negative = prefer higher)");
+DEFINE_double(freepath_weight, -1, "Weight for rollout length (negative = prefer longer)");
+DEFINE_double(subopt_tolerance, 1.5, "Max path length multiplier for clearance tradeoff");
 
 namespace motion_primitives {
 
 shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<PathRolloutBase>> &paths) {
     if (paths.size() == 0) return nullptr;
 
-    // Check if there is any path with an obstacle-free path from the end to the
-    // local target.
+    // Check line-of-sight (LOS) from each path's endpoint to the goal
     const size_t N = paths.size();
-    vector<float> clearance_to_goal(N, 0.0f);
-    vector<float> dist_to_goal(N, FLT_MAX);
-    bool path_to_goal_exists = false;
+    vector<float> los_clearance(N, 0.0f);          // clearance along LOS line to goal
+    vector<float> remaining_dist(N, FLT_MAX);      // distance from endpoint to goal
+    bool any_path_has_los = false;
 
 #pragma omp parallel
     {
-        bool local_any = false;
+        bool local_has_los = false;
 #pragma omp for schedule(runtime)
         for (int i = 0; i < static_cast<int>(N); ++i) {
             const auto endpoint = paths[i]->EndPoint().translation;
-            clearance_to_goal[i] = StraightLineClearance(Line2f(endpoint, local_target), *point_cloud);
-            if (clearance_to_goal[i] > 0.0f) {
-                dist_to_goal[i] = (endpoint - local_target).norm();
-                local_any = true;
+            los_clearance[i] = LOSClearanceToLine(Line2f(endpoint, local_target), *point_cloud);
+            if (los_clearance[i] > 0.0f) {
+                remaining_dist[i] = (endpoint - local_target).norm();
+                local_has_los = true;
             }
         }
 #pragma omp critical
         {
-            path_to_goal_exists = path_to_goal_exists || local_any;
+            any_path_has_los = any_path_has_los || local_has_los;
         }
     }
 
-    // First find the shortest path.
-    // When path_to_goal_exists: use rollout length + distance from endpoint to goal.
-    // When no clear path to goal: use rollout length only (fallback to best traversable path).
+    // Pass 1: Find shortest total path to goal
+    // With LOS: total = rollout + remaining distance. Without LOS: total = rollout only.
     shared_ptr<PathRolloutBase> best = nullptr;
-    float best_path_length = FLT_MAX;
+    float best_total_dist = FLT_MAX;
     for (size_t i = 0; i < paths.size(); ++i) {
         if (paths[i]->Length() <= 0.0f) continue;
-        const float path_length =
-            path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
-        if (path_length < best_path_length) {
-            best_path_length = path_length;
+        const float total_dist =
+            any_path_has_los ? (paths[i]->Length() + remaining_dist[i]) : paths[i]->Length();
+        if (total_dist < best_total_dist) {
+            best_total_dist = total_dist;
             best = paths[i];
         }
     }
@@ -103,16 +101,15 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
         return nullptr;
     }
 
-    // Pass 2: Among paths within subopt distance tolerance, find best clearance/free-path.
-    // This allows slightly longer paths if they have significantly better clearance.
-    const float max_allowed_length = FLAGS_subopt * best_path_length;
-    float best_cost = FLAGS_fw * best->Length() + FLAGS_cw * best->Clearance();
+    // Pass 2: Among paths within subopt tolerance of shortest, find best clearance/length tradeoff
+    const float max_allowed_dist = FLAGS_subopt_tolerance * best_total_dist;
+    float best_cost = FLAGS_freepath_weight * best->Length() + FLAGS_clearance_weight * best->Clearance();
     for (size_t i = 0; i < paths.size(); ++i) {
         if (paths[i]->Length() <= 0.0f) continue;
-        const float path_length =
-            path_to_goal_exists ? (paths[i]->Length() + dist_to_goal[i]) : paths[i]->Length();
-        if (path_length > max_allowed_length) continue;  // Outside distance tolerance
-        const float cost = FLAGS_fw * paths[i]->Length() + FLAGS_cw * paths[i]->Clearance();
+        const float total_dist =
+            any_path_has_los ? (paths[i]->Length() + remaining_dist[i]) : paths[i]->Length();
+        if (total_dist > max_allowed_dist) continue;
+        const float cost = FLAGS_freepath_weight * paths[i]->Length() + FLAGS_clearance_weight * paths[i]->Clearance();
         if (cost < best_cost) {
             best = paths[i];
             best_cost = cost;
