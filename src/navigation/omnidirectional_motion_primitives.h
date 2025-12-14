@@ -51,7 +51,6 @@ struct OmnidirectionalMovePath : PathRolloutBase {
     float length;                 // Distance to travel
     float fpl;                    // Free path length
     float clearance;              // Minimum clearance to obstacles
-    Eigen::Vector2f obstruction;  // Location of closest obstacle
 };
 
 // Omnidirectional path rollout sampler

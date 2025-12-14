@@ -51,12 +51,6 @@ float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, con
                               const float v_final, const float dt) {
     // Non-zero final vel not yet implemented.
     CHECK_EQ(v_final, 0.0f) << "Non-zero final vel not yet implemented!";
-    static FILE* fid = nullptr;
-    const bool kTest = false;
-    const string kTestLogFile = "1DTOC.txt";
-    if (kTest && fid == nullptr) {
-        fid = fopen(kTestLogFile.c_str(), "w");
-    }
     const float dist_left = x_final - x_now;
     float velocity_cmd = 0;
     const float speed = fabs(v_now);
@@ -86,15 +80,6 @@ float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, con
     } else if (speed > 0.0f) {
         phase = 'X';
         velocity_cmd = max<float>(0, speed - dv_d);
-    }
-    if (kTest) {
-        printf("%c x:%f dist_left:%f a_dist:%f c_dist:%f v:%f cmd:%f\n", phase, x_now, dist_left, accel_stopping_dist,
-               cruise_stopping_dist, v_now, velocity_cmd);
-        if (fid != nullptr) {
-            fprintf(fid, "%f %f %f %f %f %f\n", x_now, dist_left, accel_stopping_dist, cruise_stopping_dist, v_now,
-                    velocity_cmd);
-            fflush(fid);
-        }
     }
     return velocity_cmd;
 }
