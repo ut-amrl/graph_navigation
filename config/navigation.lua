@@ -53,6 +53,7 @@ ROSTopics = {
   ackermann_drive_topic = "ackermann_curvature_drive";
   nav_status_topic = "navigation_goal_status";
   visualization_topic = "visualization";
+  visualization_local_topic = "visualization_local";
   fp_pcl_topic = "forward_predicted_pcl";
   path_topic = "trajectory";
   carrot_topic = "carrot";

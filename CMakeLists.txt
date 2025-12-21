@@ -6,6 +6,17 @@ MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")
 MESSAGE(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 MESSAGE(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
 
+# Ensure installed binaries know where to find project / ROS / torch libs
+set(INSTALL_RPATH_DIRS
+    "${CMAKE_INSTALL_PREFIX}/lib"
+    "${CMAKE_INSTALL_PREFIX}/${PROJECT_NAME}/lib")
+if(DEFINED ENV{ROS_DISTRO})
+  list(APPEND INSTALL_RPATH_DIRS "/opt/ros/$ENV{ROS_DISTRO}/lib")
+endif()
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 # ROS2 compilation
 MESSAGE(STATUS "Compiling with ROS2")
 add_compile_definitions(ROS2)
@@ -70,6 +81,14 @@ if(Torch_FOUND)
 else()
   MESSAGE(WARNING "LibTorch not found - deep learning evaluator disabled")
 endif()
+
+if(Torch_FOUND AND EXISTS "${TORCH_INSTALL_PREFIX}/lib")
+  list(APPEND INSTALL_RPATH_DIRS "${TORCH_INSTALL_PREFIX}/lib")
+endif()
+list(REMOVE_DUPLICATES INSTALL_RPATH_DIRS)
+set(CMAKE_INSTALL_RPATH "${INSTALL_RPATH_DIRS}" CACHE STRING "Install RPATH" FORCE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE CACHE BOOL "Use link paths in install RPATH" FORCE)
+set(CMAKE_SKIP_INSTALL_RPATH FALSE CACHE BOOL "Keep RPATH on install" FORCE)
 
 # Use C++20 for auto parameters, but fallback to C++17 for compatibility
 if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "10.0")
@@ -235,6 +254,16 @@ target_include_directories(navigation_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
     ${AMENT_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
+)
+
+set_target_properties(navigation PROPERTIES
+    INSTALL_RPATH "${INSTALL_RPATH_DIRS}"
+    BUILD_RPATH "${INSTALL_RPATH_DIRS}"
+)
+
+set_target_properties(navigation_tests PROPERTIES
+    INSTALL_RPATH "${INSTALL_RPATH_DIRS}"
+    BUILD_RPATH "${INSTALL_RPATH_DIRS}"
 )
 
 # Install targets

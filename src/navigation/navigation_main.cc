@@ -87,7 +87,7 @@
 using namespace std::chrono_literals;
 
 // Command line flags
-DEFINE_string(robot_config, "config/navigation.lua", "Robot config file");
+DEFINE_string(robot_config, "", "Robot config file (required)");
 DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(debug_file, "", "Path to debug log file (.log or .txt). Empty disables logging");
@@ -144,6 +144,7 @@ CONFIG_STRING(localization_topic, "ROSTopics.localization_topic");
 CONFIG_STRING(ackermann_drive_topic, "ROSTopics.ackermann_drive_topic");
 CONFIG_STRING(nav_status_topic, "ROSTopics.nav_status_topic");
 CONFIG_STRING(visualization_topic, "ROSTopics.visualization_topic");
+CONFIG_STRING(visualization_local_topic, "ROSTopics.visualization_local_topic");
 CONFIG_STRING(fp_pcl_topic, "ROSTopics.fp_pcl_topic");
 CONFIG_STRING(path_topic, "ROSTopics.path_topic");
 CONFIG_STRING(carrot_topic, "ROSTopics.carrot_topic");
@@ -199,7 +200,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             this->create_publisher<amrl_msgs::msg::AckermannCurvatureDriveMsg>(CONFIG_ackermann_drive_topic, 1);
         twist_drive_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(CONFIG_twist_drive_topic, 1);
         status_pub_ = this->create_publisher<amrl_msgs::msg::NavStatusMsg>(CONFIG_nav_status_topic, 1);
-        viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(CONFIG_visualization_topic, 1);
+        viz_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(CONFIG_visualization_topic, 10);
+        viz_local_pub_ = this->create_publisher<amrl_msgs::msg::VisualizationMsg>(CONFIG_visualization_local_topic, 10);
         fp_pcl_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud>(CONFIG_fp_pcl_topic, 1);
         path_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_path_topic, 1);
         carrot_pub_ = this->create_publisher<nav_msgs::msg::Path>(CONFIG_carrot_topic, 1);
@@ -251,6 +253,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_drive_pub_;
     rclcpp::Publisher<amrl_msgs::msg::NavStatusMsg>::SharedPtr status_pub_;
     rclcpp::Publisher<amrl_msgs::msg::VisualizationMsg>::SharedPtr viz_pub_;
+    rclcpp::Publisher<amrl_msgs::msg::VisualizationMsg>::SharedPtr viz_local_pub_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud>::SharedPtr fp_pcl_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr carrot_pub_;
@@ -387,7 +390,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             PublishPath();
             local_viz_msg_.header.stamp = this->get_clock()->now();
             global_viz_msg_.header.stamp = this->get_clock()->now();
-            viz_pub_->publish(local_viz_msg_);
+            viz_local_pub_->publish(local_viz_msg_);
             viz_pub_->publish(global_viz_msg_);
 
             // Send commands
@@ -583,11 +586,13 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Compute final goal position in current base frame for visualization
         const Eigen::Vector2f goal_in_local = R_now_inv * (navigation_.nav_goal_loc_ - navigation_.robot_loc_);
 
-        // Draw target distance tolerance circle around final goal: red if robot within target distance, light gray otherwise
+        // Draw target distance tolerance circle around final goal: red if robot within target distance, light gray
+        // otherwise
         const float goal_dist2 = (navigation_.nav_goal_loc_ - navigation_.robot_loc_fp_).squaredNorm();
         const float target_dist_tolerance = navigation_.params_.target_dist_tolerance;
         const bool within_target_dist = (goal_dist2 <= target_dist_tolerance * target_dist_tolerance);
-        const uint32_t target_dist_color = within_target_dist ? 0xFF0000 : 0xE0E0E0;  // red if within, light gray otherwise
+        const uint32_t target_dist_color =
+            within_target_dist ? 0xFF0000 : 0xE0E0E0;  // red if within, light gray otherwise
         visualization::DrawArc(goal_in_local, target_dist_tolerance, -M_PI, M_PI, target_dist_color, local_viz_msg_);
 
         // Draw nudge circle around final goal: red if robot within nudge distance, light gray otherwise
@@ -813,6 +818,13 @@ int main(int argc, char** argv) {
     // Initialize gflags and glog
     google::ParseCommandLineFlags(&argc, &argv, false);
     google::InitGoogleLogging(argv[0]);
+
+    // Check if robot config was provided
+    if (FLAGS_robot_config.empty()) {
+        fprintf(stderr, "ERROR: --robot_config flag is required. Please specify a robot config file path.\n");
+        fprintf(stderr, "Usage: %s --robot_config=<path_to_config_file> [other options]\n", argv[0]);
+        exit(1);
+    }
 
     // Set up signal handler
     signal(SIGINT, SignalHandler);
