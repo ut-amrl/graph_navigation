@@ -26,6 +26,33 @@
 
 namespace motion_primitives {
 
+// Rectangle with center offset from base_link, sides aligned with base_link axes.
+// ASSUMPTION: base_link is inside rectangle still, ie, offset not larger than half_x and half_y.
+struct OffsetRect {
+    Eigen::Vector2f center;  // center position in base_link frame
+    float half_x, half_y;    // half-extents measured from geometric center along base_link X and Y
+
+    // Check if point (in base_link frame) is inside this rectangle
+    bool contains(const Eigen::Vector2f& p) const {
+        const Eigen::Vector2f rel = p - center;
+        return std::fabs(rel.x()) < half_x && std::fabs(rel.y()) < half_y;
+    }
+
+    // Extent from geometric center in direction u: half_x*|u.x| + half_y*|u.y|, which measures
+    // the furthest projection of the rectangle in the direction u.
+    // Note: this is symmetric, i.e. extent(u) = extent(-u).
+    float extent(const Eigen::Vector2f& u) const {
+        return half_x * std::fabs(u.x()) + half_y * std::fabs(u.y());
+    }
+
+    // Support function from BASE_LINK origin in direction u (unit vector in base_link frame)
+    // h(u) = (center · u) + extent(u) = distance from base_link to furthest edge in direction u
+    // Note: this is NOT symmetric, i.e. support(u) != support(-u).
+    float support(const Eigen::Vector2f& u) const {
+        return center.dot(u) + extent(u);
+    }
+};
+
 // Omnidirectional motion primitive - straight line movement in x-y plane
 struct OmnidirectionalMovePath : PathRolloutBase {
     ~OmnidirectionalMovePath() = default;
@@ -48,9 +75,9 @@ struct OmnidirectionalMovePath : PathRolloutBase {
         : direction(dir.normalized()), length(len), fpl(len), clearance(0) {}
 
     Eigen::Vector2f direction;    // Unit vector for movement direction
-    float length;                 // Distance to travel
-    float fpl;                    // Free path length
-    float clearance;              // Minimum clearance to obstacles
+    float length;                 // Actual traversable distance = min(desired_to_goal, fpl)
+    float fpl;                    // Free path length = obstacle-free distance ahead (up to sensor range)
+    float clearance;              // Min lateral distance from obstacles to robot body along path
 };
 
 // Omnidirectional path rollout sampler

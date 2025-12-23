@@ -34,6 +34,7 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/header.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose2_d.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -109,8 +110,7 @@ CONFIG_FLOAT(base_link_offset_x, "NavigationParameters.base_link_offset_x");
 CONFIG_FLOAT(base_link_offset_y, "NavigationParameters.base_link_offset_y");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
-CONFIG_FLOAT(local_half_fov, "NavigationParameters.local_half_fov");
-CONFIG_FLOAT(center_threshold, "NavigationParameters.center_threshold");
+CONFIG_FLOAT(lidar_fov_half_angle, "NavigationParameters.lidar_fov_half_angle");
 CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
 CONFIG_FLOAT(nudge_dist_tolerance, "NavigationParameters.nudge_dist_tolerance");
@@ -153,6 +153,7 @@ CONFIG_STRING(goto_amrl_topic, "ROSTopics.goto_amrl_topic");
 CONFIG_STRING(reset_nav_goals_topic, "ROSTopics.reset_nav_goals_topic");
 CONFIG_STRING(halt_topic, "ROSTopics.halt_topic");
 CONFIG_STRING(twist_drive_topic, "ROSTopics.twist_drive_topic");
+CONFIG_STRING(current_map_topic, "ROSTopics.current_map_topic");
 
 // ROS Frames
 CONFIG_STRING(map_frame, "ROSFrames.map_frame");
@@ -233,6 +234,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             std::bind(&NavigationNode::ResetNavGoalsCallback, this, std::placeholders::_1));
         halt_sub_ = this->create_subscription<std_msgs::msg::Bool>(
             CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
+        current_map_sub_ = this->create_subscription<std_msgs::msg::String>(
+            CONFIG_current_map_topic, 1, std::bind(&NavigationNode::CurrentMapCallback, this, std::placeholders::_1));
 
         // Create timer for main loop
         timer_ = this->create_wall_timer(std::chrono::duration<double>(params_.dt),
@@ -266,6 +269,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Subscription<amrl_msgs::msg::Localization2DMsg>::SharedPtr goto_amrl_sub_;
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_nav_goals_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr halt_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr current_map_sub_;
 
     // Service
     rclcpp::Service<graph_navigation::srv::GraphNav>::SharedPtr nav_service_;
@@ -283,6 +287,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     bool received_laser_;
     navigation::Odom odom_;
     std::vector<Eigen::Vector2f> point_cloud_;
+    std::string current_map_name_;
 
     // Visualization
     amrl_msgs::msg::VisualizationMsg local_viz_msg_;
@@ -306,12 +311,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     }
 
     void LocalizationCallback(const amrl_msgs::msg::Localization2DMsg::SharedPtr msg) {
-        static std::string map = "";
         navigation_.UpdateLocation(Eigen::Vector2f(msg->pose.x, msg->pose.y), msg->pose.theta);
-        if (map != msg->map) {
-            map = msg->map;
-            navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg->map));
-        }
     }
 
     void LaserCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg, const std::string& topic) {
@@ -343,6 +343,14 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void HaltCallback(const std_msgs::msg::Bool::SharedPtr msg) {
         navigation_.nav_state_ = navigation::NavigationState::kStopped;
+    }
+
+    void CurrentMapCallback(const std_msgs::msg::String::SharedPtr msg) {
+        if (current_map_name_ != msg->data) {
+            RCLCPP_INFO(this->get_logger(), "Current map changed to: %s", msg->data.c_str());
+            current_map_name_ = msg->data;
+            navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg->data));
+        }
     }
 
     void PlanServiceCallback(const std::shared_ptr<graph_navigation::srv::GraphNav::Request> request,
@@ -601,9 +609,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         const uint32_t nudge_color = within_nudge ? 0xFF0000 : 0xE0E0E0;  // red if within, light gray otherwise
         visualization::DrawArc(goal_in_local, nudge_dist_tolerance, -M_PI, M_PI, nudge_color, local_viz_msg_);
 
-        // Draw FOV cone boundaries (dark yellow)
+        // Draw lidar FOV cone boundaries (dark yellow)
         const float fov_length = 2.0f;  // Length of FOV lines in meters
-        const float fov_half_angle = CONFIG_local_half_fov;
+        const float fov_half_angle = CONFIG_lidar_fov_half_angle;
         Eigen::Vector2f fov_left(fov_length * cos(fov_half_angle), fov_length * sin(fov_half_angle));
         Eigen::Vector2f fov_right(fov_length * cos(-fov_half_angle), fov_length * sin(-fov_half_angle));
         visualization::DrawLine(Eigen::Vector2f(0, 0), fov_left, 0xFFCC00, local_viz_msg_);
@@ -717,23 +725,24 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.sampled_paths_;
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
 
-        // Draw path options that participate in optimization (Length > 0) in blue
+        // Draw path options that participate in optimization (Length > 0) in light blue
+        constexpr uint32_t kCandidatePathColor = 0x80A0FF;  // Light blue for non-winning paths
         for (const auto& rollout : path_rollouts) {
             if (rollout->Length() <= 0.0f) continue;  // Skip zero-length paths (not in optimization)
 
             // Handle constant curvature arc paths
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(rollout.get());
             if (arc) {
-                // Draw arc path (blue: 0x0000FF)
-                visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(), 0x0000FF, false,
-                                              local_viz_msg_);
+                // Draw arc path
+                visualization::DrawPathOption(arc->curvature, arc->Length(), arc->Clearance(), kCandidatePathColor,
+                                              false, local_viz_msg_);
             }
             // Handle omnidirectional straight-line paths
             const auto* omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(rollout.get());
             if (omni) {
-                // Draw straight line from origin to endpoint (blue: 0x0000FF)
+                // Draw straight line from origin to endpoint
                 Eigen::Vector2f endpoint = omni->EndPoint().translation;
-                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0x0000FF, local_viz_msg_);
+                visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, kCandidatePathColor, local_viz_msg_);
             }
         }
 
@@ -750,17 +759,22 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_option.get());
             if (best_omni) {
                 // Draw selected straight path (red: 0xFF0000)
-                Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
+                const Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
                 visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
 
-                // Draw clearance boundaries showing minimum distance to obstacles (red: 0xFF0000)
+                // Draw clearance corridor: robot body extent + clearance on each side
+                // Path centerline is at base_link origin; support() gives distance from base_link to robot edge
+                const Eigen::Vector2f dir_lateral(-best_omni->direction.y(), best_omni->direction.x());
+                const motion_primitives::OffsetRect robot_body = {
+                    Eigen::Vector2f(navigation_.params_.base_link_offset_x, navigation_.params_.base_link_offset_y),
+                    0.5f * navigation_.params_.robot_length, 0.5f * navigation_.params_.robot_width};
                 const float clearance = best_omni->Clearance();
-                // Calculate perpendicular vector for clearance boundaries
-                Eigen::Vector2f perp(-best_omni->direction.y(), best_omni->direction.x());
-                Eigen::Vector2f clearance_offset = clearance * perp;
-                // Draw parallel lines showing clearance boundaries
-                visualization::DrawLine(clearance_offset, endpoint + clearance_offset, 0xFF0000, local_viz_msg_);
-                visualization::DrawLine(-clearance_offset, endpoint - clearance_offset, 0xFF0000, local_viz_msg_);
+                // Corridor edge = body extent (from base_link) + clearance
+                const Eigen::Vector2f offset_left = (clearance + robot_body.support(dir_lateral)) * dir_lateral;
+                const Eigen::Vector2f offset_right = (clearance + robot_body.support(-dir_lateral)) * (-dir_lateral);
+                constexpr uint32_t kCorridorColor = 0xFF8080;  // Light red
+                visualization::DrawLine(offset_left, endpoint + offset_left, kCorridorColor, local_viz_msg_);
+                visualization::DrawLine(offset_right, endpoint + offset_right, kCorridorColor, local_viz_msg_);
             }
         }
     }
@@ -781,8 +795,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->base_link_offset_y = CONFIG_base_link_offset_y;
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
-        params->local_half_fov = CONFIG_local_half_fov;
-        params->center_threshold = CONFIG_center_threshold;
+        params->lidar_fov_half_angle = CONFIG_lidar_fov_half_angle;
         params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;
         params->nudge_dist_tolerance = CONFIG_nudge_dist_tolerance;

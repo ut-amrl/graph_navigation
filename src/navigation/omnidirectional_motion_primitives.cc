@@ -107,15 +107,11 @@ inline void PrecomputeUnitDirs(int n, std::vector<Eigen::Vector2f>& cache) {
 }  // namespace
 
 void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
-    // Projection of goal onto this direction
+    // Projection of goal onto this direction (negative = pointing away from goal)
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
 
-    // Desired distance: how far we WANT to travel (limited by goal and max path length)
-    // Directions pointing away from goal get length=0
-    const float desired_dist =
-        (distance_to_goal_along_direction > 0.0f) ? std::min(nav_params.max_free_path_length, distance_to_goal_along_direction) : 0.0f;
-
-    // Initialize both to desired; CheckObstacles will limit fpl and finalize length
+    // Desired travel distance: toward goal, or 0 if pointing away
+    const float desired_dist = std::clamp(distance_to_goal_along_direction, 0.0f, nav_params.max_free_path_length); 
     move->length = desired_dist;
     move->fpl = desired_dist;
 }
@@ -142,72 +138,60 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
 }
 
 void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
-    // Path-aligned coordinate system
-    const Eigen::Vector2f dir_forward = move->direction;                      // unit vector along motion
-    const Eigen::Vector2f dir_lateral(-dir_forward.y(), dir_forward.x());     // unit vector perpendicular (CCW 90°)
+    // Path-aligned basis vectors (expressed in base_link frame)
+    const Eigen::Vector2f dir_forward = move->direction;                   // motion direction (unit)
+    const Eigen::Vector2f dir_lateral(-dir_forward.y(), dir_forward.x());  // perpendicular (CCW 90°)
 
-    // Robot half-dimensions in base_link frame
-    const float half_length = 0.5f * nav_params.robot_length;  // along robot x-axis
-    const float half_width = 0.5f * nav_params.robot_width;    // along robot y-axis
+    // Robot body
+    const OffsetRect robot_body = {Eigen::Vector2f(nav_params.base_link_offset_x, nav_params.base_link_offset_y),
+                                   0.5f * nav_params.robot_length, 0.5f * nav_params.robot_width};
 
-    // Robot center offset in path-aligned frame
-    const Eigen::Vector2f robot_center(nav_params.base_link_offset_x, nav_params.base_link_offset_y);
-    const float center_forward = robot_center.dot(dir_forward);   // center offset along motion
-    const float center_lateral = robot_center.dot(dir_lateral);   // center offset perpendicular
+    // Inflated robot body
+    const OffsetRect robot_with_margin = {robot_body.center, robot_body.half_x + nav_params.obstacle_margin,
+                                          robot_body.half_y + nav_params.obstacle_margin};
 
-    // Direction-dependent robot extents (support function of rectangle)
-    // For motion direction u, extent = half_length*|u.x| + half_width*|u.y|
-    const float abs_dir_x = std::fabs(dir_forward.x());
-    const float abs_dir_y = std::fabs(dir_forward.y());
-    const float robot_forward_extent = half_length * abs_dir_x + half_width * abs_dir_y;
-    const float robot_lateral_extent = half_length * abs_dir_y + half_width * abs_dir_x;
+    // Swept area bounds (with margin) for collision detection
+    const float front_dist = robot_with_margin.support(dir_forward);
+    const float lateral_max = robot_with_margin.support(dir_lateral);
+    const float lateral_min = -robot_with_margin.support(-dir_lateral);
 
-    // Swept area bounds WITH margin (for collision detection)
-    const float front_clearance_dist = center_forward + robot_forward_extent + nav_params.obstacle_margin;
-    const float swept_lateral_half_width = robot_lateral_extent + nav_params.obstacle_margin;
-
-    // Body bounds WITHOUT margin (for filtering points on robot itself)
-    const float body_rear = center_forward - robot_forward_extent;
-    const float body_front = center_forward + robot_forward_extent;
-    const float body_lateral_half_width = robot_lateral_extent;
+    // Robot body bounds (no margin) for clearance calculation
+    const float body_lateral_max = robot_body.support(dir_lateral);
+    const float body_lateral_min = -robot_body.support(-dir_lateral);
 
     // ---- Compute FPL: find first obstacle that blocks the path ----
     for (const Eigen::Vector2f& p : *point_cloud) {
-        const float dist_forward = p.dot(dir_forward);    // point's position along motion
-        const float dist_lateral = p.dot(dir_lateral);    // point's lateral position
+        if (robot_body.contains(p)) continue;  // skip points on robot itself
 
-        // Skip points inside current robot body (no margin)
-        if (dist_forward > body_rear && dist_forward < body_front &&
-            std::fabs(dist_lateral - center_lateral) < body_lateral_half_width) {
-            continue;
-        }
-        // Skip points outside swept band or behind us
-        if (dist_forward < 0.0f || std::fabs(dist_lateral - center_lateral) > swept_lateral_half_width) {
-            continue;
-        }
+        // Transform p to path-aligned frame
+        const float p_forward = p.dot(dir_forward);
+        const float p_lateral = p.dot(dir_lateral);
 
-        // Obstacle limits free path length
-        move->fpl = std::min(move->fpl, dist_forward - front_clearance_dist);
+        // Skip points behind us or outside the swept lateral band
+        if (p_forward < 0.0f) continue;
+        if (p_lateral < lateral_min || p_lateral > lateral_max) continue;
+
+        // Obstacle limits the free path length
+        move->fpl = std::min(move->fpl, p_forward - front_dist);
     }
 
-    // ---- Compute clearance: min distance to swept boundary within traversable segment ----
+    // ---- Compute clearance: min distance from obstacles to robot body within traversable region ----
     move->clearance = nav_params.max_clearance;
     for (const Eigen::Vector2f& p : *point_cloud) {
-        const float dist_forward = p.dot(dir_forward);
-        if (dist_forward < 0.0f || (dist_forward - front_clearance_dist) > move->fpl) continue;
+        if (robot_body.contains(p)) continue;  // skip points on robot itself
 
-        const float dist_lateral = p.dot(dir_lateral);
+        // Transform p to path-aligned frame
+        const float p_forward = p.dot(dir_forward);
+        const float p_lateral = p.dot(dir_lateral);
 
-        // Skip points inside current robot body (no margin)
-        if (dist_forward > body_rear && dist_forward < body_front &&
-            std::fabs(dist_lateral - center_lateral) < body_lateral_half_width) {
-            continue;
-        }
-        if (std::fabs(dist_lateral - center_lateral) > swept_lateral_half_width) continue;
+        // Skip points behind us, outside the traversable region in forward direction, or outside the swept lateral band
+        if (p_forward < 0.0f || p_forward > move->fpl + front_dist) continue;
+        if (p_lateral < lateral_min || p_lateral > lateral_max) continue;
 
-        // Distance from point to lateral boundary of swept rectangle
-        const float lateral_offset = std::fabs(dist_lateral - center_lateral);
-        move->clearance = std::min(move->clearance, std::fabs(lateral_offset - swept_lateral_half_width));
+        // Distance from point to robot body edge (no margin)
+        const float dist_to_body =
+            (p_lateral > body_lateral_max) ? (p_lateral - body_lateral_max) : (body_lateral_min - p_lateral);
+        move->clearance = std::min(move->clearance, dist_to_body);
     }
 
     // ---- Finalize outputs ----

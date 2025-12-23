@@ -125,6 +125,8 @@ struct PathEvaluatorBase {
         point_cloud = &new_point_cloud;  // zero-copy view
     }
 
+    void SetNavParams(const navigation::NavigationParameters& new_params) { nav_params = new_params; }
+
     // Return the best path rollout from the provided set of paths.
     virtual std::shared_ptr<PathRolloutBase> FindBest(const std::vector<std::shared_ptr<PathRolloutBase>>& paths) = 0;
 
@@ -140,6 +142,8 @@ struct PathEvaluatorBase {
     Eigen::Vector2f local_target;
     // Non-owning view of obstacle point cloud.
     const std::vector<Eigen::Vector2f>* point_cloud = nullptr;
+    // Navigation parameters.
+    navigation::NavigationParameters nav_params;
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits, const float x_init, const float v_init,

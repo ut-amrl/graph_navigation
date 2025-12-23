@@ -23,8 +23,7 @@ NavigationParameters = {
   base_link_offset_y = 0;
   max_free_path_length = 6.0;
   max_clearance = 1.0;
-  local_half_fov = deg2rad(90);
-  center_threshold = deg2rad(10);
+  lidar_fov_half_angle = deg2rad(60);
   can_traverse_stairs = false;
   target_dist_tolerance = 0.1;
   nudge_dist_tolerance = 0.3;
@@ -57,6 +56,7 @@ ROSTopics = {
   fp_pcl_topic = "forward_predicted_pcl";
   path_topic = "trajectory";
   carrot_topic = "carrot";
+  current_map_topic = "/current_map";
 };
 
 ROSFrames = {

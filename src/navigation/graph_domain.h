@@ -126,9 +126,11 @@ struct GraphDomain {
     GraphDomain() { this->params_ = new NavigationParameters(); }
 
     explicit GraphDomain(const std::string& map_file, const navigation::NavigationParameters* params) {
-        // Load graph from file.
-        Load(map_file);
         this->params_ = params;
+        // Load graph from file.
+        if (!map_file.empty()) {
+            Load(map_file);
+        }
     }
 
     State KeyToState(uint64_t key) const {
@@ -360,70 +362,99 @@ struct GraphDomain {
 
     // Load from a V2 map file.
     bool Load(const std::string& file) {
+        if (file.empty()) {
+            // Skip loading for empty file paths (used during initialization)
+            fprintf(stderr, "Skipping load for empty file path\n");
+            return false;
+        }
+
         printf("Loading %s...\n", file.c_str());
-        std::ifstream i(file);
-        json j;
-        i >> j;
-        i.close();
 
-        CHECK(j["nodes"].is_array());
-        auto const states_json = j["nodes"];
+        try {
+            std::ifstream i(file);
+            if (!i.is_open()) {
+                throw std::runtime_error("Failed to open file");
+            }
 
-        states.clear();
-        states.resize(states_json.size());
-        edges.clear();
+            json j;
+            i >> j;
+            i.close();
 
-        for (const json& j : states_json) {
-            State s = State::fromJSON(j);
-            states[s.id] = s;
-        }
+            CHECK(j["nodes"].is_array());
+            auto const states_json = j["nodes"];
 
-        CHECK(j["edges"].is_array());
-        auto const edges_json = j["edges"];
+            states.clear();
+            states.resize(states_json.size());
+            edges.clear();
 
-        for (const json& j : edges_json) {
-            AddUndirectedEdge(j);
-        }
+            for (const json& j : states_json) {
+                State s = State::fromJSON(j);
+                states[s.id] = s;
+            }
 
-        printf("Loaded %s with %lu states, %lu edges\n", file.c_str(), states.size(), edges.size());
+            CHECK(j["edges"].is_array());
+            auto const edges_json = j["edges"];
 
-        static_edges = edges;
-        static_states = states;
-        return true;
-    }
+            for (const json& j : edges_json) {
+                AddUndirectedEdge(j);
+            }
 
-    // Save a V2 Map from V1 map structures.
-    bool SaveV2FromV1(const std::string& in_file, const std::string& out_file) {
-        ScopedFile fid(in_file, "r", true);
-        CHECK_NOTNULL(fid());
-        bool valid = true;
-        uint64_t id = 0;
-        float x = 0, y = 0;
-        int num_edges = 0;
-        int num_neighbors = 0;
-        states.clear();
-        while (valid && !feof(fid()) && fscanf(fid(), "%lu, %f, %f, %d", &id, &x, &y, &num_neighbors) == 4) {
-            GrowIfNeeded(id);
-            states[id] = State(id, x, y);
-            for (int i = 0; i < num_neighbors; ++i) {
-                uint64_t n = 0;
-                if (fscanf(fid(), ", %lu", &n) == 1) {
-                    AddUndirectedEdge(id, n);
-                    ++num_edges;
-                } else {
-                    valid = false;
-                    break;
+            printf("Loaded %s with %lu states, %lu edges\n", file.c_str(), states.size(), edges.size());
+
+            static_edges = edges;
+            static_states = states;
+            return true;
+
+        } catch (const std::exception& e) {
+            fprintf(stderr, "ERROR: Failed to load navigation map %s: %s\n", file.c_str(), e.what());
+
+            // Fallback to EmptyMap
+            std::string empty_map_path =
+                "/home/dynamo/AMRL_Research/repos/amrl_maps/install/amrl_maps/share/amrl_maps/EmptyMap/"
+                "EmptyMap.navigation.json";
+            fprintf(stderr, "Falling back to EmptyMap: %s\n", empty_map_path.c_str());
+
+            try {
+                std::ifstream i(empty_map_path);
+                if (!i.is_open()) {
+                    fprintf(stderr, "ERROR: Even EmptyMap fallback failed - no navigation graph available!\n");
+                    return false;
                 }
+
+                json j;
+                i >> j;
+                i.close();
+
+                CHECK(j["nodes"].is_array());
+                auto const states_json = j["nodes"];
+
+                states.clear();
+                states.resize(states_json.size());
+                edges.clear();
+
+                for (const json& j : states_json) {
+                    State s = State::fromJSON(j);
+                    states[s.id] = s;
+                }
+
+                CHECK(j["edges"].is_array());
+                auto const edges_json = j["edges"];
+
+                for (const json& j : edges_json) {
+                    AddUndirectedEdge(j);
+                }
+
+                printf("Loaded fallback EmptyMap with %lu states, %lu edges\n", states.size(), edges.size());
+
+                static_edges = edges;
+                static_states = states;
+                return true;
+
+            } catch (const std::exception& fallback_e) {
+                fprintf(stderr, "ERROR: EmptyMap fallback also failed: %s\n", fallback_e.what());
+                return false;
             }
         }
-
-        printf("Loaded %s with %d states, %d edges\n", in_file.c_str(), static_cast<int>(states.size()), num_edges);
-
-        DrawMap();
-
-        Save(out_file);
-
-        return true;
     }
 
     void GetClearanceAndSpeedFromLoc(const Eigen::Vector2f& p, float* clearance, float* speed) const {

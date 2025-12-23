@@ -68,12 +68,9 @@ struct NavigationParameters {
     float base_link_offset_y;
     float max_free_path_length;
     float max_clearance;
-    // Half-angle of the local field of view cone (radians).
-    // Full FOV cone is ±local_half_fov. Used to determine when obstacle avoidance can continue.
-    float local_half_fov;
-    // Angle threshold (radians) for starting obstacle avoidance in hysteresis logic.
-    // Target must be within ±center_threshold to start obstacle avoidance.
-    float center_threshold;
+    // Half-angle of the lidar field of view cone (radians).
+    // Full FOV cone is ±lidar_fov_half_angle. Used to determine when obstacle avoidance can run safely.
+    float lidar_fov_half_angle;
 
     bool can_traverse_stairs;
 
@@ -130,8 +127,7 @@ struct NavigationParameters {
           base_link_offset_y(0),
           max_free_path_length(10.0),
           max_clearance(1.0),
-          local_half_fov(1.57),
-          center_threshold(0.174),
+          lidar_fov_half_angle(1.57),
           can_traverse_stairs(false),
           target_dist_tolerance(0.1),
           nudge_dist_tolerance(0.3),

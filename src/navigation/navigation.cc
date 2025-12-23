@@ -242,6 +242,7 @@ void Navigation::Initialize(const NavigationParameters& params, const string& ma
     PathEvaluatorBase* evaluator = nullptr;
     if (params_.evaluator_type == "linear") {
         evaluator = (PathEvaluatorBase*)new LinearEvaluator();
+        evaluator->SetNavParams(params);
     } else {
         printf("Unknown evaluator type %s\n", params_.evaluator_type.c_str());
         exit(1);
@@ -915,20 +916,21 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         // "Nudge" window: when close to goal, prefer continuing OA over FOV-based turning
         const float goal_dist2 = (nav_goal_loc_ - robot_loc_fp_).squaredNorm();  // MAP-frame distance^2
         const bool near_goal_nudge = (goal_dist2 <= Sq(params_.nudge_dist_tolerance));
-        const bool fov_ok = (fabs(theta) <= params_.local_half_fov);
+        // Hysteresis-based lidar FOV check to prevent oscillation:
+        // - To START obstacle avoidance: target must be within conservative FOV (±0.8 * lidar_fov_half_angle)
+        // - To CONTINUE obstacle avoidance: target can be anywhere in full FOV (±lidar_fov_half_angle)
 
-        // Hysteresis-based FOV check to prevent oscillation:
-        // - To START obstacle avoidance: target must be well-centered (±center_threshold)
-        // - To CONTINUE obstacle avoidance: target can be anywhere in FOV (±local_half_fov)
+        const bool fov_ok_for_continue = (fabs(theta) <= params_.lidar_fov_half_angle);
+        const bool fov_ok_for_start = (fabs(theta) <= 0.8f * params_.lidar_fov_half_angle);
 
         // Check nudge condition first
         if (near_goal_nudge) {
-            fprintf(stderr, "DEBUG: Not in FOV but goal nudge is active\n");
+            fprintf(stderr, "DEBUG: Not in lidar FOV but goal nudge is active\n");
             RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
         } else {
             if (in_obstacle_avoidance_mode_) {
-                // Already doing obstacle avoidance: keep going unless target leaves FOV
-                if (!fov_ok) {
+                // Already doing obstacle avoidance: keep going unless target leaves full FOV
+                if (!fov_ok_for_continue) {
                     // Target left FOV: switch back to turning
                     in_obstacle_avoidance_mode_ = false;
                     TurnInPlace(cmd_vel, cmd_angle_vel);
@@ -939,12 +941,12 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             } else {
                 // Currently turning: only start obstacle avoidance when target is well-centered
                 yaw_align_sp_init_ = false;
-                if (fabs(theta) <= params_.center_threshold) {
-                    // Target is centered: start obstacle avoidance
+                if (fov_ok_for_start) {
+                    // Target is well-centered in FOV: start obstacle avoidance
                     in_obstacle_avoidance_mode_ = true;
                     RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
                 } else {
-                    // Target not centered: keep turning
+                    // Target not well-centered: keep turning
                     TurnInPlace(cmd_vel, cmd_angle_vel);
                 }
             }

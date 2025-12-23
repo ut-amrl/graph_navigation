@@ -57,10 +57,6 @@ inline std::string GetMapPath(const std::string& dir, const std::string& name) {
     return dir + "/" + name + "/" + name + ".navigation.json";
 }
 
-inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
-    return dir + "/" + name + "/" + name + ".navigation.txt";
-}
-
 static inline double overlap(double a0, double a1, double b0, double b1) {
     const double lo = std::max(a0, b0);
     const double hi = std::min(a1, b1);
