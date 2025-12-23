@@ -111,7 +111,7 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
 
     // Desired travel distance: toward goal, or 0 if pointing away
-    const float desired_dist = std::clamp(distance_to_goal_along_direction, 0.0f, nav_params.max_free_path_length); 
+    const float desired_dist = std::clamp(distance_to_goal_along_direction, 0.0f, nav_params.max_free_path_length);
     move->length = desired_dist;
     move->fpl = desired_dist;
 }
@@ -143,8 +143,9 @@ void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
     const Eigen::Vector2f dir_lateral(-dir_forward.y(), dir_forward.x());  // perpendicular (CCW 90°)
 
     // Robot body
-    const OffsetRect robot_body = {Eigen::Vector2f(nav_params.base_link_offset_x, nav_params.base_link_offset_y),
-                                   0.5f * nav_params.robot_length, 0.5f * nav_params.robot_width};
+    const OffsetRect robot_body = {
+        Eigen::Vector2f(nav_params.geometric_center_offset.x, nav_params.geometric_center_offset.y),
+        0.5f * nav_params.robot_length, 0.5f * nav_params.robot_width};
 
     // Inflated robot body
     const OffsetRect robot_with_margin = {robot_body.center, robot_body.half_x + nav_params.obstacle_margin,

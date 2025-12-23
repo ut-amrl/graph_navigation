@@ -106,8 +106,8 @@ CONFIG_FLOAT(obstacle_margin, "NavigationParameters.obstacle_margin");
 CONFIG_INT(num_options, "NavigationParameters.num_options");
 CONFIG_FLOAT(robot_width, "NavigationParameters.robot_width");
 CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
-CONFIG_FLOAT(base_link_offset_x, "NavigationParameters.base_link_offset_x");
-CONFIG_FLOAT(base_link_offset_y, "NavigationParameters.base_link_offset_y");
+CONFIG_FLOAT(geometric_center_offset_x, "NavigationParameters.geometric_center_offset.x");
+CONFIG_FLOAT(geometric_center_offset_y, "NavigationParameters.geometric_center_offset.y");
 CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
 CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
 CONFIG_FLOAT(lidar_fov_half_angle, "NavigationParameters.lidar_fov_half_angle");
@@ -370,7 +370,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // const double timer_callback_start_time = this->get_clock()->now().seconds();
         // std::string start_msg = "TimerCallback started at timestamp: " + std::to_string(timer_callback_start_time);
         // navigation::navigation_debug::DebugLog(start_msg);
-        const auto timer_start = std::chrono::steady_clock::now();
+        // const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
         visualization::ClearVisualizationMsg(local_viz_msg_);
@@ -405,8 +405,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
 
-        const auto timer_end = std::chrono::steady_clock::now();
-        const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
+        // const auto timer_end = std::chrono::steady_clock::now();
+        // const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
 
         // Log end-to-end TimerCallback duration
         // std::string timer_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
@@ -621,8 +621,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void DrawRobot() {
         const float kRobotLength = navigation_.params_.robot_length;
         const float kRobotWidth = navigation_.params_.robot_width;
-        const float kBaseLinkOffsetX = navigation_.params_.base_link_offset_x;
-        const float kBaseLinkOffsetY = navigation_.params_.base_link_offset_y;
+        const float kBaseLinkOffsetX = navigation_.params_.geometric_center_offset.x;
+        const float kBaseLinkOffsetY = navigation_.params_.geometric_center_offset.y;
         const float kObstacleMargin = navigation_.params_.obstacle_margin;
 
         // Draw robot with margin (light gray outline showing safety buffer)
@@ -766,7 +766,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 // Path centerline is at base_link origin; support() gives distance from base_link to robot edge
                 const Eigen::Vector2f dir_lateral(-best_omni->direction.y(), best_omni->direction.x());
                 const motion_primitives::OffsetRect robot_body = {
-                    Eigen::Vector2f(navigation_.params_.base_link_offset_x, navigation_.params_.base_link_offset_y),
+                    Eigen::Vector2f(navigation_.params_.geometric_center_offset.x,
+                                    navigation_.params_.geometric_center_offset.y),
                     0.5f * navigation_.params_.robot_length, 0.5f * navigation_.params_.robot_width};
                 const float clearance = best_omni->Clearance();
                 // Corridor edge = body extent (from base_link) + clearance
@@ -791,8 +792,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->num_options = CONFIG_num_options;
         params->robot_width = CONFIG_robot_width;
         params->robot_length = CONFIG_robot_length;
-        params->base_link_offset_x = CONFIG_base_link_offset_x;
-        params->base_link_offset_y = CONFIG_base_link_offset_y;
+        params->geometric_center_offset.x = CONFIG_geometric_center_offset_x;
+        params->geometric_center_offset.y = CONFIG_geometric_center_offset_y;
         params->max_free_path_length = CONFIG_max_free_path_length;
         params->max_clearance = CONFIG_max_clearance;
         params->lidar_fov_half_angle = CONFIG_lidar_fov_half_angle;

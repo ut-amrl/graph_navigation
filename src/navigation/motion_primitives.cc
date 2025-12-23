@@ -58,27 +58,21 @@ float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, con
     const float dv_d = dt * limits.max_deceleration;
     float accel_stopping_dist = (speed + 0.5 * dv_a) * dt + Sq(speed + dv_a) / (2.0 * limits.max_deceleration);
     float cruise_stopping_dist = speed * dt + Sq(speed) / (2.0 * limits.max_deceleration);
-    char phase = '?';
     if (dist_left > 0) {
         if (speed > limits.max_speed) {
             // Over max speed, slow down.
-            phase = 'O';
             velocity_cmd = max<float>(0.0f, speed - dv_d);
         } else if (speed < limits.max_speed && accel_stopping_dist < dist_left) {
             // Acceleration possible.
-            phase = 'A';
             velocity_cmd = min<float>(limits.max_speed, speed + dv_a);
         } else if (cruise_stopping_dist < dist_left) {
             // Must maintain speed, cruise phase.
-            phase = 'C';
             velocity_cmd = speed;
         } else {
             // Must decelerate.
-            phase = 'D';
             velocity_cmd = max<float>(0, speed - dv_d);
         }
     } else if (speed > 0.0f) {
-        phase = 'X';
         velocity_cmd = max<float>(0, speed - dv_d);
     }
     return velocity_cmd;

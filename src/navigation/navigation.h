@@ -158,12 +158,6 @@ class Navigation {
     float yaw_align_sp_map_ = 0.0f;
     // Whether yaw alignment setpoint has been initialized (for visualization).
     bool yaw_align_sp_init_ = false;
-    // Debug logging values (temporary storage).
-    float omni_best_path_heading_ = 0.0f;
-    bool omni_best_path_valid_ = false;
-    float nav_ang_toc_target_angle_ = 0.0f;
-    float nav_ang_toc_control_ = 0.0f;
-    bool nav_ang_toc_active_ = false;
     // Final navigation goal location in map frame.
     Eigen::Vector2f nav_goal_loc_;
     // Final navigation goal orientation in map frame.

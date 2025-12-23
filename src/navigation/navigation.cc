@@ -85,9 +85,6 @@ using namespace motion_primitives;
 #include <cfloat>
 #include <glog/logging.h>
 
-// Utility macro for vector component access in printf statements
-#define V2COMP(v) v.x(), v.y()
-
 DEFINE_double(max_plan_deviation, 0.5, "Maximum premissible deviation from the plan");
 
 namespace {
@@ -206,12 +203,14 @@ Navigation::Navigation()
       robot_angle_(0),
       robot_loc_fp_(0, 0),
       robot_angle_fp_(0),
-      robot_vel_(0, 0),
       nav_state_(NavigationState::kStopped),
       in_obstacle_avoidance_mode_(false),
-      robot_omega_(0),
+      yaw_align_sp_map_(0.0f),
+      yaw_align_sp_init_(false),
       nav_goal_loc_(0, 0),
       nav_goal_angle_(0),
+      robot_vel_(0, 0),
+      robot_omega_(0),
       odom_initialized_(false),
       loc_initialized_(false),
       t_point_cloud_(std::numeric_limits<double>::quiet_NaN()),
@@ -257,9 +256,6 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
     nav_state_ = NavigationState::kGoto;
     in_obstacle_avoidance_mode_ = false;
     yaw_align_sp_init_ = false;
-    // Reset debug logging variables
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
 }
 
 void Navigation::ResetNavGoals() {
@@ -270,9 +266,6 @@ void Navigation::ResetNavGoals() {
     plan_path_.clear();
     in_obstacle_avoidance_mode_ = false;
     yaw_align_sp_init_ = false;
-    // Reset debug logging variables
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -280,9 +273,6 @@ void Navigation::UpdateMap(const string& map_path) {
     plan_path_.clear();
     in_obstacle_avoidance_mode_ = false;  // Reset sub-state when plan is cleared
     yaw_align_sp_init_ = false;           // Reset yaw alignment setpoint when map is updated
-    // Reset debug logging variables
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -636,15 +626,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
         return;
     }
 
-    // Store best path heading for omnidirectional paths (for debug logging)
-    if (params_.motion_primitives_mode == "omni") {
-        const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_path.get());
-        if (best_omni) {
-            omni_best_path_heading_ = atan2(best_omni->direction.y(), best_omni->direction.x());
-            omni_best_path_valid_ = true;
-        }
-    }
-
     float max_map_speed = params_.linear_limits.max_speed;
     planning_domain_.GetClearanceAndSpeedFromLoc(map_loc_pred, nullptr, &max_map_speed);
     auto linear_limits = params_.linear_limits;
@@ -664,7 +645,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
             const Eigen::Rotation2Df R_map_base(yaw_map_pred);
             const Eigen::Vector2f v_map_cmd = R_map_base * vel_cmd;
             const float heading_map_target = std::atan2(v_map_cmd.y(), v_map_cmd.x());
-            nav_ang_toc_target_angle_ = heading_map_target;  // Store for debug logging
 
             // Initialize persistent setpoint once
             if (!yaw_align_sp_init_) {
@@ -699,14 +679,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                                           params_.angular_limits, 0.0f, s * robot_omega_, s * dTheta, 0.0f, params_.dt);
                 }
             }
-            nav_ang_toc_control_ = ang_vel_cmd;  // Store for debug logging
-            nav_ang_toc_active_ = true;
         } else {
             // Essentially stopped → only brake omega (not actively aligning)
             const float domega = params_.angular_limits.max_deceleration * params_.dt;
             ang_vel_cmd = (std::fabs(robot_omega_) <= domega) ? 0.0f : (robot_omega_ - Sign(robot_omega_) * domega);
-            // Note: nav_ang_toc_active_ remains false when speed <= vmin (not actively aligning, just braking)
-            // nav_ang_toc_target_angle_ is not set here because we're not actively aligning
         }
     }
 
@@ -819,10 +795,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
-    // Reset debug logging flags at start of each Run() cycle
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
-
     PruneLatencyQueue();
     // Forward predict robot state to account for actuation latency
     ForwardPredict(time + params_.actuation_latency);
@@ -925,7 +897,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
 
         // Check nudge condition first
         if (near_goal_nudge) {
-            fprintf(stderr, "DEBUG: Not in lidar FOV but goal nudge is active\n");
+            // fprintf(stderr, "DEBUG: Not in lidar FOV but goal nudge is active\n");
             RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
         } else {
             if (in_obstacle_avoidance_mode_) {

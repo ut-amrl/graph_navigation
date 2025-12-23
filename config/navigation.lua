@@ -19,8 +19,10 @@ NavigationParameters = {
   num_options = 31;
   robot_width = 0.44;
   robot_length = 0.5;
-  base_link_offset_x = 0;
-  base_link_offset_y = 0;
+  geometric_center_offset = {
+    x = 0;
+    y = 0;
+  };
   max_free_path_length = 6.0;
   max_clearance = 1.0;
   lidar_fov_half_angle = deg2rad(60);

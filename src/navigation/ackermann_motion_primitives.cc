@@ -93,7 +93,6 @@ vector<shared_ptr<PathRolloutBase>> AckermannSampler::GetSamples(int n) {
     // - robot_omega_ (ang_vel) provides current angular velocity for smooth transitions
     const float max_domega_accel = nav_params.dt * nav_params.angular_limits.max_acceleration;
     const float max_domega_decel = nav_params.dt * nav_params.angular_limits.max_deceleration;
-    const float max_dv_accel = nav_params.dt * nav_params.linear_limits.max_acceleration;
     const float max_dv_decel = nav_params.dt * nav_params.linear_limits.max_deceleration;
     const float robot_speed = fabs(vel.x());
 
@@ -142,24 +141,22 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
     const float hw = 0.5f * nav_params.robot_width;
 
     // Margin-augmented footprint bounds in base_link frame.
-    const float x_max = nav_params.base_link_offset_x + hl + nav_params.obstacle_margin;
-    const float x_min = nav_params.base_link_offset_x - hl - nav_params.obstacle_margin;
-    const float y_max = nav_params.base_link_offset_y + hw + nav_params.obstacle_margin;
-    const float y_min = nav_params.base_link_offset_y - hw - nav_params.obstacle_margin;
+    const float x_max = nav_params.geometric_center_offset.x + hl + nav_params.obstacle_margin;
+    const float x_min = nav_params.geometric_center_offset.x - hl - nav_params.obstacle_margin;
+    const float y_max = nav_params.geometric_center_offset.y + hw + nav_params.obstacle_margin;
+    const float y_min = nav_params.geometric_center_offset.y - hw - nav_params.obstacle_margin;
 
     // Body (no margin) bounds.
-    const float x_max_body = nav_params.base_link_offset_x + hl;
-    const float x_min_body = nav_params.base_link_offset_x - hl;
-    const float y_max_body = nav_params.base_link_offset_y + hw;
-    const float y_min_body = nav_params.base_link_offset_y - hw;
+    const float x_max_body = nav_params.geometric_center_offset.x + hl;
+    const float x_min_body = nav_params.geometric_center_offset.x - hl;
+    const float y_max_body = nav_params.geometric_center_offset.y + hw;
+    const float y_min_body = nav_params.geometric_center_offset.y - hw;
 
-    // Half-width (+margin) and without margin (for formulas below).
+    // Half-width (+margin) for collision detection.
     const float w = hw + nav_params.obstacle_margin;
-    const float w_body = hw;
 
     // Distance from base_link origin to front face (+margin), for straight-line hit tests.
-    const float l = hl + nav_params.obstacle_margin + nav_params.base_link_offset_x;
-    const float l_body = hl + nav_params.base_link_offset_x;
+    const float l = hl + nav_params.obstacle_margin + nav_params.geometric_center_offset.x;
 
     // Straight line case (|curvature| ~ 0)
     if (fabs(path.curvature) < kEpsilon) {
@@ -184,7 +181,8 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
             }
             if (p.x() - x_max > path.fpl || p.x() < 0.0f) continue;
 
-            const float lateral_dist = (p.y() < nav_params.base_link_offset_y) ? (y_min - p.y()) : (p.y() - y_max);
+            const float lateral_dist =
+                (p.y() < nav_params.geometric_center_offset.y) ? (y_min - p.y()) : (p.y() - y_max);
             path.clearance = std::min<float>(path.clearance, std::fabs(lateral_dist));
         }
         path.clearance = std::max(0.0f, path.clearance);
