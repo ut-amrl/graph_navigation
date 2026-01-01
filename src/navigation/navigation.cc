@@ -25,11 +25,8 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <chrono>
 #include <iostream>
 #include <fstream>
-#include <iomanip>
-#include <sstream>
 #include <queue>
 #include <limits>
 
@@ -477,8 +474,6 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
 
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vector2f& end) {
     vector<GraphDomain::State> path;
-    static CumulativeFunctionTimer function_timer_(__FUNCTION__);
-    CumulativeFunctionTimer::Invocation invoke(&function_timer_);
     static const bool kVisualize = true;
     typedef navigation::GraphDomain Domain;
     planning_domain_.ResetDynamicStates();
@@ -596,8 +591,6 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
 }
 
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
-    static CumulativeFunctionTimer function_timer_(__FUNCTION__);
-    CumulativeFunctionTimer::Invocation invoke(&function_timer_);
     Vector2f local_target = local_target_;
 
     // Update planner components with current state and obstacles
@@ -614,6 +607,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     // Generate path options
     auto paths = sampler_->GetSamples(params_.num_options);
     if (paths.size() == 0) {
+        // Clear stale visualization data
+        sampled_paths_.clear();
+        best_option_.reset();
         // Fallback: no path options available
         Halt(vel_cmd, ang_vel_cmd);
         return;
@@ -621,6 +617,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     // Select best path from options
     auto best_path = evaluator_->FindBest(paths);
     if (best_path == nullptr) {
+        // Clear stale visualization data
+        sampled_paths_.clear();
+        best_option_.reset();
         // Fallback: no valid path found
         TurnInPlace(vel_cmd, ang_vel_cmd);
         return;

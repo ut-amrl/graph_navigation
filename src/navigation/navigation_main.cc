@@ -383,25 +383,26 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         bool nav_succeeded = navigation_.Run(cmd_plan_start_time, cmd_vel, cmd_angle_vel);
 
         PublishNavStatus();
-        if (nav_succeeded) {
-            // Publish visualizations
-            PublishForwardPredictedPCL(navigation_.fp_point_cloud_);
-            DrawRobot();
-            if (static_cast<uint8_t>(navigation_.nav_state_) !=
-                static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
-                DrawTarget();
-                if (navigation_.in_obstacle_avoidance_mode_) {
-                    DrawYawTarget();
-                }
-                DrawPathOptions();
-            }
-            PublishPath();
-            local_viz_msg_.header.stamp = this->get_clock()->now();
-            global_viz_msg_.header.stamp = this->get_clock()->now();
-            viz_local_pub_->publish(local_viz_msg_);
-            viz_pub_->publish(global_viz_msg_);
 
-            // Send commands
+        // Always publish visualizations (they may be empty/cleared if navigation failed)
+        PublishForwardPredictedPCL(navigation_.fp_point_cloud_);
+        DrawRobot();
+        if (static_cast<uint8_t>(navigation_.nav_state_) !=
+            static_cast<uint8_t>(navigation::NavigationState::kStopped)) {
+            DrawTarget();
+            if (navigation_.in_obstacle_avoidance_mode_) {
+                DrawYawTarget();
+            }
+            DrawPathOptions();
+        }
+        PublishPath();
+        local_viz_msg_.header.stamp = this->get_clock()->now();
+        global_viz_msg_.header.stamp = this->get_clock()->now();
+        viz_local_pub_->publish(local_viz_msg_);
+        viz_pub_->publish(global_viz_msg_);
+
+        if (nav_succeeded) {
+            // Send commands only if navigation succeeded
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
 
@@ -724,6 +725,11 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     void DrawPathOptions() {
         std::vector<std::shared_ptr<motion_primitives::PathRolloutBase>> path_rollouts = navigation_.sampled_paths_;
         std::shared_ptr<motion_primitives::PathRolloutBase> best_option = navigation_.best_option_;
+
+        // If no paths are available, don't draw anything (messages are already cleared)
+        if (path_rollouts.empty() && best_option == nullptr) {
+            return;
+        }
 
         // Draw path options that participate in optimization (Length > 0) in light blue
         constexpr uint32_t kCandidatePathColor = 0x80A0FF;  // Light blue for non-winning paths

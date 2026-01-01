@@ -23,9 +23,6 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
-#include <iomanip>
-#include <sstream>
-#include <chrono>
 
 #include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
@@ -66,11 +63,11 @@ void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear
     if (v_along < 0.0f) {
         // Wrong-way: robot moving opposite to desired path direction.
         // Must brake first before accelerating toward goal.
+        const float speed = vel.norm();
         const float dv = linear_limits.max_deceleration * dt;
-        const float speed_away = std::fabs(v_along);
-        if (speed_away > dv) {
-            // Still braking - continue in current (wrong) direction but slower
-            vel_cmd = (speed_away - dv) * (-direction);
+        if (speed > 1e-3f) {
+            const float new_speed = std::max(0.0f, speed - dv);
+            vel_cmd = vel * (new_speed / speed);  // same direction as current motion, reduced magnitude
         } else {
             // Braked to near-zero - can now start toward goal
             vel_cmd = Vector2f::Zero();
@@ -113,7 +110,7 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     // Desired travel distance: toward goal, or 0 if pointing away
     const float desired_dist = std::clamp(distance_to_goal_along_direction, 0.0f, nav_params.max_free_path_length);
     move->length = desired_dist;
-    move->fpl = desired_dist;
+    move->fpl = nav_params.max_free_path_length;
 }
 
 vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
@@ -187,11 +184,21 @@ void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
 
         // Skip points behind us, outside the traversable region in forward direction, or outside the swept lateral band
         if (p_forward < 0.0f || p_forward > move->fpl + front_dist) continue;
-        if (p_lateral < lateral_min || p_lateral > lateral_max) continue;
+
+        // Use max_clearance for clearance bounds (larger than obstacle_margin)
+        const float clearance_lat_min = body_lateral_min - nav_params.max_clearance;
+        const float clearance_lat_max = body_lateral_max + nav_params.max_clearance;
+        if (p_lateral < clearance_lat_min || p_lateral > clearance_lat_max) continue;
 
         // Distance from point to robot body edge (no margin)
-        const float dist_to_body =
-            (p_lateral > body_lateral_max) ? (p_lateral - body_lateral_max) : (body_lateral_min - p_lateral);
+        float dist_to_body = 0.0f;
+        if (p_lateral < body_lateral_min)
+            dist_to_body = body_lateral_min - p_lateral;
+        else if (p_lateral > body_lateral_max)
+            dist_to_body = p_lateral - body_lateral_max;
+        else
+            dist_to_body = 0.0f;  // inside lateral span → eventual collision → clearance 0
+
         move->clearance = std::min(move->clearance, dist_to_body);
     }
 
