@@ -82,8 +82,6 @@ using namespace motion_primitives;
 #include <cfloat>
 #include <glog/logging.h>
 
-DEFINE_double(max_plan_deviation, 0.5, "Maximum premissible deviation from the plan");
-
 namespace {
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
@@ -149,10 +147,10 @@ inline int VelocityToMotorCounts(float vel, float slope_pos, float intercept_pos
                                  float intercept_neg) {
     if (vel > 0.0f) {
         double counts = static_cast<double>(slope_pos) * static_cast<double>(vel) + static_cast<double>(intercept_pos);
-        return static_cast<int>(std::floor(counts));  // ?? flipped, make sure to match driver
+        return static_cast<int>(std::floor(counts));
     } else if (vel < 0.0f) {
         double counts = static_cast<double>(slope_neg) * static_cast<double>(vel) + static_cast<double>(intercept_neg);
-        return static_cast<int>(std::ceil(counts));  // ?? flipped, make sure to match driver
+        return static_cast<int>(std::ceil(counts));
     }
     return 0;
 }
@@ -476,14 +474,18 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vecto
     vector<GraphDomain::State> path;
     static const bool kVisualize = true;
     typedef navigation::GraphDomain Domain;
+    // Fallback: if map has no graph (EmptyMap or load failure), return a direct start->goal segment.
+    if (planning_domain_.states.empty() || planning_domain_.edges.empty()) {
+        path.emplace_back(0, initial);
+        path.emplace_back(1, end);
+        return path;
+    }
     planning_domain_.ResetDynamicStates();
     const uint64_t start_id = planning_domain_.AddDynamicState(initial);
     const uint64_t goal_id = planning_domain_.AddDynamicState(end);
     Domain::State start = planning_domain_.states[start_id];
     Domain::State goal = planning_domain_.states[goal_id];
     GraphVisualizer graph_viz(kVisualize);
-    // ?? figure out whats the planning domain and graph for empty map, and is there a default grid that it fallbacks to
-    // when no nodes?
     const bool found_path = AStar(start, goal, planning_domain_, &graph_viz, &path);
     if (!found_path) {
         printf("No path found!\n");
@@ -492,15 +494,12 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vecto
 }
 
 bool Navigation::PlanStillValid() {
-    // ??, why max_plan_deviation is needed? it should just go to the closest point on path right howsoever far?
-    if (plan_path_.size() < 2)
-        return false;  // ?? is it due to (start, end) atleast. In that case, why would the distance check be false
-    // ever?
+    if (plan_path_.size() < 2) return false;
     const Vector2f pose = robot_loc_fp_;  // predicted pose at actuation time
     for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
         const float dist_from_segment =
             geometry::DistanceFromLineSegment(pose, plan_path_[i].loc, plan_path_[i + 1].loc);
-        if (dist_from_segment < FLAGS_max_plan_deviation) {
+        if (dist_from_segment < params_.max_plan_deviation) {
             return true;
         }
     }
@@ -512,7 +511,7 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
         carrot_dist = params_.carrot_dist;
     }
     const auto& plan_path = plan_path_;
-    if (plan_path.size() < 2u) {  // guard, ?? is this needed?
+    if (plan_path.size() < 2u) {
         return false;
     }
     // Predicted map pose at actuation time.
@@ -878,6 +877,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
     }
 
     if (nav_state_ == NavigationState::kStopped) {
+        plan_path_.clear();  // Drop stale plan so path viz clears once goal is done/stopped
         yaw_align_sp_init_ = false;
         Halt(cmd_vel, cmd_angle_vel);
         return true;

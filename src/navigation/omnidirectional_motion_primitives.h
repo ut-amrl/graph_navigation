@@ -39,7 +39,7 @@ struct OffsetRect {
     // Check if point (in {B}) is inside this rectangle
     bool contains(const Eigen::Vector2f& p) const {
         const Eigen::Vector2f rel = p - center;
-        return std::fabs(rel.x()) < half_x && std::fabs(rel.y()) < half_y;
+        return std::fabs(rel.x()) <= half_x && std::fabs(rel.y()) <= half_y;
     }
 
     // Extent from geometric center in direction u: half_x*|u.x| + half_y*|u.y|
@@ -60,7 +60,7 @@ struct OffsetRect {
     // Compute the time interval [t_enter, t_exit] where point p, when translated along -dir
     // (i.e., p - t*dir), lies inside this rectangle. This is equivalent to translating the rectangle
     // along +dir until it contains point p.
-    // Returns: 
+    // Returns:
     // - true if there's any intersection for t >= 0, false otherwise.
     // - sets overlaps_now to true if point p is currently inside/on boundary at t=0.
     // - sets t_enter to t >= 0 when p enters the rectangle (or 0 if already inside at t=0).

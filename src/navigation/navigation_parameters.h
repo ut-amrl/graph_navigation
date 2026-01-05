@@ -105,6 +105,11 @@ struct NavigationParameters {
     std::string motion_primitives_mode;
     bool do_ang_toc;
 
+    // Maximum permissible deviation from the plan
+    float max_plan_deviation;
+    // Height of laser sensor above robot base frame (for visualization)
+    float laser_height;
+
     // Command mapping parameters
     bool apply_custom_cmd_map;
     // Linear model for x-axis velocity mapping: v_mapped = slope * v + intercept

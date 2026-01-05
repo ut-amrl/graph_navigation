@@ -122,6 +122,8 @@ CONFIG_STRING(evaluator_type, "NavigationParameters.evaluator_type");
 CONFIG_FLOAT(carrot_dist, "NavigationParameters.carrot_dist");
 CONFIG_STRING(motion_primitives_mode, "NavigationParameters.motion_primitives_mode");
 CONFIG_BOOL(do_ang_toc, "NavigationParameters.do_ang_toc");
+CONFIG_FLOAT(max_plan_deviation, "NavigationParameters.max_plan_deviation");
+CONFIG_FLOAT(laser_height, "NavigationParameters.laser_height");
 
 // Command Mapping
 CONFIG_BOOL(apply_custom_cmd_map, "CommandMapping.apply_custom_cmd_map");
@@ -239,11 +241,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             CONFIG_current_map_topic, 1, std::bind(&NavigationNode::CurrentMapCallback, this, std::placeholders::_1));
 
         // Create timer for main loop (respects use_sim_time parameter)
-        timer_ = rclcpp::create_timer(
-            this,
-            this->get_clock(),
-            std::chrono::duration<double>(params_.dt),
-            std::bind(&NavigationNode::TimerCallback, this));
+        timer_ = rclcpp::create_timer(this, this->get_clock(), std::chrono::duration<double>(params_.dt),
+                                      std::bind(&NavigationNode::TimerCallback, this));
 
         RCLCPP_INFO(this->get_logger(), "Navigation node initialized");
     }
@@ -371,15 +370,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
     void TimerCallback() {
         if (!run_) return;
-        // const double timer_callback_start_time = this->get_clock()->now().seconds();
-        // std::string start_msg = "TimerCallback started at timestamp: " + std::to_string(timer_callback_start_time);
-        // navigation::navigation_debug::DebugLog(start_msg);
-        const auto timer_start = std::chrono::steady_clock::now();
+        // const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
         visualization::ClearVisualizationMsg(local_viz_msg_);
         visualization::ClearVisualizationMsg(global_viz_msg_);
-        received_laser_ = false;  // ?? why is this here? why happening at each callback?
+        received_laser_ = false;  // Reset for new tick so next laser clears/rebuilds the point cloud from latest data
 
         Eigen::Vector2f cmd_vel(0, 0);
         float cmd_angle_vel(0);
@@ -410,15 +406,11 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
 
-        const auto timer_end = std::chrono::steady_clock::now();
-        const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
-
-        // Log end-to-end TimerCallback duration
+        // const auto timer_end = std::chrono::steady_clock::now();
+        // const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
         // std::string timer_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
         //                         "] TimerCallback took " + std::to_string(total_ms) + " ms";
         // navigation::navigation_debug::DebugLog(timer_msg);
-        
-        // printf("[%d] TimerCallback took %.3f ms\n", static_cast<int>(navigation_.nav_state_), total_ms);
     }
 
     // Helper functions
@@ -529,16 +521,16 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         for (size_t i = 0; i < pcl.size(); ++i) {
             fp_pcl_msg->points[i].x = pcl[i].x();
             fp_pcl_msg->points[i].y = pcl[i].y();
-            fp_pcl_msg->points[i].z =
-                0.324;  // ?? is this laser height above ground? if so, should be a config parameter
+            fp_pcl_msg->points[i].z = navigation_.params_.laser_height;
         }
         fp_pcl_msg->header.stamp = this->get_clock()->now();
+        fp_pcl_msg->header.frame_id = CONFIG_robot_frame;
         fp_pcl_pub_->publish(std::move(fp_pcl_msg));
     }
 
     void PublishPath() {
         const auto path = navigation_.plan_path_;
-        if (path.size() >= 2) {  // ?? is it due to (start, end) atleast
+        if (path.size() >= 2) {
             // Publish full planned path as nav_msgs::Path
             auto path_msg = std::make_unique<nav_msgs::msg::Path>();
             path_msg->header.stamp = this->get_clock()->now();
@@ -740,9 +732,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Draw path options that participate in optimization (Length > 0) in light blue
         constexpr uint32_t kCandidatePathColor = 0x80A0FF;  // Light blue for non-winning paths
         for (const auto& rollout : path_rollouts) {
-            if (rollout->Length() <= 0.0f) continue;  // Skip zero-length paths (not in optimization)
-            // ?? TODO: move los-based resampling to actual GetSamples instead of in linear evaluator, then remove this
-            // filtered visualization so that you visualize all samples as is
+            if (rollout->Length() <= 0.0f) continue;  // Skip zero-length unusable paths
 
             // Handle constant curvature arc paths
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(rollout.get());
@@ -824,6 +814,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->carrot_dist = CONFIG_carrot_dist;
         params->motion_primitives_mode = CONFIG_motion_primitives_mode;
         params->do_ang_toc = CONFIG_do_ang_toc;
+        params->max_plan_deviation = CONFIG_max_plan_deviation;
+        params->laser_height = CONFIG_laser_height;
         params->apply_custom_cmd_map = CONFIG_apply_custom_cmd_map;
         params->cmd_map_x_slope_pos = CONFIG_cmd_map_x_slope_pos;
         params->cmd_map_x_intercept_pos = CONFIG_cmd_map_x_intercept_pos;

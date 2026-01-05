@@ -114,6 +114,9 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
 }
 
 vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
+    // TODO: add resampling from LOS distn? ie, check line of sight from init samples, drop non-LOS ones, resample from
+    // LOS angle distn
+    if (n <= 0) return {};
     vector<shared_ptr<PathRolloutBase>> samples(n);
 
     // Cache unit directions per n to avoid trig every cycle.
@@ -198,23 +201,29 @@ void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
     // Executed distance must not exceed distance to NEW collisions
     move->length = std::min(move->length, fpl_forward);
 
+    if (move->length <= 0.0f) {
+        move->clearance = 0.0f;
+        move->los_clearance = 0.0f;
+        return;
+    }
+
     // Safety check: if can't stop before NEW collision, mark path unusable
-    // ?? TODO, perhaps just delete the path from the paths directly? so downstream doesnt do redundant work?
     const float v_f = std::max(0.0f, vel.dot(dir_f));
     const float stopping_dist = (v_f * v_f) / (2.0f * nav_params.linear_limits.max_deceleration);
     if (fpl_forward < stopping_dist) {
         move->length = 0.0f;
     }
 
-    // --------------------
-    // 2) Clearance over executed segment
-    // --------------------
-    if (move->length <= 0.0f) {  // ?? TODO is this conditional necessary? does it not conflate the sematics?
+    // Early return if path is unusable
+    if (move->length <= 0.0f) {
         move->clearance = 0.0f;
         move->los_clearance = 0.0f;
         return;
     }
 
+    // --------------------
+    // 2) Clearance over executed segment
+    // --------------------
     float clearance = nav_params.clearance_band;
     const float lat_search_min = lat_min - nav_params.clearance_band;
     const float lat_search_max = lat_max + nav_params.clearance_band;

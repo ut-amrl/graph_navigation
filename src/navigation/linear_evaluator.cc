@@ -81,11 +81,10 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
     vector<float> total_dist(N, FLT_MAX);
     vector<float> alignment(N, 0.0f);
 
-    // LOS clearance threshold (conservative), relaxed by 0.25
-    // ?? TODO, is relaxation necessary?
+    // LOS clearance threshold
     const float inflated_width = nav_params.robot_width + 2.0f * nav_params.obstacle_margin;
     const float inflated_length = nav_params.robot_length + 2.0f * nav_params.obstacle_margin;
-    const float los_radius = 0.5f * std::hypot(inflated_width, inflated_length) * 0.25f;
+    const float los_radius = 0.5f * std::min(inflated_width, inflated_length);
 
     // Current velocity direction (for smoothness reward)
     const float current_speed = vel.norm();

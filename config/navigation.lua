@@ -37,6 +37,8 @@ NavigationParameters = {
   carrot_dist = 3.5;
   motion_primitives_mode = "omni";
   do_ang_toc = false;
+  max_plan_deviation = 0.5;
+  laser_height = 0.324;
 };
 
 ROSTopics = {
