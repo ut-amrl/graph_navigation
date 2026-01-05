@@ -15,7 +15,6 @@ NavigationParameters = {
     max_speed = 1.0;
   };
   actuation_latency = 0.24;
-  obstacle_margin = 0.15;
   num_options = 31;
   robot_width = 0.44;
   robot_length = 0.5;
@@ -23,8 +22,10 @@ NavigationParameters = {
     x = 0;
     y = 0;
   };
-  max_free_path_length = 6.0;
-  max_clearance = 1.0;
+  obstacle_margin = 0.15;
+  max_rollout_length = 6.0;
+  max_lookahead_fpl = 6.0;
+  clearance_band = 1.0;
   lidar_fov_half_angle = deg2rad(60);
   can_traverse_stairs = false;
   target_dist_tolerance = 0.1;

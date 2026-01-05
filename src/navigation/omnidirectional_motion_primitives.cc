@@ -26,19 +26,14 @@
 
 #include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
-#include "eigen3/Eigen/Geometry"
-#include "config_reader/config_reader.h"
 #include "omnidirectional_motion_primitives.h"
 #include "motion_primitives.h"
 #include "navigation.h"
 
 using Eigen::Vector2f;
 using pose_2d::Pose2Df;
-using std::max;
-using std::min;
 using std::shared_ptr;
 using std::vector;
-using namespace math_util;
 
 namespace motion_primitives {
 
@@ -52,6 +47,8 @@ float OmnidirectionalMovePath::AngularLength() const {
 }
 
 float OmnidirectionalMovePath::Clearance() const { return clearance; }
+
+float OmnidirectionalMovePath::LOSClearance() const { return los_clearance; }
 
 void OmnidirectionalMovePath::GetControls(const navigation::MotionLimits& linear_limits,
                                           const navigation::MotionLimits& angular_limits, const float dt,
@@ -107,10 +104,13 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
     // Projection of goal onto this direction (negative = pointing away from goal)
     const float distance_to_goal_along_direction = local_target.dot(move->direction);
 
-    // Desired travel distance: toward goal, or 0 if pointing away
-    const float desired_dist = std::clamp(distance_to_goal_along_direction, 0.0f, nav_params.max_free_path_length);
+    // Allow a small "escape" move even if not making forward progress (lateral/backwards),
+    // so these samples don't get discarded by the evaluator.
+    constexpr float kEscapeLength = 0.2f;
+    const float desired_dist = (distance_to_goal_along_direction > 0.0f)
+                                   ? std::min(distance_to_goal_along_direction, nav_params.max_rollout_length)
+                                   : std::min(kEscapeLength, nav_params.max_rollout_length);
     move->length = desired_dist;
-    move->fpl = nav_params.max_free_path_length;
 }
 
 vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
@@ -134,85 +134,126 @@ vector<shared_ptr<PathRolloutBase>> OmniSampler::GetSamples(int n) {
     return samples;
 }
 
+// Checks obstacles for the given omnidirectional move path and computes:
+// - fpl: Free Path Length (positive = distance to first collision, negative = escaping path length if penetrating)
+// - length: Executed path distance (clamped by FPL and stopping constraints, 0.0 means unusable path)
+// - clearance: Lateral clearance during executed segment (0..clearance_band)
+// - los_clearance: Line-of-sight clearance from endpoint to local_target
 void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
-    // Path-aligned basis vectors (expressed in base_link frame)
-    const Eigen::Vector2f dir_forward = move->direction;                   // motion direction (unit)
-    const Eigen::Vector2f dir_lateral(-dir_forward.y(), dir_forward.x());  // perpendicular (CCW 90°)
+    // Path-aligned basis (in base_link frame)
+    const Eigen::Vector2f dir_f = move->direction;       // forward along dir
+    const Eigen::Vector2f dir_l(-dir_f.y(), dir_f.x());  // lateral to dir
 
-    // Robot body
+    // Robot body (no margin) -- ONLY used for skipping points inside the robot body
     const OffsetRect robot_body = {
         Eigen::Vector2f(nav_params.geometric_center_offset.x, nav_params.geometric_center_offset.y),
         0.5f * nav_params.robot_length, 0.5f * nav_params.robot_width};
 
     // Inflated robot body
-    const OffsetRect robot_with_margin = {robot_body.center, robot_body.half_x + nav_params.obstacle_margin,
-                                          robot_body.half_y + nav_params.obstacle_margin};
+    const OffsetRect robot_infl = {robot_body.center, robot_body.half_x + nav_params.obstacle_margin,
+                                   robot_body.half_y + nav_params.obstacle_margin};
 
-    // Swept area bounds (with margin) for collision detection
-    const float front_dist = robot_with_margin.support(dir_forward);
-    const float lateral_max = robot_with_margin.support(dir_lateral);
-    const float lateral_min = -robot_with_margin.support(-dir_lateral);
+    // Projections spans of inflated body
+    float lat_min, lat_max;
+    robot_infl.range(dir_l, lat_min, lat_max);
+    float back, front;
+    robot_infl.range(dir_f, back, front);
 
-    // Robot body bounds (no margin) for clearance calculation
-    const float body_lateral_max = robot_body.support(dir_lateral);
-    const float body_lateral_min = -robot_body.support(-dir_lateral);
+    // --------------------
+    // 1) Signed FPL + forward free distance
+    // --------------------
+    // Compute SIGNED FPL:
+    // - If not penetrating now: FPL = +min among all points of the entry time to first hit (standard)
+    // - If penetrating now:     FPL = -max among all penetrating of the exit time (escape distance)
+    // Also compute fpl_forward: the "true forward free distance to NEW collisions" (ignoring already-penetrating
+    // points), used to clamp Length and stopping checks.
+    float fpl_forward = nav_params.max_lookahead_fpl;  // distance to first NEW collision
+    float escape_dist = 0.0f;                          // distance required to clear all currently-penetrating points
+    bool penetrating = false;
 
-    // ---- Compute FPL: find first obstacle that blocks the path ----
     for (const Eigen::Vector2f& p : *point_cloud) {
-        if (robot_body.contains(p)) continue;  // skip points on robot itself
+        if (robot_body.contains(p)) continue;  // skip points inside the robot body
 
-        // Transform p to path-aligned frame
-        const float p_forward = p.dot(dir_forward);
-        const float p_lateral = p.dot(dir_lateral);
+        // Lateral projection doesn't change under translation along dir_f
+        const float p_lat = p.dot(dir_l);
+        if (p_lat < lat_min || p_lat > lat_max)
+            continue;  // skip points outside the lateral projection spans of the inflated body
 
-        // Skip points behind us or outside the swept lateral band
-        if (p_forward < 0.0f) continue;
-        if (p_lateral < lateral_min || p_lateral > lateral_max) continue;
+        bool overlaps_now = false;
+        float t_enter = 0.0f, t_exit = 0.0f;
+        if (!robot_infl.enter_exit_times(dir_f, p, overlaps_now, t_enter, t_exit)) continue;
 
-        // Obstacle limits the free path length
-        move->fpl = std::min(move->fpl, p_forward - front_dist);
+        if (overlaps_now) {
+            penetrating = true;
+            escape_dist = std::max(escape_dist, std::min(t_exit, nav_params.max_lookahead_fpl));
+        } else {
+            fpl_forward = std::min(fpl_forward, t_enter);
+        }
     }
 
-    // ---- Compute clearance: min distance from obstacles to robot body within traversable region ----
-    move->clearance = nav_params.max_clearance;
-    for (const Eigen::Vector2f& p : *point_cloud) {
-        if (robot_body.contains(p)) continue;  // skip points on robot itself
+    fpl_forward = std::clamp(fpl_forward, 0.0f, nav_params.max_lookahead_fpl);
+    escape_dist = std::clamp(escape_dist, 0.0f, nav_params.max_lookahead_fpl);
+    move->fpl = penetrating ? -escape_dist : fpl_forward;
 
-        // Transform p to path-aligned frame
-        const float p_forward = p.dot(dir_forward);
-        const float p_lateral = p.dot(dir_lateral);
+    // Executed distance must not exceed distance to NEW collisions
+    move->length = std::min(move->length, fpl_forward);
 
-        // Skip points behind us, outside the traversable region in forward direction, or outside the swept lateral band
-        if (p_forward < 0.0f || p_forward > move->fpl + front_dist) continue;
-
-        // Use max_clearance for clearance bounds (larger than obstacle_margin)
-        const float clearance_lat_min = body_lateral_min - nav_params.max_clearance;
-        const float clearance_lat_max = body_lateral_max + nav_params.max_clearance;
-        if (p_lateral < clearance_lat_min || p_lateral > clearance_lat_max) continue;
-
-        // Distance from point to robot body edge (no margin)
-        float dist_to_body = 0.0f;
-        if (p_lateral < body_lateral_min)
-            dist_to_body = body_lateral_min - p_lateral;
-        else if (p_lateral > body_lateral_max)
-            dist_to_body = p_lateral - body_lateral_max;
-        else
-            dist_to_body = 0.0f;  // inside lateral span → eventual collision → clearance 0
-
-        move->clearance = std::min(move->clearance, dist_to_body);
-    }
-
-    // ---- Finalize outputs ----
-    move->clearance = std::max(0.0f, move->clearance);
-    move->fpl = std::max(0.0f, move->fpl);
-    move->length = std::min(move->length, move->fpl);
-
-    // Safety check: if can't stop before obstacle, mark path as unusable
-    const float vel_forward = std::max(0.0f, vel.dot(move->direction));
-    const float stopping_dist = (vel_forward * vel_forward) / (2.0f * nav_params.linear_limits.max_deceleration);
-    if (move->fpl < stopping_dist) {
+    // Safety check: if can't stop before NEW collision, mark path unusable
+    // ?? TODO, perhaps just delete the path from the paths directly? so downstream doesnt do redundant work?
+    const float v_f = std::max(0.0f, vel.dot(dir_f));
+    const float stopping_dist = (v_f * v_f) / (2.0f * nav_params.linear_limits.max_deceleration);
+    if (fpl_forward < stopping_dist) {
         move->length = 0.0f;
     }
+
+    // --------------------
+    // 2) Clearance over executed segment
+    // --------------------
+    if (move->length <= 0.0f) {  // ?? TODO is this conditional necessary? does it not conflate the sematics?
+        move->clearance = 0.0f;
+        move->los_clearance = 0.0f;
+        return;
+    }
+
+    float clearance = nav_params.clearance_band;
+    const float lat_search_min = lat_min - nav_params.clearance_band;
+    const float lat_search_max = lat_max + nav_params.clearance_band;
+
+    for (const Eigen::Vector2f& p : *point_cloud) {
+        if (robot_body.contains(p)) continue;
+
+        const float p_f = p.dot(dir_f);
+        const float p_lat = p.dot(dir_l);
+
+        // Finding the t in [0, executed_length] where this point p is in the pependicular-to-u inflated body slab as
+        // that is when this point affects the clearance value, ie, back <= (p_f - t) <= front  =>  t ∈ [p_f - front,
+        // p_f - back]
+        const float t0 = p_f - front;
+        const float t1 = p_f - back;
+        // Skip if it never enters for t>=0 the perp-slab or enters beyond executed length
+        if (t1 < 0.0f || t0 > move->length) continue;
+        // Skip if it is outside the lateral clearance search band
+        if (p_lat < lat_search_min || p_lat > lat_search_max) continue;
+
+        float lateral_dist = 0.0f;
+        if (p_lat < lat_min)
+            lateral_dist = lat_min - p_lat;
+        else if (p_lat > lat_max)
+            lateral_dist = p_lat - lat_max;
+        else
+            lateral_dist = 0.0f;  // inside inflated body slab => clearance 0. Note: this is NOT =contains(). This is a
+                                  // conservative approximation
+
+        clearance = std::min(clearance, lateral_dist);
+        if (clearance <= 0.0f) break;
+    }
+    move->clearance = std::max(0.0f, clearance);
+
+    // --------------------
+    // 3) LOS Clearance: clearance from endpoint to local_target
+    // --------------------
+    const Eigen::Vector2f endpoint = move->length * move->direction;
+    move->los_clearance = motion_primitives::LOSClearanceToLine(geometry::Line2f(endpoint, local_target), *point_cloud);
 }
 
 }  // namespace motion_primitives

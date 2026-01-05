@@ -19,18 +19,18 @@
 */
 //========================================================================
 
-#include <float.h>
 #include <math.h>
 #include <stdio.h>
 
 #include <algorithm>
 #include <memory>
 #include <vector>
-
-#include "shared/math/line2d.h"
 #include "shared/math/poses_2d.h"
+#include "shared/math/line2d.h"
 #include "eigen3/Eigen/Dense"
 
+#include <cfloat>
+#include <cmath>
 #include "shared/math/math_util.h"
 #include "motion_primitives.h"
 #include "navigation_parameters.h"
@@ -46,6 +46,31 @@ using namespace math_util;
 using namespace geometry;
 
 namespace motion_primitives {
+
+// Simple lateral point-to-segment clearance from l.p0 to l.p1.
+// Returns FLT_MAX if no points project onto the segment.
+float LOSClearanceToLine(const Line2f& l, const vector<Vector2f>& points) {
+    const Vector2f seg = l.p1 - l.p0;
+    const float len = seg.norm();
+
+    // Zero-length segment (endpoint == goal) => trivially clear.
+    if (len <= 1e-6f) return FLT_MAX;
+
+    const Vector2f dir = seg / len;
+
+    float min_r2 = FLT_MAX;  // track squared lateral distance; sqrt at end
+    for (const Vector2f& p : points) {
+        const Vector2f r = p - l.p0;
+        const float x = dir.dot(r);
+        if (x < 0.0f || x > len) continue;         // projection outside segment
+        const float r2 = r.squaredNorm() - x * x;  // lateral distance^2
+        if (r2 < min_r2) {
+            min_r2 = r2;
+            if (min_r2 <= 0.0f) return 0.0f;
+        }
+    }
+    return (min_r2 == FLT_MAX) ? FLT_MAX : std::sqrt(std::max(0.0f, min_r2));
+}
 
 float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, const float v_now, const float x_final,
                               const float v_final, const float dt) {
@@ -76,26 +101,6 @@ float Run1DTimeOptimalControl(const MotionLimits& limits, const float x_now, con
         velocity_cmd = max<float>(0, speed - dv_d);
     }
     return velocity_cmd;
-}
-
-float LOSClearanceToLine(const Line2f& l, const vector<Vector2f>& points) {
-    const Vector2f seg = l.p1 - l.p0;
-    const float len = seg.norm();
-    if (len <= 0.0f) return 0.0f;
-    const Vector2f dir = seg / len;
-
-    float min_r2 = FLT_MAX;  // track squared lateral distance; sqrt at end
-    for (const Vector2f& p : points) {
-        const Vector2f r = p - l.p0;
-        const float x = dir.dot(r);
-        if (x < 0.0f || x > len) continue;         // projection outside segment
-        const float r2 = r.squaredNorm() - x * x;  // lateral distance^2
-        if (r2 < min_r2) {
-            min_r2 = r2;
-            if (min_r2 == 0.0f) return 0.0f;  // exact hit
-        }
-    }
-    return (min_r2 == FLT_MAX) ? FLT_MAX : std::sqrt(std::max(0.0f, min_r2));
 }
 
 }  // namespace motion_primitives

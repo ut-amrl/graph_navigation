@@ -62,6 +62,9 @@ struct PathRolloutBase {
     // The obstacle clearance along the path.
     virtual float Clearance() const = 0;
 
+    // The clearance of the line segment from path endpoint to local target (LOS clearance).
+    virtual float LOSClearance() const = 0;
+
     // Get actuation commands for the robot to execute this rollout in terms of
     // the robot's linear and angular velocity commands for the specified control
     // period.
@@ -149,8 +152,8 @@ struct PathEvaluatorBase {
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits, const float x_init, const float v_init,
                               const float x_final, const float v_final, const float dt);
 
-// Compute clearance (min perpendicular distance) from obstacles to a line segment.
-// Treats robot as a point - used for line-of-sight heuristics, not collision checking.
+// Compute clearance from a line segment to obstacle points.
+// Returns FLT_MAX if no points project onto the segment.
 float LOSClearanceToLine(const geometry::Line2f& l, const std::vector<Eigen::Vector2f>& points);
 
 }  // namespace motion_primitives

@@ -75,8 +75,9 @@ struct NavigationParameters {
     float robot_length;
     // Offset of geometric center c_g from base_link origin (in base_link frame).
     GeometricCenterOffset geometric_center_offset;
-    float max_free_path_length;
-    float max_clearance;
+    float max_rollout_length;  // Max rollout/commanded segment length
+    float max_lookahead_fpl;   // Max lookahead for free path length computation
+    float clearance_band;
     // Half-angle of the lidar field of view cone (radians).
     // Full FOV cone is ±lidar_fov_half_angle. Used to determine when obstacle avoidance can run safely.
     float lidar_fov_half_angle;
@@ -133,8 +134,9 @@ struct NavigationParameters {
           robot_width(0.44),
           robot_length(0.5),
           geometric_center_offset(0, 0),
-          max_free_path_length(10.0),
-          max_clearance(1.0),
+          max_rollout_length(10.0),
+          max_lookahead_fpl(10.0),
+          clearance_band(1.0),
           lidar_fov_half_angle(1.57),
           can_traverse_stairs(false),
           target_dist_tolerance(0.1),

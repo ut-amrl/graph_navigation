@@ -47,6 +47,8 @@ float ConstantCurvatureArcPath::AngularLength() const { return angular_length; }
 
 float ConstantCurvatureArcPath::Clearance() const { return clearance; }
 
+float ConstantCurvatureArcPath::LOSClearance() const { return los_clearance; }
+
 void ConstantCurvatureArcPath::GetControls(const MotionLimits& linear_limits, const MotionLimits& angular_limits,
                                            const float dt, const Vector2f& vel, const float ang_vel, Vector2f& vel_cmd,
                                            float& ang_vel_cmd) const {

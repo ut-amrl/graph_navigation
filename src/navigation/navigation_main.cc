@@ -108,8 +108,9 @@ CONFIG_FLOAT(robot_width, "NavigationParameters.robot_width");
 CONFIG_FLOAT(robot_length, "NavigationParameters.robot_length");
 CONFIG_FLOAT(geometric_center_offset_x, "NavigationParameters.geometric_center_offset.x");
 CONFIG_FLOAT(geometric_center_offset_y, "NavigationParameters.geometric_center_offset.y");
-CONFIG_FLOAT(max_free_path_length, "NavigationParameters.max_free_path_length");
-CONFIG_FLOAT(max_clearance, "NavigationParameters.max_clearance");
+CONFIG_FLOAT(max_rollout_length, "NavigationParameters.max_rollout_length");
+CONFIG_FLOAT(max_lookahead_fpl, "NavigationParameters.max_lookahead_fpl");
+CONFIG_FLOAT(clearance_band, "NavigationParameters.clearance_band");
 CONFIG_FLOAT(lidar_fov_half_angle, "NavigationParameters.lidar_fov_half_angle");
 CONFIG_BOOL(can_traverse_stairs, "NavigationParameters.can_traverse_stairs");
 CONFIG_FLOAT(target_dist_tolerance, "NavigationParameters.target_dist_tolerance");
@@ -237,9 +238,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         current_map_sub_ = this->create_subscription<std_msgs::msg::String>(
             CONFIG_current_map_topic, 1, std::bind(&NavigationNode::CurrentMapCallback, this, std::placeholders::_1));
 
-        // Create timer for main loop
-        timer_ = this->create_wall_timer(std::chrono::duration<double>(params_.dt),
-                                         std::bind(&NavigationNode::TimerCallback, this));
+        // Create timer for main loop (respects use_sim_time parameter)
+        timer_ = rclcpp::create_timer(
+            this,
+            this->get_clock(),
+            std::chrono::duration<double>(params_.dt),
+            std::bind(&NavigationNode::TimerCallback, this));
 
         RCLCPP_INFO(this->get_logger(), "Navigation node initialized");
     }
@@ -370,7 +374,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // const double timer_callback_start_time = this->get_clock()->now().seconds();
         // std::string start_msg = "TimerCallback started at timestamp: " + std::to_string(timer_callback_start_time);
         // navigation::navigation_debug::DebugLog(start_msg);
-        // const auto timer_start = std::chrono::steady_clock::now();
+        const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
         visualization::ClearVisualizationMsg(local_viz_msg_);
@@ -406,13 +410,15 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             SendCommand(cmd_vel, cmd_angle_vel, cmd_plan_start_time);
         }
 
-        // const auto timer_end = std::chrono::steady_clock::now();
-        // const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
+        const auto timer_end = std::chrono::steady_clock::now();
+        const double total_ms = std::chrono::duration<double, std::milli>(timer_end - timer_start).count();
 
         // Log end-to-end TimerCallback duration
         // std::string timer_msg = std::string("[") + std::to_string(static_cast<int>(navigation_.nav_state_)) +
         //                         "] TimerCallback took " + std::to_string(total_ms) + " ms";
         // navigation::navigation_debug::DebugLog(timer_msg);
+        
+        // printf("[%d] TimerCallback took %.3f ms\n", static_cast<int>(navigation_.nav_state_), total_ms);
     }
 
     // Helper functions
@@ -735,6 +741,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         constexpr uint32_t kCandidatePathColor = 0x80A0FF;  // Light blue for non-winning paths
         for (const auto& rollout : path_rollouts) {
             if (rollout->Length() <= 0.0f) continue;  // Skip zero-length paths (not in optimization)
+            // ?? TODO: move los-based resampling to actual GetSamples instead of in linear evaluator, then remove this
+            // filtered visualization so that you visualize all samples as is
 
             // Handle constant curvature arc paths
             const auto* arc = dynamic_cast<const motion_primitives::ConstantCurvatureArcPath*>(rollout.get());
@@ -768,17 +776,19 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
                 const Eigen::Vector2f endpoint = best_omni->EndPoint().translation;
                 visualization::DrawLine(Eigen::Vector2f(0, 0), endpoint, 0xFF0000, local_viz_msg_);
 
-                // Draw clearance corridor: robot body extent + clearance on each side
-                // Path centerline is at base_link origin; support() gives distance from base_link to robot edge
+                // Draw clearance corridor: inflated robot body extent + clearance on each side
+                // Clearance is computed w.r.t. inflated body, so corridor shows inflated body + extra clearance
                 const Eigen::Vector2f dir_lateral(-best_omni->direction.y(), best_omni->direction.x());
-                const motion_primitives::OffsetRect robot_body = {
+                const motion_primitives::OffsetRect robot_inflated = {
                     Eigen::Vector2f(navigation_.params_.geometric_center_offset.x,
                                     navigation_.params_.geometric_center_offset.y),
-                    0.5f * navigation_.params_.robot_length, 0.5f * navigation_.params_.robot_width};
+                    0.5f * navigation_.params_.robot_length + navigation_.params_.obstacle_margin,
+                    0.5f * navigation_.params_.robot_width + navigation_.params_.obstacle_margin};
                 const float clearance = best_omni->Clearance();
-                // Corridor edge = body extent (from base_link) + clearance
-                const Eigen::Vector2f offset_left = (clearance + robot_body.support(dir_lateral)) * dir_lateral;
-                const Eigen::Vector2f offset_right = (clearance + robot_body.support(-dir_lateral)) * (-dir_lateral);
+                // Corridor edge = inflated body extent (from base_link) + clearance
+                const Eigen::Vector2f offset_left = (clearance + robot_inflated.support(dir_lateral)) * dir_lateral;
+                const Eigen::Vector2f offset_right =
+                    (clearance + robot_inflated.support(-dir_lateral)) * (-dir_lateral);
                 constexpr uint32_t kCorridorColor = 0xFF8080;  // Light red
                 visualization::DrawLine(offset_left, endpoint + offset_left, kCorridorColor, local_viz_msg_);
                 visualization::DrawLine(offset_right, endpoint + offset_right, kCorridorColor, local_viz_msg_);
@@ -800,8 +810,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->robot_length = CONFIG_robot_length;
         params->geometric_center_offset.x = CONFIG_geometric_center_offset_x;
         params->geometric_center_offset.y = CONFIG_geometric_center_offset_y;
-        params->max_free_path_length = CONFIG_max_free_path_length;
-        params->max_clearance = CONFIG_max_clearance;
+        params->max_rollout_length = CONFIG_max_rollout_length;
+        params->max_lookahead_fpl = CONFIG_max_lookahead_fpl;
+        params->clearance_band = CONFIG_clearance_band;
         params->lidar_fov_half_angle = CONFIG_lidar_fov_half_angle;
         params->can_traverse_stairs = CONFIG_can_traverse_stairs;
         params->target_dist_tolerance = CONFIG_target_dist_tolerance;

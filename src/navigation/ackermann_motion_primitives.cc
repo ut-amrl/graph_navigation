@@ -56,7 +56,7 @@ AckermannSampler::AckermannSampler() {}
 void AckermannSampler::SetMaxPathLength(ConstantCurvatureArcPath* path_ptr) {
     ConstantCurvatureArcPath& path = *path_ptr;
     if (fabs(path.curvature) < kEpsilon) {
-        path.length = min(nav_params.max_free_path_length, local_target.x());
+        path.length = min(nav_params.max_rollout_length, local_target.x());
         path.fpl = path.length;
         return;
     }
@@ -67,7 +67,7 @@ void AckermannSampler::SetMaxPathLength(ConstantCurvatureArcPath* path_ptr) {
     const Vector2f middle_radial = fabs(turn_radius) * target_radial.normalized();
     const float middle_angle = atan2(fabs(middle_radial.x()), fabs(middle_radial.y()));
     const float dist_closest_to_goal = middle_angle * fabs(turn_radius);
-    path.fpl = min<float>({nav_params.max_free_path_length, quarter_circle_dist});
+    path.fpl = min<float>({nav_params.max_lookahead_fpl, quarter_circle_dist});
     path.length = min<float>({path.fpl, dist_closest_to_goal});
     const float stopping_dist = Sq(vel.x()) / (2.0 * nav_params.linear_limits.max_deceleration);
     path.length = max(path.length, stopping_dist);
@@ -172,14 +172,14 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
             path.fpl = std::min(path.fpl, p.x() - x_max);
         }
 
-        // Clearance over the executed segment [0, fpl].
-        path.clearance = nav_params.max_clearance;
+        // Clearance over the executed segment [0, length].
+        path.clearance = nav_params.clearance_band;
         for (const Vector2f& p : *point_cloud) {
             // Skip body points (NO margin).
             if (p.x() > x_min_body && p.x() < x_max_body && p.y() > y_min_body && p.y() < y_max_body) {
                 continue;
             }
-            if (p.x() - x_max > path.fpl || p.x() < 0.0f) continue;
+            if (p.x() - x_max > path.length || p.x() < 0.0f) continue;
 
             const float lateral_dist =
                 (p.y() < nav_params.geometric_center_offset.y) ? (y_min - p.y()) : (p.y() - y_max);
@@ -214,7 +214,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
     const float r3_sq = (outer_front_corner - c).squaredNorm();
 
     float angle_min = M_PI;
-    path.obstruction = Vector2f(-nav_params.max_free_path_length, 0);
+    path.obstruction = Vector2f(-nav_params.max_lookahead_fpl, 0);
 
     using std::isfinite;
     for (const Vector2f& p : *point_cloud) {
@@ -268,7 +268,7 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
 
     path.length = std::max(0.0f, path.length);
     angle_min = std::min<float>(angle_min, path.length * std::fabs(path.curvature));
-    path.clearance = nav_params.max_clearance;
+    path.clearance = nav_params.clearance_band;
 
     for (const Vector2f& p : *point_cloud) {
         const float theta = (path.curvature > 0.0f) ? std::atan2<float>(p.x(), path_radius - p.y())
@@ -282,6 +282,11 @@ void AckermannSampler::CheckObstacles(ConstantCurvatureArcPath* path_ptr) {
         }
     }
     path.clearance = std::max(0.0f, path.clearance);
+
+    // LOS Clearance: clearance from endpoint to local_target
+    const pose_2d::Pose2Df endpoint = path.EndPoint();
+    path.los_clearance =
+        motion_primitives::LOSClearanceToLine(geometry::Line2f(endpoint.translation, local_target), *point_cloud);
 }
 
 }  // namespace motion_primitives
