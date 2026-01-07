@@ -39,6 +39,11 @@ NavigationParameters = {
   do_ang_toc = false;
   max_plan_deviation = 0.5;
   laser_height = 0.324;
+  stuck_meta_control = {
+    override_obstacle_margin = 0.1;
+    stuck_timeout_sec = 10.0;
+    improve_eps = 0.02;
+  };
 };
 
 ROSTopics = {
@@ -62,6 +67,7 @@ ROSTopics = {
   path_topic = "trajectory";
   carrot_topic = "carrot";
   current_map_topic = "/current_map";
+  robot_geometry_topic = "/robot_geometry_update"; -- [width, length, offset_x, offset_y, obstacle_margin, do_ang_toc(0/1)]
 };
 
 ROSFrames = {

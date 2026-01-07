@@ -28,6 +28,8 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <mutex>
+#include <limits>
 
 // ROS2 includes
 #include <rclcpp/rclcpp.hpp>
@@ -41,6 +43,7 @@
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/point_cloud.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -124,6 +127,9 @@ CONFIG_STRING(motion_primitives_mode, "NavigationParameters.motion_primitives_mo
 CONFIG_BOOL(do_ang_toc, "NavigationParameters.do_ang_toc");
 CONFIG_FLOAT(max_plan_deviation, "NavigationParameters.max_plan_deviation");
 CONFIG_FLOAT(laser_height, "NavigationParameters.laser_height");
+CONFIG_FLOAT(stuck_meta_override_obstacle_margin, "NavigationParameters.stuck_meta_control.override_obstacle_margin");
+CONFIG_FLOAT(stuck_meta_stuck_timeout_sec, "NavigationParameters.stuck_meta_control.stuck_timeout_sec");
+CONFIG_FLOAT(stuck_meta_improve_eps, "NavigationParameters.stuck_meta_control.improve_eps");
 
 // Command Mapping
 CONFIG_BOOL(apply_custom_cmd_map, "CommandMapping.apply_custom_cmd_map");
@@ -157,6 +163,7 @@ CONFIG_STRING(reset_nav_goals_topic, "ROSTopics.reset_nav_goals_topic");
 CONFIG_STRING(halt_topic, "ROSTopics.halt_topic");
 CONFIG_STRING(twist_drive_topic, "ROSTopics.twist_drive_topic");
 CONFIG_STRING(current_map_topic, "ROSTopics.current_map_topic");
+CONFIG_STRING(robot_geometry_topic, "ROSTopics.robot_geometry_topic");
 
 // ROS Frames
 CONFIG_STRING(map_frame, "ROSFrames.map_frame");
@@ -185,8 +192,13 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         config_reader::ConfigReader reader({FLAGS_robot_config});
         LoadConfig(&params_);
 
+        // Save baseline (original Lua config). We will always reset to THIS after reaching the active goal.
+        config_params_ = params_;
+
         // Load map
         std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
+        current_map_name_ = FLAGS_map;
+        current_map_path_ = map_path;
         if (!FileExists(map_path)) {
             RCLCPP_ERROR(this->get_logger(), "Could not find navigation map file at %s", map_path.c_str());
             throw std::runtime_error("Map file not found");
@@ -239,6 +251,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             CONFIG_halt_topic, 1, std::bind(&NavigationNode::HaltCallback, this, std::placeholders::_1));
         current_map_sub_ = this->create_subscription<std_msgs::msg::String>(
             CONFIG_current_map_topic, 1, std::bind(&NavigationNode::CurrentMapCallback, this, std::placeholders::_1));
+        robot_geom_sub_ = this->create_subscription<std_msgs::msg::Float32MultiArray>(
+            CONFIG_robot_geometry_topic, 1, std::bind(&NavigationNode::RobotGeomCallback, this, std::placeholders::_1));
 
         // Create timer for main loop (respects use_sim_time parameter)
         timer_ = rclcpp::create_timer(this, this->get_clock(), std::chrono::duration<double>(params_.dt),
@@ -273,6 +287,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_nav_goals_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr halt_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr current_map_sub_;
+    rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr robot_geom_sub_;
 
     // Service
     rclcpp::Service<graph_navigation::srv::GraphNav>::SharedPtr nav_service_;
@@ -284,6 +299,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     navigation::Navigation navigation_;
     navigation::NavigationParameters params_;
 
+    // Snapshot of the ORIGINAL config (Lua) params. Used for meta-reset when goal completes.
+    navigation::NavigationParameters config_params_;
+
     // State variables
     bool run_;
     bool received_odom_;
@@ -291,6 +309,47 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     navigation::Odom odom_;
     std::vector<Eigen::Vector2f> point_cloud_;
     std::string current_map_name_;
+    std::string current_map_path_;
+
+    // --- "Stuck" meta-controller state ---
+    struct StuckMetaState {
+        bool initialized = false;
+        bool override_active = false;
+
+        // Final fallback latch: we already retargeted the goal to best_loc_map.
+        bool final_goal_applied = false;
+
+        // For sim-time jumps/backwards detection
+        double last_time = 0.0;
+
+        // Lowest distance-to-goal observed since we started tracking (for this goal/meta reset).
+        float best_dist = std::numeric_limits<float>::infinity();
+
+        // Robot pose (MAP frame) at which best_dist was achieved.
+        Eigen::Vector2f best_loc_map = Eigen::Vector2f(0.0f, 0.0f);
+
+        // time when best_dist was last improved
+        double best_time = 0.0;
+    };
+
+    StuckMetaState stuck_meta_;
+
+    // Track nav_state across ticks so we detect transitions that happen BETWEEN callbacks too.
+    navigation::NavigationState last_nav_state_ = navigation::NavigationState::kStopped;
+
+    // Pending geometry update buffer
+    struct PendingGeomUpdate {
+        float width = 0.0f;
+        float length = 0.0f;
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        float margin = 0.0f;
+        bool do_ang_toc = false;
+    };
+
+    std::mutex geom_update_mutex_;
+    bool geom_update_pending_ = false;
+    PendingGeomUpdate pending_geom_update_;
 
     // Visualization
     amrl_msgs::msg::VisualizationMsg local_viz_msg_;
@@ -352,8 +411,52 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         if (current_map_name_ != msg->data) {
             RCLCPP_INFO(this->get_logger(), "Current map changed to: %s", msg->data.c_str());
             current_map_name_ = msg->data;
-            navigation_.UpdateMap(navigation::GetMapPath(FLAGS_maps_dir, msg->data));
+            current_map_path_ = navigation::GetMapPath(FLAGS_maps_dir, msg->data);
+            navigation_.UpdateMap(current_map_path_);
         }
+    }
+
+    void RobotGeomCallback(const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
+        if (msg->data.size() < 6) {
+            RCLCPP_WARN(this->get_logger(),
+                        "Robot geometry update ignored: expected 6 floats "
+                        "[width,length,offset_x,offset_y,margin,do_ang_toc], got %zu",
+                        msg->data.size());
+            return;
+        }
+
+        // Sentinel value for "do not modify" parameters
+        constexpr float kNoModify = -99.0f;
+
+        // Apply "do not change" sentinel values (kNoModify) - use current values as defaults
+        const float width = (msg->data[0] == kNoModify) ? navigation_.params_.robot_width : msg->data[0];
+        const float length = (msg->data[1] == kNoModify) ? navigation_.params_.robot_length : msg->data[1];
+        const float offset_x =
+            (msg->data[2] == kNoModify) ? navigation_.params_.geometric_center_offset.x : msg->data[2];
+        const float offset_y =
+            (msg->data[3] == kNoModify) ? navigation_.params_.geometric_center_offset.y : msg->data[3];
+        const float margin = (msg->data[4] == kNoModify) ? navigation_.params_.obstacle_margin : msg->data[4];
+        const float do_ang_toc_raw = msg->data[5];
+        const bool do_ang_toc =
+            (do_ang_toc_raw == kNoModify) ? navigation_.params_.do_ang_toc : (do_ang_toc_raw != 0.0f);
+
+        PendingGeomUpdate u;
+        u.width = width;
+        u.length = length;
+        u.offset_x = offset_x;
+        u.offset_y = offset_y;
+        u.margin = margin;
+        u.do_ang_toc = do_ang_toc;
+
+        {
+            std::lock_guard<std::mutex> lock(geom_update_mutex_);
+            pending_geom_update_ = u;  // last-write-wins
+            geom_update_pending_ = true;
+        }
+
+        RCLCPP_INFO(this->get_logger(),
+                    "Queued robot geometry update: width=%.3f length=%.3f offset=(%.3f,%.3f) margin=%.3f do_ang_toc=%s",
+                    u.width, u.length, u.offset_x, u.offset_y, u.margin, u.do_ang_toc ? "true" : "false");
     }
 
     void PlanServiceCallback(const std::shared_ptr<graph_navigation::srv::GraphNav::Request> request,
@@ -368,8 +471,240 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         response->plan = plan;
     }
 
+    void ApplyPendingGeometryUpdate() {
+        // If meta override is active, ignore external geometry updates until reset-on-stop.
+        if (stuck_meta_.override_active) {
+            std::lock_guard<std::mutex> lock(geom_update_mutex_);
+            geom_update_pending_ = false;
+            return;
+        }
+
+        PendingGeomUpdate u;
+        {
+            std::lock_guard<std::mutex> lock(geom_update_mutex_);
+            if (!geom_update_pending_) return;
+            u = pending_geom_update_;
+            geom_update_pending_ = false;
+        }
+
+        // Keep the node's params_ consistent too (future-proof; avoids mixed usage).
+        params_.robot_width = u.width;
+        params_.robot_length = u.length;
+        params_.geometric_center_offset.x = u.offset_x;
+        params_.geometric_center_offset.y = u.offset_y;
+        params_.obstacle_margin = u.margin;
+        params_.do_ang_toc = u.do_ang_toc;
+
+        // Apply to Navigation (propagates to sampler/evaluator, clears stale plan/samples).
+        navigation_.UpdateGeometryParams(u.width, u.length, u.offset_x, u.offset_y, u.margin, u.do_ang_toc);
+
+        // IMPORTANT: Re-load the current map so the global planning domain can rebuild any geometry-dependent caches.
+        if (!current_map_path_.empty()) {
+            navigation_.UpdateMap(current_map_path_);
+        }
+    }
+
+    void ApplyGeometryUpdateImmediate(float width, float length, float offset_x, float offset_y, float margin,
+                                      bool do_ang_toc) {
+        // Determine what changed BEFORE mutating params_.
+        const bool geom_changed = (params_.robot_width != width) || (params_.robot_length != length) ||
+                                  (params_.geometric_center_offset.x != offset_x) ||
+                                  (params_.geometric_center_offset.y != offset_y) ||
+                                  (params_.obstacle_margin != margin);
+
+        const bool toc_changed = (params_.do_ang_toc != do_ang_toc);
+
+        if (!geom_changed && !toc_changed) return;
+
+        // Keep node params_ consistent.
+        params_.robot_width = width;
+        params_.robot_length = length;
+        params_.geometric_center_offset.x = offset_x;
+        params_.geometric_center_offset.y = offset_y;
+        params_.obstacle_margin = margin;
+        params_.do_ang_toc = do_ang_toc;
+
+        // Apply into Navigation (propagates to sampler/evaluator, clears stale local planner artifacts).
+        navigation_.UpdateGeometryParams(width, length, offset_x, offset_y, margin, do_ang_toc);
+
+        // Only reload the map if geometry (footprint / margin) changed. (do_ang_toc alone does NOT require reload)
+        if (geom_changed && !current_map_path_.empty()) {
+            navigation_.UpdateMap(current_map_path_);
+        }
+    }
+
+    void ResetStuckMetaState() {
+        stuck_meta_ = StuckMetaState();  // resets initialized/best/override/timestamps
+    }
+
+    void RestoreOriginalConfigGeometry() {
+        // Drop any queued external geometry update so it doesn't re-apply AFTER we restore baseline.
+        {
+            std::lock_guard<std::mutex> lock(geom_update_mutex_);
+            geom_update_pending_ = false;
+        }
+
+        ApplyGeometryUpdateImmediate(config_params_.robot_width, config_params_.robot_length,
+                                     config_params_.geometric_center_offset.x, config_params_.geometric_center_offset.y,
+                                     config_params_.obstacle_margin, config_params_.do_ang_toc);
+    }
+
+    void MetaGeometryController(double now_sec, bool nav_succeeded) {
+        const navigation::NavigationState cur_state = navigation_.nav_state_;
+        const navigation::NavigationState prev_state = last_nav_state_;
+
+        // --- Reset meta + restore baseline geometry when we ENTER Stopped. ---
+        if (cur_state == navigation::NavigationState::kStopped) {
+            if (prev_state != navigation::NavigationState::kStopped) {
+                ResetStuckMetaState();
+                RestoreOriginalConfigGeometry();
+            }
+            return;
+        }
+
+        // If we START navigating from Stopped, reset meta tracking.
+        if (prev_state == navigation::NavigationState::kStopped) {
+            ResetStuckMetaState();
+        }
+
+        // Only evaluate stuck logic if we produced a navigation output and are actively navigating.
+        if (!nav_succeeded || cur_state != navigation::NavigationState::kGoto) return;
+
+        // If we've already declared the original goal unreachable and retargeted,
+        // do nothing else until we enter kStopped (reset happens there).
+        if (stuck_meta_.final_goal_applied) {
+            stuck_meta_.last_time = now_sec;
+            return;
+        }
+
+        constexpr double kTimeBackwardsEps = 1e-3;
+        constexpr float kMarginEps = 1e-4f;
+
+        const float override_margin = params_.stuck_meta_override_obstacle_margin;
+        const double timeout_sec = params_.stuck_meta_stuck_timeout_sec;
+        const float improve_eps = params_.stuck_meta_improve_eps;
+        const char* toc_str = params_.do_ang_toc ? "true" : "false";
+
+        const Eigen::Vector2f robot_fp = navigation_.robot_loc_fp_;  // MAP frame
+        const Eigen::Vector2f goal_map = navigation_.nav_goal_loc_;  // MAP frame
+        const float dist_to_goal = (goal_map - robot_fp).norm();
+        if (!std::isfinite(dist_to_goal)) return;
+
+        auto DropPendingGeomUpdate = [&]() {
+            std::lock_guard<std::mutex> lock(geom_update_mutex_);
+            geom_update_pending_ = false;
+        };
+
+        auto ApplyOverride = [&]() {
+            stuck_meta_.override_active = true;
+            ApplyGeometryUpdateImmediate(params_.robot_width, params_.robot_length, params_.geometric_center_offset.x,
+                                         params_.geometric_center_offset.y, override_margin, params_.do_ang_toc);
+        };
+
+        auto EnsureBestInitialized = [&]() {
+            if (!stuck_meta_.initialized) {
+                stuck_meta_.initialized = true;
+                stuck_meta_.best_dist = dist_to_goal;
+                stuck_meta_.best_loc_map = robot_fp;  // MAP frame
+            }
+        };
+
+        // --- Near-goal: goal is effectively inside inflated footprint -> immediately relax margin once. ---
+        if (!stuck_meta_.override_active) {
+            const float max_body_dim =
+                (params_.robot_width > params_.robot_length) ? params_.robot_width : params_.robot_length;
+            const float trigger_dist = max_body_dim + 2.0f * params_.obstacle_margin;
+            if (dist_to_goal < trigger_dist) {
+                ApplyOverride();
+                EnsureBestInitialized();
+                stuck_meta_.best_time = now_sec;  // fresh timeout window (prevents instant "unreachable")
+                stuck_meta_.last_time = now_sec;
+
+                RCLCPP_WARN(this->get_logger(),
+                            "[meta] Goal near; applying override: obstacle_margin=%.2f, do_ang_toc=%s", override_margin,
+                            toc_str);
+                return;
+            }
+        }
+
+        // Pause the stuck timer while not in obstacle-avoidance mode BEFORE we apply the override.
+        // Once override_active is true, we intentionally keep counting time even if OA toggles off, so stage-2 can
+        // trigger.
+        if (!navigation_.in_obstacle_avoidance_mode_ && !stuck_meta_.override_active) {
+            if (now_sec + kTimeBackwardsEps < stuck_meta_.last_time) {
+                ResetStuckMetaState();
+            } else if (stuck_meta_.initialized && stuck_meta_.last_time > 0.0) {
+                const double pause_dt = now_sec - stuck_meta_.last_time;
+                if (pause_dt > 0.0) stuck_meta_.best_time += pause_dt;
+            }
+            stuck_meta_.last_time = now_sec;
+            return;
+        }
+
+        // Handle time going backwards (sim time reset/jump).
+        if (now_sec + kTimeBackwardsEps < stuck_meta_.last_time) {
+            ResetStuckMetaState();
+        }
+        stuck_meta_.last_time = now_sec;
+
+        // --- "lowest it ever was" rule ---
+        // Update best-ever distance if uninitialized or improved by >= eps.
+        if (!stuck_meta_.initialized || dist_to_goal < stuck_meta_.best_dist - improve_eps) {
+            stuck_meta_.initialized = true;
+            stuck_meta_.best_dist = dist_to_goal;
+            stuck_meta_.best_loc_map = robot_fp;
+            stuck_meta_.best_time = now_sec;
+            return;
+        }
+
+        const double wait_time = now_sec - stuck_meta_.best_time;
+        if (wait_time < timeout_sec) {
+            RCLCPP_INFO(this->get_logger(),
+                        "[meta] No new best goal distance for %.2fs / %.1fs (best=%.3f, current=%.3f)", wait_time,
+                        timeout_sec, stuck_meta_.best_dist, dist_to_goal);
+            return;
+        }
+
+        // --- Timed out without improvement: stage-1 override OR stage-2 "unreachable goal" fallback. ---
+        const bool at_override_margin = (std::fabs(params_.obstacle_margin - override_margin) <= kMarginEps);
+        if (at_override_margin) {
+            stuck_meta_.override_active = true;  // keep suppressing external geom updates until stop
+            stuck_meta_.final_goal_applied = true;
+
+            Eigen::Vector2f fallback_goal = stuck_meta_.best_loc_map;
+            if (!std::isfinite(fallback_goal.x()) || !std::isfinite(fallback_goal.y())) {
+                fallback_goal = robot_fp;
+            }
+
+            const float keep_goal_angle = navigation_.nav_goal_angle_;
+            const Eigen::Vector2f original_goal = navigation_.nav_goal_loc_;
+
+            DropPendingGeomUpdate();
+            navigation_.SetNavGoal(fallback_goal, keep_goal_angle);
+
+            RCLCPP_ERROR(this->get_logger(),
+                         "[meta] Goal unreachable after override (margin=%.2f). Retargeting to closest point: "
+                         "best_dist=%.3f best_loc=(%.3f, %.3f) original_goal=(%.3f, %.3f)",
+                         override_margin, stuck_meta_.best_dist, fallback_goal.x(), fallback_goal.y(),
+                         original_goal.x(), original_goal.y());
+            return;
+        }
+
+        // Stage-1: apply reduced obstacle margin and give it a fresh timeout window.
+        ApplyOverride();
+        stuck_meta_.best_time = now_sec;
+
+        RCLCPP_WARN(this->get_logger(),
+                    "[meta] Stuck: no NEW best goal distance for %.1fs (best=%.3f, current=%.3f). "
+                    "Applying override: obstacle_margin=%.2f, do_ang_toc=%s",
+                    timeout_sec, stuck_meta_.best_dist, dist_to_goal, override_margin, toc_str);
+    }
+
     void TimerCallback() {
         if (!run_) return;
+
+        ApplyPendingGeometryUpdate();
+
         // const auto timer_start = std::chrono::steady_clock::now();
 
         // Clear visualization messages
@@ -381,6 +716,12 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         float cmd_angle_vel(0);
         const double cmd_plan_start_time = this->get_clock()->now().seconds();
         bool nav_succeeded = navigation_.Run(cmd_plan_start_time, cmd_vel, cmd_angle_vel);
+
+        // Meta-controller (stuck detection + param override/reset).
+        MetaGeometryController(cmd_plan_start_time, nav_succeeded);
+
+        // Update last-nav-state AFTER meta logic so transitions are detected correctly next tick.
+        last_nav_state_ = navigation_.nav_state_;
 
         PublishNavStatus();
 
@@ -816,6 +1157,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         params->do_ang_toc = CONFIG_do_ang_toc;
         params->max_plan_deviation = CONFIG_max_plan_deviation;
         params->laser_height = CONFIG_laser_height;
+        params->stuck_meta_override_obstacle_margin = CONFIG_stuck_meta_override_obstacle_margin;
+        params->stuck_meta_stuck_timeout_sec = CONFIG_stuck_meta_stuck_timeout_sec;
+        params->stuck_meta_improve_eps = CONFIG_stuck_meta_improve_eps;
         params->apply_custom_cmd_map = CONFIG_apply_custom_cmd_map;
         params->cmd_map_x_slope_pos = CONFIG_cmd_map_x_slope_pos;
         params->cmd_map_x_intercept_pos = CONFIG_cmd_map_x_intercept_pos;

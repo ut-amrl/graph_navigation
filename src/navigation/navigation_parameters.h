@@ -110,6 +110,11 @@ struct NavigationParameters {
     // Height of laser sensor above robot base frame (for visualization)
     float laser_height;
 
+    // Stuck meta-controller parameters
+    float stuck_meta_override_obstacle_margin;
+    float stuck_meta_stuck_timeout_sec;
+    float stuck_meta_improve_eps;
+
     // Command mapping parameters
     bool apply_custom_cmd_map;
     // Linear model for x-axis velocity mapping: v_mapped = slope * v + intercept

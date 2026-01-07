@@ -118,6 +118,25 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
 
     const bool require_los = (!in_penetration && any_path_has_los);
 
+    // Dynamic subopt tolerance:
+    // Far from target: use FLAGS_subopt_tolerance
+    // Near target: tighten toward 1.1 (nonlinear), to focus more on goal-reaching
+    constexpr float kTolNear = 1.25f;
+    constexpr float kTolMaxDist = 5.0f;  // meters
+
+    const float dist_to_target = local_target.norm();  // robot is at origin in local frame
+    float subopt_tol_eff = FLAGS_subopt_tolerance;
+
+    if (subopt_tol_eff > kTolNear) {
+        const float t = std::clamp(dist_to_target / kTolMaxDist, 0.0f, 1.0f);
+        // Smoothstep S-curve (nonlinear): s=0 at t=0, s=1 at t=1, zero slope at ends.
+        const float s = t * t * (3.0f - 2.0f * t);
+        subopt_tol_eff = kTolNear + (FLAGS_subopt_tolerance - kTolNear) * s;
+    } else {
+        // If user set tolerance tighter than 1.1 already, respect it (no "increase" near goal).
+        subopt_tol_eff = FLAGS_subopt_tolerance;
+    }
+
     // Pass 1: compute best (minimum) total_dist among eligible paths
     float best_total_dist = FLT_MAX;
     for (size_t i = 0; i < N; ++i) {
@@ -131,7 +150,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
     }
 
     // Pass 2: choose max reward among near-optimal total distance candidates
-    const float max_allowed_dist = in_penetration ? FLT_MAX : (FLAGS_subopt_tolerance * best_total_dist);
+    const float max_allowed_dist = in_penetration ? FLT_MAX : (subopt_tol_eff * best_total_dist);
 
     shared_ptr<PathRolloutBase> best = nullptr;
     size_t best_idx = N;
@@ -151,39 +170,40 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
         }
     }
 
-    // Debug output for path evaluation
-    if (best) {
-        printf("=== Path Evaluation Debug ===\n");
+    // // Debug output for path evaluation
+    // if (best) {
+    //     printf("=== Path Evaluation Debug ===\n");
 
-        const float best_reward_dbg =
-            ComputeReward(best, alignment[best_idx], nav_params.clearance_band, nav_params.max_lookahead_fpl);
-        printf(
-            "BEST: Length=%.3f, FPL=%.3f, Clearance=%.3f, LOS=%c, Align=%.3f, "
-            "ClearanceReward=%.3f, FPLReward=%.3f, Reward=%.3f, BestTotalDist=%.3f, MaxAllowedDist=%.3f\n",
-            best->Length(), best->FPL(), best->Clearance(), best->LOSClearance() > los_radius ? 'Y' : 'N',
-            alignment[best_idx],
-            FLAGS_clearance_reward * ClearanceUtility(best->Clearance(), nav_params.clearance_band),
-            FLAGS_fpl_reward * FPLUtility(best->FPL(), nav_params.max_lookahead_fpl), best_reward_dbg, best_total_dist,
-            max_allowed_dist);
+    //     const float best_reward_dbg =
+    //         ComputeReward(best, alignment[best_idx], nav_params.clearance_band, nav_params.max_lookahead_fpl);
+    //     printf(
+    //         "BEST: Length=%.3f, FPL=%.3f, Clearance=%.3f, LOS=%c, Align=%.3f, "
+    //         "ClearanceReward=%.3f, FPLReward=%.3f, Reward=%.3f, BestTotalDist=%.3f, MaxAllowedDist=%.3f, "
+    //         "SuboptTolEff=%.3f, DistToTarget=%.3f\n",
+    //         best->Length(), best->FPL(), best->Clearance(), best->LOSClearance() > los_radius ? 'Y' : 'N',
+    //         alignment[best_idx],
+    //         FLAGS_clearance_reward * ClearanceUtility(best->Clearance(), nav_params.clearance_band),
+    //         FLAGS_fpl_reward * FPLUtility(best->FPL(), nav_params.max_lookahead_fpl), best_reward_dbg, best_total_dist,
+    //         max_allowed_dist, subopt_tol_eff, dist_to_target);
 
-        printf("ALL SAMPLES:\n");
-        for (size_t i = 0; i < N; ++i) {
-            if (paths[i]->Length() <= 0.0f) continue;
+    //     printf("ALL SAMPLES:\n");
+    //     for (size_t i = 0; i < N; ++i) {
+    //         if (paths[i]->Length() <= 0.0f) continue;
 
-            const float sample_reward =
-                ComputeReward(paths[i], alignment[i], nav_params.clearance_band, nav_params.max_lookahead_fpl);
-            printf(
-                "  [%zu]: Length=%.3f, FPL=%.3f, Clearance=%.3f, LOS=%c, Align=%.3f, "
-                "ClearanceReward=%.3f, FPLReward=%.3f, Reward=%.3f, TotalDist=%.3f, Allowed=%c\n",
-                i, paths[i]->Length(), paths[i]->FPL(), paths[i]->Clearance(),
-                paths[i]->LOSClearance() > los_radius ? 'Y' : 'N', alignment[i],
-                FLAGS_clearance_reward * ClearanceUtility(paths[i]->Clearance(), nav_params.clearance_band),
-                FLAGS_fpl_reward * FPLUtility(paths[i]->FPL(), nav_params.max_lookahead_fpl), sample_reward,
-                total_dist[i], (total_dist[i] <= max_allowed_dist) ? 'Y' : 'N');
-        }
+    //         const float sample_reward =
+    //             ComputeReward(paths[i], alignment[i], nav_params.clearance_band, nav_params.max_lookahead_fpl);
+    //         printf(
+    //             "  [%zu]: Length=%.3f, FPL=%.3f, Clearance=%.3f, LOS=%c, Align=%.3f, "
+    //             "ClearanceReward=%.3f, FPLReward=%.3f, Reward=%.3f, TotalDist=%.3f, Allowed=%c\n",
+    //             i, paths[i]->Length(), paths[i]->FPL(), paths[i]->Clearance(),
+    //             paths[i]->LOSClearance() > los_radius ? 'Y' : 'N', alignment[i],
+    //             FLAGS_clearance_reward * ClearanceUtility(paths[i]->Clearance(), nav_params.clearance_band),
+    //             FLAGS_fpl_reward * FPLUtility(paths[i]->FPL(), nav_params.max_lookahead_fpl), sample_reward,
+    //             total_dist[i], (total_dist[i] <= max_allowed_dist) ? 'Y' : 'N');
+    //     }
 
-        printf("=== End Debug ===\n");
-    }
+    //     printf("=== End Debug ===\n");
+    // }
 
     return best;
 }

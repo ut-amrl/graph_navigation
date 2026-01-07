@@ -263,6 +263,52 @@ void Navigation::ResetNavGoals() {
     yaw_align_sp_init_ = false;
 }
 
+void Navigation::UpdateGeometryParams(float width, float length, float offset_x, float offset_y, float obstacle_margin,
+                                      bool do_ang_toc) {
+    // Basic validation (avoid corrupting planner state with NaNs / invalid geometry)
+    if (!std::isfinite(width) || !std::isfinite(length) || !std::isfinite(offset_x) || !std::isfinite(offset_y) ||
+        !std::isfinite(obstacle_margin)) {
+        LOG(WARNING) << "UpdateGeometryParams ignored: non-finite input(s).";
+        return;
+    }
+    if (width <= 0.0f || length <= 0.0f || obstacle_margin < 0.0f) {
+        LOG(WARNING) << "UpdateGeometryParams ignored: invalid geometry. width=" << width << " length=" << length
+                     << " margin=" << obstacle_margin;
+        return;
+    }
+
+    const bool changed = (params_.robot_width != width) || (params_.robot_length != length) ||
+                         (params_.geometric_center_offset.x != offset_x) ||
+                         (params_.geometric_center_offset.y != offset_y) ||
+                         (params_.obstacle_margin != obstacle_margin) || (params_.do_ang_toc != do_ang_toc);
+
+    if (!changed) return;
+
+    params_.robot_width = width;
+    params_.robot_length = length;
+    params_.geometric_center_offset.x = offset_x;
+    params_.geometric_center_offset.y = offset_y;
+    params_.obstacle_margin = obstacle_margin;
+    params_.do_ang_toc = do_ang_toc;
+
+    // Propagate updated footprint to local planner components.
+    if (sampler_) sampler_->SetNavParams(params_);
+    if (evaluator_) evaluator_->SetNavParams(params_);
+
+    // IMPORTANT: clear any state that would be inconsistent with old geometry.
+    plan_path_.clear();  // force replan under new geometry
+    in_obstacle_avoidance_mode_ = false;
+    yaw_align_sp_init_ = false;
+
+    // Clear stale per-tick artifacts so visualization/planner doesn't reuse old-geometry samples.
+    sampled_paths_.clear();
+    best_option_.reset();
+
+    LOG(INFO) << "Robot geometry updated: width=" << params_.robot_width << " length=" << params_.robot_length
+              << " offset=(" << params_.geometric_center_offset.x << "," << params_.geometric_center_offset.y << ")"
+              << " margin=" << params_.obstacle_margin << " do_ang_toc=" << (params_.do_ang_toc ? "true" : "false");
+}
+
 void Navigation::UpdateMap(const string& map_path) {
     planning_domain_.Load(map_path);
     plan_path_.clear();
@@ -876,9 +922,16 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         }
     }
 
+    auto ClearSampledPaths = [&]() {
+        sampled_paths_.clear();
+        best_option_.reset();
+    };
+
+    // TODO; turninplace is not obstacle aware currently, is there a way to do something about it?
     if (nav_state_ == NavigationState::kStopped) {
         plan_path_.clear();  // Drop stale plan so path viz clears once goal is done/stopped
         yaw_align_sp_init_ = false;
+        ClearSampledPaths();
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
@@ -904,6 +957,7 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
                 if (!fov_ok_for_continue) {
                     // Target left FOV: switch back to turning
                     in_obstacle_avoidance_mode_ = false;
+                    ClearSampledPaths();
                     TurnInPlace(cmd_vel, cmd_angle_vel);
                 } else {
                     // Target still in FOV: continue obstacle avoidance
@@ -918,11 +972,13 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
                     RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
                 } else {
                     // Target not well-centered: keep turning
+                    ClearSampledPaths();
                     TurnInPlace(cmd_vel, cmd_angle_vel);
                 }
             }
         }
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
+        ClearSampledPaths();
         TurnInPlace(cmd_vel, cmd_angle_vel);
     }
     return true;

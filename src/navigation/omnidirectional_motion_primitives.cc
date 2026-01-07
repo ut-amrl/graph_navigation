@@ -201,12 +201,6 @@ void OmniSampler::CheckObstacles(OmnidirectionalMovePath* move) {
     // Executed distance must not exceed distance to NEW collisions
     move->length = std::min(move->length, fpl_forward);
 
-    if (move->length <= 0.0f) {
-        move->clearance = 0.0f;
-        move->los_clearance = 0.0f;
-        return;
-    }
-
     // Safety check: if can't stop before NEW collision, mark path unusable
     const float v_f = std::max(0.0f, vel.dot(dir_f));
     const float stopping_dist = (v_f * v_f) / (2.0f * nav_params.linear_limits.max_deceleration);

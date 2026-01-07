@@ -121,6 +121,9 @@ class Navigation {
     void SetNavGoal(const Eigen::Vector2f& loc, float angle);
     // Reset navigation goals by setting goal to current robot position (map frame).
     void ResetNavGoals();
+    // Update geometric footprint parameters at runtime.
+    void UpdateGeometryParams(float width, float length, float offset_x, float offset_y, float obstacle_margin,
+                              bool do_ang_toc);
     // Check if current global plan is still valid.
     bool PlanStillValid();
     // Plan global path between two points using A* on navigation graph (map frame).
