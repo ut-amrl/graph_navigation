@@ -82,6 +82,9 @@ using namespace motion_primitives;
 #include <cfloat>
 #include <glog/logging.h>
 
+// Declare gflags in global namespace to avoid namespace-mismatch at link time.
+DECLARE_double(min_ang_toc_sample_length);
+
 namespace {
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
@@ -681,7 +684,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     best_option_ = best_path;
 
     // === Smooth "look-where-you-go" yaw alignment (Navigation-level) ===
-    if (params_.motion_primitives_mode == "omni" && params_.do_ang_toc && !near_goal_nudge) {
+    if (params_.motion_primitives_mode == "omni" && params_.do_ang_toc && !near_goal_nudge &&
+        best_path->Length() >= FLAGS_min_ang_toc_sample_length) {
         const float speed = vel_cmd.norm();
         const float vmin = 0.05f;  // don't try to align while essentially stopped
         if (speed > vmin) {

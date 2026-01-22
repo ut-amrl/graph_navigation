@@ -24,11 +24,15 @@
 #include <memory>
 #include <vector>
 
+#include "gflags/gflags.h"
 #include "shared/math/poses_2d.h"
 #include "eigen3/Eigen/Dense"
 #include "omnidirectional_motion_primitives.h"
 #include "motion_primitives.h"
 #include "navigation.h"
+
+// Define gflag for escape length
+DEFINE_double(k_escape_length, 0.2, "Minimum length for escape moves in omnidirectional motion primitives");
 
 using Eigen::Vector2f;
 using pose_2d::Pose2Df;
@@ -106,10 +110,9 @@ void OmniSampler::SetMaxPathLength(OmnidirectionalMovePath* move) {
 
     // Allow a small "escape" move even if not making forward progress (lateral/backwards),
     // so these samples don't get discarded by the evaluator.
-    constexpr float kEscapeLength = 0.2f;
     const float desired_dist = (distance_to_goal_along_direction > 0.0f)
                                    ? std::min(distance_to_goal_along_direction, nav_params.max_rollout_length)
-                                   : std::min(kEscapeLength, nav_params.max_rollout_length);
+                                   : std::min(static_cast<float>(FLAGS_k_escape_length), nav_params.max_rollout_length);
     move->length = desired_dist;
 }
 
