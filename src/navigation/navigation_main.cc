@@ -165,6 +165,7 @@ CONFIG_STRING(halt_topic, "ROSTopics.halt_topic");
 CONFIG_STRING(twist_drive_topic, "ROSTopics.twist_drive_topic");
 CONFIG_STRING(current_map_topic, "ROSTopics.current_map_topic");
 CONFIG_STRING(robot_geometry_topic, "ROSTopics.robot_geometry_topic");
+CONFIG_STRING(dynamic_nav_graph_topic, "ROSTopics.dynamic_nav_graph_topic");
 
 // ROS Frames
 CONFIG_STRING(map_frame, "ROSFrames.map_frame");
@@ -254,6 +255,8 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             CONFIG_current_map_topic, 1, std::bind(&NavigationNode::CurrentMapCallback, this, std::placeholders::_1));
         robot_geom_sub_ = this->create_subscription<std_msgs::msg::Float32MultiArray>(
             CONFIG_robot_geometry_topic, 1, std::bind(&NavigationNode::RobotGeomCallback, this, std::placeholders::_1));
+        dynamic_nav_graph_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
+            CONFIG_dynamic_nav_graph_topic, 1, std::bind(&NavigationNode::DynamicNavGraphCallback, this, std::placeholders::_1));
 
         // Create timer for main loop (respects use_sim_time parameter)
         timer_ = rclcpp::create_timer(this, this->get_clock(), std::chrono::duration<double>(params_.dt),
@@ -289,6 +292,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr halt_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr current_map_sub_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr robot_geom_sub_;
+    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr dynamic_nav_graph_sub_;
 
     // Service
     rclcpp::Service<graph_navigation::srv::GraphNav>::SharedPtr nav_service_;
@@ -415,6 +419,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             current_map_path_ = navigation::GetMapPath(FLAGS_maps_dir, msg->data);
             navigation_.UpdateMap(current_map_path_);
         }
+    }
+
+    void DynamicNavGraphCallback(const visualization_msgs::msg::MarkerArray::SharedPtr msg) {
+        navigation_.UpdateDynamicNavGraph(*msg);
     }
 
     void RobotGeomCallback(const std_msgs::msg::Float32MultiArray::SharedPtr msg) {

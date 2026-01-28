@@ -107,6 +107,8 @@ class Navigation {
     explicit Navigation();
     // Update navigation map from file.
     void UpdateMap(const std::string& map_file);
+    // Update navigation graph from dynamic MarkerArray.
+    void UpdateDynamicNavGraph(const visualization_msgs::msg::MarkerArray& markers);
     // Update robot location in map frame.
     void UpdateLocation(const Eigen::Vector2f& loc, float angle);
     // Update odometry based location (odometry frame).

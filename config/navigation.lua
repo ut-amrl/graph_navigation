@@ -68,6 +68,7 @@ ROSTopics = {
   carrot_topic = "carrot";
   current_map_topic = "/current_map";
   robot_geometry_topic = "/robot_geometry_update"; -- [width, length, offset_x, offset_y, obstacle_margin, do_ang_toc(0/1)]
+  dynamic_nav_graph_topic = "/voronoi_graph";
 };
 
 ROSFrames = {

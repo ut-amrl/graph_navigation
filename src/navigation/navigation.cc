@@ -319,6 +319,58 @@ void Navigation::UpdateMap(const string& map_path) {
     yaw_align_sp_init_ = false;           // Reset yaw alignment setpoint when map is updated
 }
 
+void Navigation::UpdateDynamicNavGraph(const visualization_msgs::msg::MarkerArray& markers) {
+    vector<Vector2f> nodes;
+    vector<std::pair<int, int>> edge_connections;
+    
+    for (const auto& marker : markers.markers) {
+        if (marker.ns == "gvd_nodes") {
+            nodes.push_back(Vector2f(marker.pose.position.x, marker.pose.position.y));
+        }
+    }
+    
+    for (const auto& marker : markers.markers) {
+        if (marker.ns == "gvd_edges" && marker.type == 4 && marker.points.size() >= 2) {
+            Vector2f p0(marker.points.front().x, marker.points.front().y);
+            Vector2f p1(marker.points.back().x, marker.points.back().y);
+            int idx0 = -1, idx1 = -1;
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                if ((nodes[i] - p0).norm() < 0.01f) idx0 = i;
+                if ((nodes[i] - p1).norm() < 0.01f) idx1 = i;
+            }
+            if (idx0 >= 0 && idx1 >= 0) {
+                edge_connections.push_back({idx0, idx1});
+            }
+        }
+    }
+    
+    if (nodes.empty() || edge_connections.empty()) return;
+    
+    planning_domain_.states.clear();
+    planning_domain_.edges.clear();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        planning_domain_.states.push_back(GraphDomain::State(i, nodes[i]));
+    }
+    for (const auto& conn : edge_connections) {
+        GraphDomain::NavigationEdge e;
+        e.s0_id = conn.first;
+        e.s1_id = conn.second;
+        e.edge.p0 = nodes[conn.first];
+        e.edge.p1 = nodes[conn.second];
+        e.max_speed = 2.0f;
+        e.max_clearance = 1.0f;
+        e.has_door = false;
+        e.has_stairs = false;
+        planning_domain_.edges.push_back(e);
+    }
+    planning_domain_.static_states = planning_domain_.states;
+    planning_domain_.static_edges = planning_domain_.edges;
+    
+    plan_path_.clear();
+    in_obstacle_avoidance_mode_ = false;
+    yaw_align_sp_init_ = false;
+}
+
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
     robot_loc_ = loc;
     robot_angle_ = angle;
