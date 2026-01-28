@@ -196,6 +196,9 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
 
         // Save baseline (original Lua config). We will always reset to THIS after reaching the active goal.
         config_params_ = params_;
+        
+        // Initialize dynamic graph tracking
+        has_dynamic_graph_ = false;
 
         // Load map
         std::string map_path = navigation::GetMapPath(FLAGS_maps_dir, FLAGS_map);
@@ -255,8 +258,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             CONFIG_current_map_topic, 1, std::bind(&NavigationNode::CurrentMapCallback, this, std::placeholders::_1));
         robot_geom_sub_ = this->create_subscription<std_msgs::msg::Float32MultiArray>(
             CONFIG_robot_geometry_topic, 1, std::bind(&NavigationNode::RobotGeomCallback, this, std::placeholders::_1));
+        
+        auto graph_qos = rclcpp::QoS(1).reliable().transient_local();
         dynamic_nav_graph_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
-            CONFIG_dynamic_nav_graph_topic, 1, std::bind(&NavigationNode::DynamicNavGraphCallback, this, std::placeholders::_1));
+            CONFIG_dynamic_nav_graph_topic, graph_qos, std::bind(&NavigationNode::DynamicNavGraphCallback, this, std::placeholders::_1));
 
         // Create timer for main loop (respects use_sim_time parameter)
         timer_ = rclcpp::create_timer(this, this->get_clock(), std::chrono::duration<double>(params_.dt),
@@ -315,6 +320,10 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
     std::vector<Eigen::Vector2f> point_cloud_;
     std::string current_map_name_;
     std::string current_map_path_;
+    
+    // Dynamic navigation graph tracking
+    visualization_msgs::msg::MarkerArray last_dynamic_graph_;
+    bool has_dynamic_graph_;
 
     // --- "Stuck" meta-controller state ---
     struct StuckMetaState {
@@ -418,11 +427,20 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
             current_map_name_ = msg->data;
             current_map_path_ = navigation::GetMapPath(FLAGS_maps_dir, msg->data);
             navigation_.UpdateMap(current_map_path_);
+            ReapplyDynamicGraphIfActive();
         }
     }
 
     void DynamicNavGraphCallback(const visualization_msgs::msg::MarkerArray::SharedPtr msg) {
+        last_dynamic_graph_ = *msg;
+        has_dynamic_graph_ = true;
         navigation_.UpdateDynamicNavGraph(*msg);
+    }
+    
+    void ReapplyDynamicGraphIfActive() {
+        if (has_dynamic_graph_) {
+            navigation_.UpdateDynamicNavGraph(last_dynamic_graph_);
+        }
     }
 
     void RobotGeomCallback(const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
@@ -510,6 +528,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // IMPORTANT: Re-load the current map so the global planning domain can rebuild any geometry-dependent caches.
         if (!current_map_path_.empty()) {
             navigation_.UpdateMap(current_map_path_);
+            ReapplyDynamicGraphIfActive();
         }
     }
 
@@ -539,6 +558,7 @@ class NavigationNode : public rclcpp::Node, public std::enable_shared_from_this<
         // Only reload the map if geometry (footprint / margin) changed. (do_ang_toc alone does NOT require reload)
         if (geom_changed && !current_map_path_.empty()) {
             navigation_.UpdateMap(current_map_path_);
+            ReapplyDynamicGraphIfActive();
         }
     }
 
