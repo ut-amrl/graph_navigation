@@ -1,5 +1,5 @@
-PROJECT(graph_navigation)
 CMAKE_MINIMUM_REQUIRED(VERSION 3.8)
+PROJECT(graph_navigation)
 
 MESSAGE(STATUS "Compiling Graph Navigation for ROS2")
 MESSAGE(STATUS "Using compiler: ${CMAKE_CXX_COMPILER}")

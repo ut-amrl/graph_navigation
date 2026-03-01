@@ -153,7 +153,7 @@ shared_ptr<PathRolloutBase> LinearEvaluator::FindBest(const vector<shared_ptr<Pa
     const float max_allowed_dist = in_penetration ? FLT_MAX : (subopt_tol_eff * best_total_dist);
 
     shared_ptr<PathRolloutBase> best = nullptr;
-    size_t best_idx = N;
+    [[maybe_unused]] size_t best_idx = N;
     float best_reward = -FLT_MAX;
 
     for (size_t i = 0; i < N; ++i) {
