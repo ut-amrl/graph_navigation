@@ -64,6 +64,7 @@ if(NOT OpenCV_FOUND)
 endif()
 MESSAGE(STATUS "Using OpenCV version: ${OpenCV_VERSION}")
 FIND_PACKAGE(Eigen3 REQUIRED)
+find_package(GTest REQUIRED)
 
 # Optional LibTorch for deep learning evaluator
 LIST(APPEND CMAKE_PREFIX_PATH "/opt/libtorch")
@@ -78,6 +79,21 @@ if(Torch_FOUND)
   # Find PyTorch required dependencies
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(GLOG REQUIRED libglog)
+  # Torch forces -D_GLIBCXX_USE_CXX11_ABI=0 via INTERFACE_COMPILE_OPTIONS, but
+  # all system ROS2/glog/gflags libs on Ubuntu 24.04 use new (cxx11) ABI.
+  # Patch every torch imported target to remove the old-ABI flag.
+  foreach(_torch_target torch torch_cpu torch_cuda c10 c10_cuda)
+    if(TARGET ${_torch_target})
+      get_target_property(_opts ${_torch_target} INTERFACE_COMPILE_OPTIONS)
+      if(_opts)
+        list(REMOVE_ITEM _opts "-D_GLIBCXX_USE_CXX11_ABI=0")
+        set_target_properties(${_torch_target} PROPERTIES
+          INTERFACE_COMPILE_OPTIONS "${_opts}")
+      endif()
+    endif()
+  endforeach()
+  # Explicitly enforce new ABI for this whole project
+  add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 else()
   MESSAGE(WARNING "LibTorch not found - deep learning evaluator disabled")
 endif()
@@ -138,15 +154,15 @@ ADD_LIBRARY(shared_library
             src/visualization/visualization.cc
             src/vector_map/vector_map.cc)
 
-target_link_libraries(shared_library
-  ${libs}
-  amrl_shared_lib
-)
-
 ament_target_dependencies(shared_library
   rclcpp
   visualization_msgs
   amrl_msgs
+)
+
+target_link_libraries(shared_library
+  ${libs}
+  amrl_shared_lib
 )
 
 target_include_directories(shared_library PUBLIC
@@ -166,17 +182,6 @@ ADD_LIBRARY(navigation_lib
             src/navigation/linear_evaluator.cc
             )
 
-target_link_libraries(navigation_lib
-    shared_library
-    ${libs}
-    ${OpenCV_LIBS}
-    amrl_shared_lib
-)
-
-if (OpenMP_CXX_FOUND)
-  target_link_libraries(navigation_lib OpenMP::OpenMP_CXX)
-endif()
-
 ament_target_dependencies(navigation_lib
     rclcpp
     std_msgs
@@ -193,6 +198,17 @@ ament_target_dependencies(navigation_lib
     ament_index_cpp
 )
 
+target_link_libraries(navigation_lib
+    shared_library
+    ${libs}
+    ${OpenCV_LIBS}
+    amrl_shared_lib
+)
+
+if (OpenMP_CXX_FOUND)
+  target_link_libraries(navigation_lib OpenMP::OpenMP_CXX)
+endif()
+
 target_include_directories(navigation_lib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader/include
@@ -204,26 +220,24 @@ target_include_directories(navigation_lib PRIVATE
 ADD_EXECUTABLE(navigation
                src/navigation/navigation_main.cc)
 
+# Do NOT use ament_target_dependencies here: it places ROS libs AFTER
+# navigation_lib's propagated torch deps in the link, where torch's
+# -Wl,--as-needed toggle drops them. Instead, list imported targets
+# explicitly BEFORE navigation_lib so they appear before the torch section.
 target_link_libraries(navigation
+    rclcpp::rclcpp
+    ament_index_cpp::ament_index_cpp
+    tf2::tf2
+    tf2_ros::tf2_ros
+    tf2_geometry_msgs::tf2_geometry_msgs
+    image_transport::image_transport
+    cv_bridge::cv_bridge
     navigation_lib
     graph_navigation__rosidl_typesupport_cpp
+    ${libs}
 )
 
-ament_target_dependencies(navigation
-    rclcpp
-    std_msgs
-    geometry_msgs
-    sensor_msgs
-    nav_msgs
-    visualization_msgs
-    tf2
-    tf2_geometry_msgs
-    tf2_ros
-    image_transport
-    cv_bridge
-    amrl_msgs
-    ament_index_cpp
-)
+
 
 target_include_directories(navigation PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
@@ -234,16 +248,21 @@ target_include_directories(navigation PRIVATE
 )
 
 # Navigation tests
+# navigation_flags_stub.cc provides gflags variables defined in navigation_main.cc
+# but used by navigation.cc (compiled into navigation_lib)
 ADD_EXECUTABLE(navigation_tests
                src/navigation/navigation_tests.cc
-               src/navigation/motion_primitives.cc)
+               src/navigation/navigation_flags_stub.cc)
 
+# navigation_lib already contains motion_primitives + all glog/gflags/rclcpp deps
 target_link_libraries(navigation_tests
-    gtest
-    gtest_main
+    navigation_lib
+    shared_library
+    amrl_shared_lib
+    GTest::GTest
+    GTest::Main
     ${libs}
     ${OpenCV_LIBS}
-    rclcpp::rclcpp
 )
 
 target_include_directories(navigation_tests PRIVATE
@@ -261,10 +280,21 @@ set_target_properties(navigation PROPERTIES
     BUILD_RPATH "${INSTALL_RPATH_DIRS}"
 )
 
+# --copy-dt-needed-entries: pull in transitive DT_NEEDED deps from shared libs
+# --no-as-needed: force all listed .so files into DT_NEEDED
+# Both are needed because Torch's cmake toggles --as-needed back on, which drops
+# librclcpp.so even though navigation_main.cc.o has undefined rclcpp symbols.
+target_link_options(navigation BEFORE PRIVATE
+    -Wl,--copy-dt-needed-entries
+    -Wl,--no-as-needed
+)
+
 set_target_properties(navigation_tests PROPERTIES
     INSTALL_RPATH "${INSTALL_RPATH_DIRS}"
     BUILD_RPATH "${INSTALL_RPATH_DIRS}"
 )
+
+target_link_options(navigation_tests BEFORE PRIVATE -Wl,--copy-dt-needed-entries)
 
 # Install targets
 install(TARGETS navigation navigation_tests
