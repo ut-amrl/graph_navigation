@@ -25,11 +25,8 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <chrono>
 #include <iostream>
 #include <fstream>
-#include <iomanip>
-#include <sstream>
 #include <queue>
 #include <limits>
 
@@ -85,10 +82,8 @@ using namespace motion_primitives;
 #include <cfloat>
 #include <glog/logging.h>
 
-// Utility macro for vector component access in printf statements
-#define V2COMP(v) v.x(), v.y()
-
-DEFINE_double(max_plan_deviation, 0.5, "Maximum premissible deviation from the plan");
+// Declare gflags in global namespace to avoid namespace-mismatch at link time.
+DECLARE_double(min_ang_toc_sample_length);
 
 namespace {
 // Epsilon value for handling limited numerical precision.
@@ -155,10 +150,10 @@ inline int VelocityToMotorCounts(float vel, float slope_pos, float intercept_pos
                                  float intercept_neg) {
     if (vel > 0.0f) {
         double counts = static_cast<double>(slope_pos) * static_cast<double>(vel) + static_cast<double>(intercept_pos);
-        return static_cast<int>(std::floor(counts));  // ?? flipped, make sure to match driver
+        return static_cast<int>(std::floor(counts));
     } else if (vel < 0.0f) {
         double counts = static_cast<double>(slope_neg) * static_cast<double>(vel) + static_cast<double>(intercept_neg);
-        return static_cast<int>(std::ceil(counts));  // ?? flipped, make sure to match driver
+        return static_cast<int>(std::ceil(counts));
     }
     return 0;
 }
@@ -206,12 +201,14 @@ Navigation::Navigation()
       robot_angle_(0),
       robot_loc_fp_(0, 0),
       robot_angle_fp_(0),
-      robot_vel_(0, 0),
       nav_state_(NavigationState::kStopped),
       in_obstacle_avoidance_mode_(false),
-      robot_omega_(0),
+      yaw_align_sp_map_(0.0f),
+      yaw_align_sp_init_(false),
       nav_goal_loc_(0, 0),
       nav_goal_angle_(0),
+      robot_vel_(0, 0),
+      robot_omega_(0),
       odom_initialized_(false),
       loc_initialized_(false),
       t_point_cloud_(std::numeric_limits<double>::quiet_NaN()),
@@ -242,6 +239,7 @@ void Navigation::Initialize(const NavigationParameters& params, const string& ma
     PathEvaluatorBase* evaluator = nullptr;
     if (params_.evaluator_type == "linear") {
         evaluator = (PathEvaluatorBase*)new LinearEvaluator();
+        evaluator->SetNavParams(params);
     } else {
         printf("Unknown evaluator type %s\n", params_.evaluator_type.c_str());
         exit(1);
@@ -256,9 +254,6 @@ void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
     nav_state_ = NavigationState::kGoto;
     in_obstacle_avoidance_mode_ = false;
     yaw_align_sp_init_ = false;
-    // Reset debug logging variables
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
 }
 
 void Navigation::ResetNavGoals() {
@@ -269,9 +264,52 @@ void Navigation::ResetNavGoals() {
     plan_path_.clear();
     in_obstacle_avoidance_mode_ = false;
     yaw_align_sp_init_ = false;
-    // Reset debug logging variables
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
+}
+
+void Navigation::UpdateGeometryParams(float width, float length, float offset_x, float offset_y, float obstacle_margin,
+                                      bool do_ang_toc) {
+    // Basic validation (avoid corrupting planner state with NaNs / invalid geometry)
+    if (!std::isfinite(width) || !std::isfinite(length) || !std::isfinite(offset_x) || !std::isfinite(offset_y) ||
+        !std::isfinite(obstacle_margin)) {
+        LOG(WARNING) << "UpdateGeometryParams ignored: non-finite input(s).";
+        return;
+    }
+    if (width <= 0.0f || length <= 0.0f || obstacle_margin < 0.0f) {
+        LOG(WARNING) << "UpdateGeometryParams ignored: invalid geometry. width=" << width << " length=" << length
+                     << " margin=" << obstacle_margin;
+        return;
+    }
+
+    const bool changed = (params_.robot_width != width) || (params_.robot_length != length) ||
+                         (params_.geometric_center_offset.x != offset_x) ||
+                         (params_.geometric_center_offset.y != offset_y) ||
+                         (params_.obstacle_margin != obstacle_margin) || (params_.do_ang_toc != do_ang_toc);
+
+    if (!changed) return;
+
+    params_.robot_width = width;
+    params_.robot_length = length;
+    params_.geometric_center_offset.x = offset_x;
+    params_.geometric_center_offset.y = offset_y;
+    params_.obstacle_margin = obstacle_margin;
+    params_.do_ang_toc = do_ang_toc;
+
+    // Propagate updated footprint to local planner components.
+    if (sampler_) sampler_->SetNavParams(params_);
+    if (evaluator_) evaluator_->SetNavParams(params_);
+
+    // IMPORTANT: clear any state that would be inconsistent with old geometry.
+    plan_path_.clear();  // force replan under new geometry
+    in_obstacle_avoidance_mode_ = false;
+    yaw_align_sp_init_ = false;
+
+    // Clear stale per-tick artifacts so visualization/planner doesn't reuse old-geometry samples.
+    sampled_paths_.clear();
+    best_option_.reset();
+
+    LOG(INFO) << "Robot geometry updated: width=" << params_.robot_width << " length=" << params_.robot_length
+              << " offset=(" << params_.geometric_center_offset.x << "," << params_.geometric_center_offset.y << ")"
+              << " margin=" << params_.obstacle_margin << " do_ang_toc=" << (params_.do_ang_toc ? "true" : "false");
 }
 
 void Navigation::UpdateMap(const string& map_path) {
@@ -279,9 +317,58 @@ void Navigation::UpdateMap(const string& map_path) {
     plan_path_.clear();
     in_obstacle_avoidance_mode_ = false;  // Reset sub-state when plan is cleared
     yaw_align_sp_init_ = false;           // Reset yaw alignment setpoint when map is updated
-    // Reset debug logging variables
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
+}
+
+void Navigation::UpdateDynamicNavGraph(const visualization_msgs::msg::MarkerArray& markers) {
+    vector<Vector2f> nodes;
+    vector<std::pair<int, int>> edge_connections;
+    
+    for (const auto& marker : markers.markers) {
+        if (marker.ns == "gvd_nodes") {
+            nodes.push_back(Vector2f(marker.pose.position.x, marker.pose.position.y));
+        }
+    }
+    
+    for (const auto& marker : markers.markers) {
+        if (marker.ns == "gvd_edges" && marker.type == 4 && marker.points.size() >= 2) {
+            Vector2f p0(marker.points.front().x, marker.points.front().y);
+            Vector2f p1(marker.points.back().x, marker.points.back().y);
+            int idx0 = -1, idx1 = -1;
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                if ((nodes[i] - p0).norm() < 0.01f) idx0 = i;
+                if ((nodes[i] - p1).norm() < 0.01f) idx1 = i;
+            }
+            if (idx0 >= 0 && idx1 >= 0) {
+                edge_connections.push_back({idx0, idx1});
+            }
+        }
+    }
+    
+    if (nodes.empty() || edge_connections.empty()) return;
+    
+    planning_domain_.states.clear();
+    planning_domain_.edges.clear();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        planning_domain_.states.push_back(GraphDomain::State(i, nodes[i]));
+    }
+    for (const auto& conn : edge_connections) {
+        GraphDomain::NavigationEdge e;
+        e.s0_id = conn.first;
+        e.s1_id = conn.second;
+        e.edge.p0 = nodes[conn.first];
+        e.edge.p1 = nodes[conn.second];
+        e.max_speed = 2.0f;
+        e.max_clearance = 1.0f;
+        e.has_door = false;
+        e.has_stairs = false;
+        planning_domain_.edges.push_back(e);
+    }
+    planning_domain_.static_states = planning_domain_.states;
+    planning_domain_.static_edges = planning_domain_.edges;
+    
+    plan_path_.clear();
+    in_obstacle_avoidance_mode_ = false;
+    yaw_align_sp_init_ = false;
 }
 
 void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
@@ -486,18 +573,20 @@ void Navigation::ObservePointCloud(const vector<Vector2f>& cloud, double time) {
 
 vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vector2f& end) {
     vector<GraphDomain::State> path;
-    static CumulativeFunctionTimer function_timer_(__FUNCTION__);
-    CumulativeFunctionTimer::Invocation invoke(&function_timer_);
     static const bool kVisualize = true;
     typedef navigation::GraphDomain Domain;
+    // Fallback: if map has no graph (EmptyMap or load failure), return a direct start->goal segment.
+    if (planning_domain_.states.empty() || planning_domain_.edges.empty()) {
+        path.emplace_back(0, initial);
+        path.emplace_back(1, end);
+        return path;
+    }
     planning_domain_.ResetDynamicStates();
     const uint64_t start_id = planning_domain_.AddDynamicState(initial);
     const uint64_t goal_id = planning_domain_.AddDynamicState(end);
     Domain::State start = planning_domain_.states[start_id];
     Domain::State goal = planning_domain_.states[goal_id];
     GraphVisualizer graph_viz(kVisualize);
-    // ?? figure out whats the planning domain and graph for empty map, and is there a default grid that it fallbacks to
-    // when no nodes?
     const bool found_path = AStar(start, goal, planning_domain_, &graph_viz, &path);
     if (!found_path) {
         printf("No path found!\n");
@@ -506,15 +595,12 @@ vector<GraphDomain::State> Navigation::Plan(const Vector2f& initial, const Vecto
 }
 
 bool Navigation::PlanStillValid() {
-    // ??, why max_plan_deviation is needed? it should just go to the closest point on path right howsoever far?
-    if (plan_path_.size() < 2)
-        return false;  // ?? is it due to (start, end) atleast. In that case, why would the distance check be false
-    // ever?
+    if (plan_path_.size() < 2) return false;
     const Vector2f pose = robot_loc_fp_;  // predicted pose at actuation time
     for (size_t i = 0; i + 1 < plan_path_.size(); ++i) {
         const float dist_from_segment =
             geometry::DistanceFromLineSegment(pose, plan_path_[i].loc, plan_path_[i + 1].loc);
-        if (dist_from_segment < FLAGS_max_plan_deviation) {
+        if (dist_from_segment < params_.max_plan_deviation) {
             return true;
         }
     }
@@ -526,7 +612,7 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
         carrot_dist = params_.carrot_dist;
     }
     const auto& plan_path = plan_path_;
-    if (plan_path.size() < 2u) {  // guard, ?? is this needed?
+    if (plan_path.size() < 2u) {
         return false;
     }
     // Predicted map pose at actuation time.
@@ -605,8 +691,6 @@ bool Navigation::GetCarrot(Vector2f& carrot, float carrot_dist) {
 }
 
 void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
-    static CumulativeFunctionTimer function_timer_(__FUNCTION__);
-    CumulativeFunctionTimer::Invocation invoke(&function_timer_);
     Vector2f local_target = local_target_;
 
     // Update planner components with current state and obstacles
@@ -623,6 +707,9 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     // Generate path options
     auto paths = sampler_->GetSamples(params_.num_options);
     if (paths.size() == 0) {
+        // Clear stale visualization data
+        sampled_paths_.clear();
+        best_option_.reset();
         // Fallback: no path options available
         Halt(vel_cmd, ang_vel_cmd);
         return;
@@ -630,18 +717,12 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     // Select best path from options
     auto best_path = evaluator_->FindBest(paths);
     if (best_path == nullptr) {
+        // Clear stale visualization data
+        sampled_paths_.clear();
+        best_option_.reset();
         // Fallback: no valid path found
         TurnInPlace(vel_cmd, ang_vel_cmd);
         return;
-    }
-
-    // Store best path heading for omnidirectional paths (for debug logging)
-    if (params_.motion_primitives_mode == "omni") {
-        const auto* best_omni = dynamic_cast<const motion_primitives::OmnidirectionalMovePath*>(best_path.get());
-        if (best_omni) {
-            omni_best_path_heading_ = atan2(best_omni->direction.y(), best_omni->direction.x());
-            omni_best_path_valid_ = true;
-        }
     }
 
     float max_map_speed = params_.linear_limits.max_speed;
@@ -655,7 +736,8 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
     best_option_ = best_path;
 
     // === Smooth "look-where-you-go" yaw alignment (Navigation-level) ===
-    if (params_.motion_primitives_mode == "omni" && params_.do_ang_toc && !near_goal_nudge) {
+    if (params_.motion_primitives_mode == "omni" && params_.do_ang_toc && !near_goal_nudge &&
+        best_path->Length() >= FLAGS_min_ang_toc_sample_length) {
         const float speed = vel_cmd.norm();
         const float vmin = 0.05f;  // don't try to align while essentially stopped
         if (speed > vmin) {
@@ -663,7 +745,6 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
             const Eigen::Rotation2Df R_map_base(yaw_map_pred);
             const Eigen::Vector2f v_map_cmd = R_map_base * vel_cmd;
             const float heading_map_target = std::atan2(v_map_cmd.y(), v_map_cmd.x());
-            nav_ang_toc_target_angle_ = heading_map_target;  // Store for debug logging
 
             // Initialize persistent setpoint once
             if (!yaw_align_sp_init_) {
@@ -698,14 +779,10 @@ void Navigation::RunObstacleAvoidance(Vector2f& vel_cmd, float& ang_vel_cmd) {
                                           params_.angular_limits, 0.0f, s * robot_omega_, s * dTheta, 0.0f, params_.dt);
                 }
             }
-            nav_ang_toc_control_ = ang_vel_cmd;  // Store for debug logging
-            nav_ang_toc_active_ = true;
         } else {
             // Essentially stopped → only brake omega (not actively aligning)
             const float domega = params_.angular_limits.max_deceleration * params_.dt;
             ang_vel_cmd = (std::fabs(robot_omega_) <= domega) ? 0.0f : (robot_omega_ - Sign(robot_omega_) * domega);
-            // Note: nav_ang_toc_active_ remains false when speed <= vmin (not actively aligning, just braking)
-            // nav_ang_toc_target_angle_ is not set here because we're not actively aligning
         }
     }
 
@@ -818,13 +895,6 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         return false;
     }
 
-    // navigation_debug::DebugLog(std::string("[") + std::to_string(static_cast<int>(nav_state_)) +
-    //                            "] command_history_ length: " + std::to_string(command_history_.size()));
-
-    // Reset debug logging flags at start of each Run() cycle
-    omni_best_path_valid_ = false;
-    nav_ang_toc_active_ = false;
-
     PruneLatencyQueue();
     // Forward predict robot state to account for actuation latency
     ForwardPredict(time + params_.actuation_latency);
@@ -908,8 +978,16 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         }
     }
 
+    auto ClearSampledPaths = [&]() {
+        sampled_paths_.clear();
+        best_option_.reset();
+    };
+
+    // TODO; turninplace is not obstacle aware currently, is there a way to do something about it?
     if (nav_state_ == NavigationState::kStopped) {
+        plan_path_.clear();  // Drop stale plan so path viz clears once goal is done/stopped
         yaw_align_sp_init_ = false;
+        ClearSampledPaths();
         Halt(cmd_vel, cmd_angle_vel);
         return true;
     } else if (nav_state_ == NavigationState::kGoto) {
@@ -918,22 +996,24 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
         // "Nudge" window: when close to goal, prefer continuing OA over FOV-based turning
         const float goal_dist2 = (nav_goal_loc_ - robot_loc_fp_).squaredNorm();  // MAP-frame distance^2
         const bool near_goal_nudge = (goal_dist2 <= Sq(params_.nudge_dist_tolerance));
-        const bool fov_ok = (fabs(theta) <= params_.local_half_fov);
+        // Hysteresis-based lidar FOV check to prevent oscillation:
+        // - To START obstacle avoidance: target must be within conservative FOV (±0.8 * lidar_fov_half_angle)
+        // - To CONTINUE obstacle avoidance: target can be anywhere in full FOV (±lidar_fov_half_angle)
 
-        // Hysteresis-based FOV check to prevent oscillation:
-        // - To START obstacle avoidance: target must be well-centered (±center_threshold)
-        // - To CONTINUE obstacle avoidance: target can be anywhere in FOV (±local_half_fov)
+        const bool fov_ok_for_continue = (fabs(theta) <= params_.lidar_fov_half_angle);
+        const bool fov_ok_for_start = (fabs(theta) <= 0.8f * params_.lidar_fov_half_angle);
 
         // Check nudge condition first
         if (near_goal_nudge) {
-            fprintf(stderr, "DEBUG: Not in FOV but goal nudge is active\n");
+            // fprintf(stderr, "DEBUG: Not in lidar FOV but goal nudge is active\n");
             RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
         } else {
             if (in_obstacle_avoidance_mode_) {
-                // Already doing obstacle avoidance: keep going unless target leaves FOV
-                if (!fov_ok) {
+                // Already doing obstacle avoidance: keep going unless target leaves full FOV
+                if (!fov_ok_for_continue) {
                     // Target left FOV: switch back to turning
                     in_obstacle_avoidance_mode_ = false;
+                    ClearSampledPaths();
                     TurnInPlace(cmd_vel, cmd_angle_vel);
                 } else {
                     // Target still in FOV: continue obstacle avoidance
@@ -942,53 +1022,21 @@ bool Navigation::Run(const double& time, Vector2f& cmd_vel, float& cmd_angle_vel
             } else {
                 // Currently turning: only start obstacle avoidance when target is well-centered
                 yaw_align_sp_init_ = false;
-                if (fabs(theta) <= params_.center_threshold) {
-                    // Target is centered: start obstacle avoidance
+                if (fov_ok_for_start) {
+                    // Target is well-centered in FOV: start obstacle avoidance
                     in_obstacle_avoidance_mode_ = true;
                     RunObstacleAvoidance(cmd_vel, cmd_angle_vel);
                 } else {
-                    // Target not centered: keep turning
+                    // Target not well-centered: keep turning
+                    ClearSampledPaths();
                     TurnInPlace(cmd_vel, cmd_angle_vel);
                 }
             }
         }
     } else if (nav_state_ == NavigationState::kTurnInPlace) {
+        ClearSampledPaths();
         TurnInPlace(cmd_vel, cmd_angle_vel);
     }
-
-    // === Consolidated [TEST] debug logs ===
-    {
-        const double wall_time =
-            std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(6) << wall_time;
-
-        // NavState
-        oss << " [TEST] NavState: " << static_cast<int>(nav_state_);
-
-        // Obstacle avoidance mode
-        oss << " InOAMode: " << (in_obstacle_avoidance_mode_ ? 1 : 0);
-
-        // Current robot heading (not forward predicted)
-        oss << " CurrYaw: " << std::setw(8) << std::setprecision(4) << robot_angle_;
-
-        // Forward predicted yaw
-        oss << " FwdPredYaw: " << std::setw(8) << std::setprecision(4) << robot_angle_fp_;
-
-        // OmniBestPath heading (if available)
-        if (omni_best_path_valid_) {
-            oss << " OmniBestPath: " << std::setw(8) << std::setprecision(4) << omni_best_path_heading_;
-        }
-
-        // Navigation-level AngularTOC (if active)
-        if (nav_ang_toc_active_) {
-            oss << " AngTOC_target: " << std::setw(8) << std::setprecision(4) << nav_ang_toc_target_angle_;
-            oss << " AngTOC_control: " << std::setw(8) << std::setprecision(4) << nav_ang_toc_control_;
-        }
-
-        navigation_debug::DebugLog(oss.str());
-    }
-
     return true;
 }
 

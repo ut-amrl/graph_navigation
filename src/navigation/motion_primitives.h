@@ -62,6 +62,9 @@ struct PathRolloutBase {
     // The obstacle clearance along the path.
     virtual float Clearance() const = 0;
 
+    // The clearance of the line segment from path endpoint to local target (LOS clearance).
+    virtual float LOSClearance() const = 0;
+
     // Get actuation commands for the robot to execute this rollout in terms of
     // the robot's linear and angular velocity commands for the specified control
     // period.
@@ -125,6 +128,8 @@ struct PathEvaluatorBase {
         point_cloud = &new_point_cloud;  // zero-copy view
     }
 
+    void SetNavParams(const navigation::NavigationParameters& new_params) { nav_params = new_params; }
+
     // Return the best path rollout from the provided set of paths.
     virtual std::shared_ptr<PathRolloutBase> FindBest(const std::vector<std::shared_ptr<PathRolloutBase>>& paths) = 0;
 
@@ -140,13 +145,16 @@ struct PathEvaluatorBase {
     Eigen::Vector2f local_target;
     // Non-owning view of obstacle point cloud.
     const std::vector<Eigen::Vector2f>* point_cloud = nullptr;
+    // Navigation parameters.
+    navigation::NavigationParameters nav_params;
 };
 
 float Run1DTimeOptimalControl(const navigation::MotionLimits& limits, const float x_init, const float v_init,
                               const float x_final, const float v_final, const float dt);
 
-// Compute the clearance along the line l with respect to the points.
-float StraightLineClearance(const geometry::Line2f& l, const std::vector<Eigen::Vector2f>& points);
+// Compute clearance from a line segment to obstacle points.
+// Returns FLT_MAX if no points project onto the segment.
+float LOSClearanceToLine(const geometry::Line2f& l, const std::vector<Eigen::Vector2f>& points);
 
 }  // namespace motion_primitives
 

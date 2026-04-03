@@ -19,6 +19,7 @@
 */
 //========================================================================
 
+#include <cfloat>
 #include <memory>
 #include <vector>
 
@@ -47,11 +48,15 @@ struct ConstantCurvatureArcPath : PathRolloutBase {
     // Clearance along path.
     float Clearance() const override;
 
+    // LOS clearance from endpoint to target.
+    float LOSClearance() const override;
+
     // Default constructor.
-    ConstantCurvatureArcPath() : curvature(0), length(0), angular_length(0) {}
+    ConstantCurvatureArcPath() : curvature(0), length(0), angular_length(0), los_clearance(FLT_MAX) {}
 
     // Explicit constructor from curvature.
-    explicit ConstantCurvatureArcPath(float curvature) : curvature(curvature), length(0), angular_length(0) {}
+    explicit ConstantCurvatureArcPath(float curvature)
+        : curvature(curvature), length(0), angular_length(0), los_clearance(FLT_MAX) {}
 
     // The pose of the robot at the end of the path rollout.
     pose_2d::Pose2Df EndPoint() const override;
@@ -68,6 +73,7 @@ struct ConstantCurvatureArcPath : PathRolloutBase {
     float fpl;
     float angular_length;
     float clearance;
+    float los_clearance;
     Eigen::Vector2f obstruction;
 };
 

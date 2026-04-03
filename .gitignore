@@ -11,6 +11,7 @@ msg_gen/
 srv_gen/
 
 # IDE and Editor files
+.cursor/
 .vscode/
 .clang-format
 .clangd/

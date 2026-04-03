@@ -15,16 +15,18 @@ NavigationParameters = {
     max_speed = 1.0;
   };
   actuation_latency = 0.24;
-  obstacle_margin = 0.15;
   num_options = 31;
   robot_width = 0.44;
   robot_length = 0.5;
-  base_link_offset_x = 0;
-  base_link_offset_y = 0;
-  max_free_path_length = 6.0;
-  max_clearance = 1.0;
-  local_half_fov = deg2rad(90);
-  center_threshold = deg2rad(10);
+  geometric_center_offset = {
+    x = 0;
+    y = 0;
+  };
+  obstacle_margin = 0.15;
+  max_rollout_length = 6.0;
+  max_lookahead_fpl = 6.0;
+  clearance_band = 1.0;
+  lidar_fov_half_angle = deg2rad(60);
   can_traverse_stairs = false;
   target_dist_tolerance = 0.1;
   nudge_dist_tolerance = 0.3;
@@ -35,6 +37,13 @@ NavigationParameters = {
   carrot_dist = 3.5;
   motion_primitives_mode = "omni";
   do_ang_toc = false;
+  max_plan_deviation = 0.5;
+  laser_height = 0.324;
+  stuck_meta_control = {
+    override_obstacle_margin = 0.1;
+    stuck_timeout_sec = 10.0;
+    improve_eps = 0.02;
+  };
 };
 
 ROSTopics = {
@@ -53,9 +62,13 @@ ROSTopics = {
   ackermann_drive_topic = "ackermann_curvature_drive";
   nav_status_topic = "navigation_goal_status";
   visualization_topic = "visualization";
+  visualization_local_topic = "visualization_local";
   fp_pcl_topic = "forward_predicted_pcl";
   path_topic = "trajectory";
   carrot_topic = "carrot";
+  current_map_topic = "/current_map";
+  robot_geometry_topic = "/robot_geometry_update"; -- [width, length, offset_x, offset_y, obstacle_margin, do_ang_toc(0/1)]
+  dynamic_nav_graph_topic = "/voronoi_graph";
 };
 
 ROSFrames = {

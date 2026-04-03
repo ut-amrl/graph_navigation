@@ -57,10 +57,6 @@ inline std::string GetMapPath(const std::string& dir, const std::string& name) {
     return dir + "/" + name + "/" + name + ".navigation.json";
 }
 
-inline std::string GetDeprecatedMapPath(const std::string& dir, const std::string& name) {
-    return dir + "/" + name + "/" + name + ".navigation.txt";
-}
-
 static inline double overlap(double a0, double a1, double b0, double b1) {
     const double lo = std::max(a0, b0);
     const double hi = std::min(a1, b1);
@@ -111,6 +107,8 @@ class Navigation {
     explicit Navigation();
     // Update navigation map from file.
     void UpdateMap(const std::string& map_file);
+    // Update navigation graph from dynamic MarkerArray.
+    void UpdateDynamicNavGraph(const visualization_msgs::msg::MarkerArray& markers);
     // Update robot location in map frame.
     void UpdateLocation(const Eigen::Vector2f& loc, float angle);
     // Update odometry based location (odometry frame).
@@ -125,6 +123,9 @@ class Navigation {
     void SetNavGoal(const Eigen::Vector2f& loc, float angle);
     // Reset navigation goals by setting goal to current robot position (map frame).
     void ResetNavGoals();
+    // Update geometric footprint parameters at runtime.
+    void UpdateGeometryParams(float width, float length, float offset_x, float offset_y, float obstacle_margin,
+                              bool do_ang_toc);
     // Check if current global plan is still valid.
     bool PlanStillValid();
     // Plan global path between two points using A* on navigation graph (map frame).
@@ -162,16 +163,14 @@ class Navigation {
     float yaw_align_sp_map_ = 0.0f;
     // Whether yaw alignment setpoint has been initialized (for visualization).
     bool yaw_align_sp_init_ = false;
-    // Debug logging values (temporary storage).
-    float omni_best_path_heading_ = 0.0f;
-    bool omni_best_path_valid_ = false;
-    float nav_ang_toc_target_angle_ = 0.0f;
-    float nav_ang_toc_control_ = 0.0f;
-    bool nav_ang_toc_active_ = false;
     // Final navigation goal location in map frame.
     Eigen::Vector2f nav_goal_loc_;
     // Final navigation goal orientation in map frame.
     float nav_goal_angle_;
+    // Penultimate-to-forward-predicted-time robot linear velocity command
+    Eigen::Vector2f robot_vel_;
+    // Penultimate-to-forward-predicted-time robot angular velocity command
+    float robot_omega_;
 
    private:
     // Run local obstacle avoidance planner (robot frame).
@@ -188,10 +187,6 @@ class Navigation {
     void DrawRobot();
     // Publish a status message.
     void PublishNavStatus(const Eigen::Vector2f& carrot);
-    // Penultimate-to-forward-predicted-time robot linear velocity command
-    Eigen::Vector2f robot_vel_;
-    // Penultimate-to-forward-predicted-time robot angular velocity command
-    float robot_omega_;
     // Forward-predicted odometry location (odometry frame)
     Eigen::Vector2f odom_loc_;
     // Forward-predicted odometry orientation (odometry frame)

@@ -43,6 +43,18 @@ struct MotionLimits {
         : max_acceleration(max_acceleration), max_deceleration(max_deceleration), max_speed(max_speed) {}
 };
 
+struct GeometricCenterOffset {
+    // Offset of geometric center c_g from base_link origin, in base_link frame.
+    // x: positive = c_g forward of base_link.
+    // y: positive = c_g left of base_link.
+    float x;
+    float y;
+
+    GeometricCenterOffset() : x(0), y(0) {}
+
+    GeometricCenterOffset(float x, float y) : x(x), y(y) {}
+};
+
 struct NavigationParameters {
     // Control period in seconds.
     double dt;
@@ -61,19 +73,14 @@ struct NavigationParameters {
     float robot_width;
     // Length of the robot.
     float robot_length;
-    // Offset of geometric center c_g from base_link frame (in base_link frame).
-    // base_link_offset_x: positive = c_g forward of base_link.
-    // base_link_offset_y: positive = c_g left of base_link.
-    float base_link_offset_x;
-    float base_link_offset_y;
-    float max_free_path_length;
-    float max_clearance;
-    // Half-angle of the local field of view cone (radians).
-    // Full FOV cone is ±local_half_fov. Used to determine when obstacle avoidance can continue.
-    float local_half_fov;
-    // Angle threshold (radians) for starting obstacle avoidance in hysteresis logic.
-    // Target must be within ±center_threshold to start obstacle avoidance.
-    float center_threshold;
+    // Offset of geometric center c_g from base_link origin (in base_link frame).
+    GeometricCenterOffset geometric_center_offset;
+    float max_rollout_length;  // Max rollout/commanded segment length
+    float max_lookahead_fpl;   // Max lookahead for free path length computation
+    float clearance_band;
+    // Half-angle of the lidar field of view cone (radians).
+    // Full FOV cone is ±lidar_fov_half_angle. Used to determine when obstacle avoidance can run safely.
+    float lidar_fov_half_angle;
 
     bool can_traverse_stairs;
 
@@ -97,6 +104,16 @@ struct NavigationParameters {
     // Motion primitives mode: "ackermann" or "omni"
     std::string motion_primitives_mode;
     bool do_ang_toc;
+
+    // Maximum permissible deviation from the plan
+    float max_plan_deviation;
+    // Height of laser sensor above robot base frame (for visualization)
+    float laser_height;
+
+    // Stuck meta-controller parameters
+    float stuck_meta_override_obstacle_margin;
+    float stuck_meta_stuck_timeout_sec;
+    float stuck_meta_improve_eps;
 
     // Command mapping parameters
     bool apply_custom_cmd_map;
@@ -126,12 +143,11 @@ struct NavigationParameters {
           num_options(41),
           robot_width(0.44),
           robot_length(0.5),
-          base_link_offset_x(0),
-          base_link_offset_y(0),
-          max_free_path_length(10.0),
-          max_clearance(1.0),
-          local_half_fov(1.57),
-          center_threshold(0.174),
+          geometric_center_offset(0, 0),
+          max_rollout_length(10.0),
+          max_lookahead_fpl(10.0),
+          clearance_band(1.0),
+          lidar_fov_half_angle(1.57),
           can_traverse_stairs(false),
           target_dist_tolerance(0.1),
           nudge_dist_tolerance(0.3),
