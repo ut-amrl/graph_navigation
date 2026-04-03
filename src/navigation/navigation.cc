@@ -82,8 +82,10 @@ using namespace motion_primitives;
 #include <cfloat>
 #include <glog/logging.h>
 
-// Declare gflags in global namespace to avoid namespace-mismatch at link time.
-DECLARE_double(min_ang_toc_sample_length);
+// Define the flag in the library, since the library itself references it.
+DEFINE_double(
+    min_ang_toc_sample_length, 1.0,
+    "Minimum sample length required to enable angular time-optimal control");
 
 namespace {
 // Epsilon value for handling limited numerical precision.

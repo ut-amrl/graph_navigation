@@ -95,7 +95,6 @@ DEFINE_string(robot_config, "", "Robot config file (required)");
 DEFINE_string(maps_dir, "", "Directory containing AMRL maps");
 DEFINE_string(map, "UT_Campus", "Name of navigation map file");
 DEFINE_string(debug_file, "", "Path to debug log file (.log or .txt). Empty disables logging");
-DEFINE_double(min_ang_toc_sample_length, 1.0, "Minimum sample length required to enable angular time-optimal control");
 
 // NavigationParameters
 CONFIG_FLOAT(dt, "NavigationParameters.dt");
